@@ -29,6 +29,12 @@ func set_world_size(size: Vector2) -> void:
 	limit_bottom = int(size.y)
 
 
+## Moves the camera to a point in the world (in pixels).
+func focus_on(world_point: Vector2) -> void:
+	position = world_point
+	_keep_on_map()
+
+
 func center_on_world() -> void:
 	position = _world_size / 2.0
 

@@ -51,6 +51,14 @@ func is_walkable(x: int, y: int) -> bool:
 	return bool(DataRegistry.get_def("tiles", tile_id).get("walkable", true))
 
 
+## How slow a tile is to walk across (1.0 is normal). Blocked and unknown tiles give 0.
+func get_move_cost(x: int, y: int) -> float:
+	var tile_id := get_tile_id(x, y)
+	if tile_id == "":
+		return 0.0
+	return float(DataRegistry.get_def("tiles", tile_id).get("move_cost", 1.0))
+
+
 func _palette_index_for(tile_id: String) -> int:
 	var found := palette.find(tile_id)
 	if found == -1:

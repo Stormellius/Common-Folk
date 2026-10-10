@@ -1,6 +1,6 @@
 # Medieval Sim
 
-A medieval life sim sandbox with RimWorld-style looks: you live one person's life at a time in a randomly generated town that keeps running without you. The full plan is in the design document; this project is **milestone 1 (Foundation)**.
+A medieval life sim sandbox with RimWorld-style looks: you live one person's life at a time in a randomly generated town that keeps running without you. The full plan is in the design document; this project is at **milestone 2 (One pawn)**.
 
 ## What works now
 
@@ -9,6 +9,8 @@ A medieval life sim sandbox with RimWorld-style looks: you live one person's lif
 - Day and night light (blue nights, warm dawn and dusk) and seasons (green spring, golden summer, brown autumn, snowy winter) that follow the game clock
 - Camera: pan, zoom toward the cursor, middle-mouse drag
 - Game clock with pause and 1x / 2x / 3x speed, a calendar with seasons, and a clock panel
+- A household of three people (names and looks from the world seed) drawn in RimWorld-style top-down art made by code. Control one at a time Sims style: click a tile to walk there, click a person (or their portrait at the bottom, or press Tab) to switch. The others keep walking if they have orders
+- Pathfinding around water and rock with A* (forest is slower to cross, diagonals never cut corners), walking at one step per clock tick so pause and speed control apply
 - Hover a tile to see what it is and whether it is walkable
 - Save and load (F5 / F9), new world (N)
 - All content (tiles, seasons, needs, traits) comes from JSON files in `data/`, and mods can add or replace it
@@ -25,13 +27,18 @@ Options go after `--` on the command line, which is handy for testing and screen
 godot --path . -- --seed=1234 --day=50 --hour=12 --zoom=0.5 --look=70,30 --speed=0
 ```
 
-`seed` is the world, `day` and `hour` set the date (day 0 is the first day, 15 days per season), `zoom` the camera zoom, `look` the tile to center on, and `speed` 0 to 3.
+`seed` is the world, `day` and `hour` set the date (day 0 is the first day, 15 days per season), `zoom` the camera zoom, `look` the tile to center on, and `speed` 0 to 3, and `walk` a tile (such as `--walk=70,50`) to send the selected person to.
 
 ## Controls
 
 | Key | Action |
 | --- | --- |
 | WASD / arrow keys | Move the camera (hold Shift for faster) |
+| Left-click a tile | Selected person walks there |
+| Left-click a person | Switch to that person |
+| Right-click | Selected person stops |
+| Tab / Shift+Tab | Next / previous person (camera jumps to them) |
+| C | Center the camera on the selected person |
 | Mouse wheel | Zoom |
 | Middle mouse drag | Pan |
 | Space | Pause / resume |
@@ -58,13 +65,22 @@ scripts/
   sim/                 Game state and rules (no drawing here)
     world_state.gd       The map as plain data, turns into a Dictionary
     map_generator.gd     Seed -> terrain
+    pawn.gd              One person: position, walking path, one step per tick
+    household.gd         The people you control and who is selected
+    household_generator.gd  Seed -> starting family (names, looks, where they stand)
+    path_finder.gd       A* over the tile map
+    simulation.gd        Ticks the world; the commands views may give (order_move, order_stop)
     save_game.gd         Writes and reads the save file
   view/                Drawing and input for the map
     map_view.gd          Feeds the world and season look to the terrain shader
     day_night.gd         Tints the map by time of day
     tile_cursor.gd       Hover highlight and grid
+    pawn_art.gd          Draws a person with code (swap for sprites later)
+    pawn_view.gd         One pawn on screen, gliding between tiles
+    pawn_layer.gd        All pawns, route overlay and mouse orders
     camera_controller.gd Pan and zoom
-  ui/hud.gd            Flat dark panels: clock and speed buttons, tile info, help, messages
+  ui/hud.gd            Flat dark panels: clock and speed buttons, household bar, tile info, help, messages
+  ui/pawn_portrait.gd  Small person picture for the household bar
   main.gd              Wires it together and handles shortcuts
 tests/                 Headless checks
 ```
@@ -93,7 +109,7 @@ A mod is a folder in `mods/` (or `user://mods/` in a built game) with the same k
 
 To try it, set `"enabled": true` in `mods/example_mod/mod.json` and restart. Grass turns bright green. Problems in data files (bad JSON, missing ids) are shown on screen and printed as warnings.
 
-`needs.json` and `traits.json` are starter content for milestones 3 and 7; nothing reads them yet.
+`names.json` (given names and family names) and `appearance.json` (skin, hair and clothing colors) feed the household generator, so a mod can change who your people are. `needs.json` and `traits.json` are starter content for milestones 3 and 7; nothing reads them yet.
 
 If you export the game, add `*.json` under **Resources > Filters to export non-resource files** so the data files are included.
 
@@ -103,7 +119,7 @@ If you export the game, add `*.json` under **Resources > Filters to export non-r
 godot --headless --path . res://tests/smoke_test.tscn
 ```
 
-This checks data loading, mods, the clock and calendar, world generation (same seed, same world) and the save round trip. Run it as a scene as shown; it needs the autoloads, which `--script` mode does not provide.
+This checks data loading, mods, the clock and calendar, world generation (same seed, same world), pathfinding, pawn movement, the household and the save round trip. Run it as a scene as shown; it needs the autoloads, which `--script` mode does not provide.
 
 ## Graphics notes
 
@@ -111,6 +127,10 @@ The terrain is procedural, so changing how it looks means editing `shaders/terra
 
 This is a procedural approximation of the RimWorld look. The real thing relies on hand-painted textures and sprites, so when characters, furniture and buildings arrive they will be sprites drawn on top (made in Krita or Aseprite, or from a free pack); the day and night tint (a `CanvasModulate` node) will apply to them automatically. To stop the dark nights, set the night colors in `day_night.gd` closer to white. The HUD colors are constants at the top of `scripts/ui/hud.gd`.
 
-## Next: milestone 2, one pawn
+## Known limits
 
-A character that you click to send to a tile, with pathfinding around water and stone (Godot's `AStarGrid2D` fits the tile map), moving one step per tick so it respects pause and speed.
+Pawns can walk through each other and are drawn over tree canopies. Neither matters until there are buildings and more people; both get revisited with milestones 3 and 4.
+
+## Next: milestone 3, needs
+
+Hunger, energy and the other needs from `needs.json` that fall over time, and a person who walks to food or a bed and uses it on their own when you are not giving orders.

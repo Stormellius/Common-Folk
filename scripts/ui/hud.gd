@@ -8,7 +8,10 @@ extends CanvasLayer
 ## live in main.gd.
 
 const SPEED_LABELS: Array[String] = ["II", "1x", "2x", "3x"]
-const HELP_TEXT := "WASD move   Wheel zoom   Space pause   1-3 speed   G grid   F5 save   F9 load   N new"
+const HELP_TEXT := "Click: walk / switch person   Right-click: stop   Tab: next person   C: center   WASD: camera   Wheel: zoom   Space: pause   1-3: speed   G: grid   F5/F9: save/load   N: new world"
+
+## The player picked a household member in the bar at the bottom.
+signal pawn_chosen(id: int)
 
 # Flat dark panels with thin light borders, in the spirit of RimWorld's interface.
 const PANEL_COLOR := Color(0.11, 0.11, 0.12, 0.92)
@@ -24,6 +27,8 @@ var _time_label: Label
 var _info_label: Label
 var _toast_label: Label
 var _speed_buttons: Array[Button] = []
+var _household_row: HBoxContainer
+var _chips: Dictionary = {}  # pawn id -> Button
 var _toast_serial := 0
 
 
@@ -31,6 +36,7 @@ func _ready() -> void:
 	layer = 10
 	_build_clock_panel()
 	_build_corner_labels()
+	_build_household_bar()
 	GameClock.ticked.connect(func(_tick: int) -> void: refresh_clock())
 	GameClock.time_set.connect(refresh_clock)
 	GameClock.speed_changed.connect(_on_speed_changed)
@@ -42,6 +48,46 @@ func refresh_clock() -> void:
 	var date := GameClock.get_date()
 	_date_label.text = "%s %d, Y%d" % [date["season_name"], date["day"], date["year"]]
 	_time_label.text = GameClock.get_time_text()
+
+
+## Rebuilds the row of household portraits at the bottom of the screen.
+func set_household(household: Household) -> void:
+	for chip in _household_row.get_children():
+		chip.queue_free()
+	_chips.clear()
+	var group := ButtonGroup.new()
+	for pawn in household.pawns:
+		var chip := Button.new()
+		chip.toggle_mode = true
+		chip.button_group = group
+		chip.focus_mode = Control.FOCUS_NONE
+		chip.custom_minimum_size = Vector2(88, 68)
+		chip.tooltip_text = pawn.display_name
+		_style_button(chip)
+		var portrait := PawnPortrait.new()
+		portrait.look = pawn.look
+		portrait.position = Vector2(22, 2)
+		chip.add_child(portrait)
+		var label := Label.new()
+		label.text = pawn.display_name.get_slice(" ", 0)
+		label.position = Vector2(0, 48)
+		label.size = Vector2(88, 18)
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		label.add_theme_font_size_override("font_size", 12)
+		label.add_theme_color_override("font_color", TEXT_COLOR)
+		chip.add_child(label)
+		var id := pawn.id
+		chip.pressed.connect(func() -> void: pawn_chosen.emit(id))
+		_household_row.add_child(chip)
+		_chips[pawn.id] = chip
+	set_selected(household.selected_id)
+
+
+## Highlights one household member without sending a signal.
+func set_selected(id: int) -> void:
+	if _chips.has(id):
+		_chips[id].set_pressed_no_signal(true)
 
 
 func set_info(text: String) -> void:
@@ -121,7 +167,7 @@ func _build_corner_labels() -> void:
 
 	_toast_label = _make_label("")
 	add_child(_toast_label)
-	_toast_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM, Control.PRESET_MODE_MINSIZE, 48)
+	_toast_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM, Control.PRESET_MODE_MINSIZE, 100)
 	_toast_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_toast_label.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -165,6 +211,22 @@ func _make_panel_label(text: String, color: Color, size: int) -> PanelContainer:
 	label.add_theme_font_size_override("font_size", size)
 	margin.add_child(label)
 	return panel
+
+
+func _build_household_bar() -> void:
+	var panel := PanelContainer.new()
+	add_child(panel)
+	panel.add_theme_stylebox_override("panel", _flat_box(PANEL_COLOR, PANEL_BORDER, 1, 0))
+	panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM, Control.PRESET_MODE_MINSIZE, 10)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	var margin := MarginContainer.new()
+	for side in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
+		margin.add_theme_constant_override(side, 4)
+	panel.add_child(margin)
+	_household_row = HBoxContainer.new()
+	_household_row.add_theme_constant_override("separation", 4)
+	margin.add_child(_household_row)
 
 
 func _make_label(text: String) -> Label:

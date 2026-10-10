@@ -1,0 +1,5 @@
+[
+  { "id": "given_female", "list": ["Aldith", "Maud", "Edda", "Isolde", "Wynne", "Hild", "Gisela", "Elswyth", "Beatrix", "Matilda", "Rowena", "Agnes", "Cecily", "Ysolde"] },
+  { "id": "given_male", "list": ["Aldric", "Godwin", "Osric", "Hugh", "Edmund", "Leofric", "Cuthbert", "Wystan", "Bertram", "Garrick", "Roland", "Alaric", "Piers", "Odo"] },
+  { "id": "family", "list": ["Ashford", "Thorne", "Marsh", "Fletcher", "Cooper", "Hollis", "Wainwright", "Brook", "Carver", "Greaves", "Fenwick", "Holt"] }
+]
