@@ -16,6 +16,7 @@ func _ready() -> void:
 	_test_mod_loading()
 	_test_clock()
 	_test_generator()
+	_test_map_view()
 	_test_save_and_load()
 	print("")
 	if _failures == 0:
@@ -93,6 +94,13 @@ func _test_clock() -> void:
 	date = GameClock.get_date()
 	_check(date["year"] == 2 and date["season_id"] == "spring" and date["day"] == 1, "60 days later it is spring of year 2")
 
+	GameClock.set_time(20, 12)
+	var season_position := GameClock.get_season_position()
+	_check(season_position["index"] == 1 and absf(season_position["progress"] - (5.5 / 15.0)) < 0.001, "season position moves smoothly through a season")
+	GameClock.set_time(0, 6)
+	_check(GameClock.tick == GameClock.START_TICK, "set_time(0, 6) is the start of a new game")
+	GameClock.reset()
+
 	GameClock.set_speed(0)
 	var before := GameClock.tick
 	GameClock._process(5.0)
@@ -135,6 +143,20 @@ func _test_generator() -> void:
 	_check(a.is_walkable(40, 32), "clearing grass is walkable")
 	var water_cell := _find_tile(a, "water")
 	_check(water_cell.x >= 0 and not a.is_walkable(water_cell.x, water_cell.y), "water is not walkable")
+
+
+func _test_map_view() -> void:
+	print("Map view")
+	var view := MapView.new()
+	add_child(view)  # runs _ready, which connects to the clock and loads the shader
+	var world := MapGenerator.generate(5, 32, 24)
+	view.set_world(world)
+	_check(view.world == world, "map view accepts a world and builds its textures")
+	_check(MapView.STYLES.has(str(DataRegistry.get_def("tiles", "water").get("style"))), "tile styles in tiles.json are known to the view")
+	for tile_id in DataRegistry.get_ids("tiles"):
+		var def := DataRegistry.get_def("tiles", tile_id)
+		_check(def.has("style") and def.has("priority"), "tile '%s' has a style and priority" % tile_id)
+	view.queue_free()
 
 
 func _test_save_and_load() -> void:

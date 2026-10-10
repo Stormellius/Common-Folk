@@ -17,6 +17,7 @@ var world: WorldState
 func _ready() -> void:
 	tile_cursor.hovered_changed.connect(_on_tile_hovered)
 	_start_new_world(_pick_seed())
+	_apply_launch_options()
 	if not DataRegistry.load_errors.is_empty():
 		hud.show_message("Data problem: %s" % DataRegistry.load_errors[0], 6.0)
 
@@ -49,13 +50,40 @@ func _unhandled_input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 
 
-## A seed can be given on the command line: godot --path . -- --seed=1234
-func _pick_seed() -> int:
+## Options can be given after "--" on the command line, for example:
+##   godot --path . -- --seed=1234 --day=50 --hour=12 --zoom=0.5 --speed=0
+## seed = world seed, day = day number to start on (0 = first), hour = hour of day,
+## zoom = camera zoom, look = tile to center the camera on (x,y), speed = 0 (paused) to 3.
+## Handy for screenshots and testing.
+func _launch_option(name: String) -> String:
+	var prefix := "--%s=" % name
 	for arg in OS.get_cmdline_user_args():
-		if arg.begins_with("--seed="):
-			return int(arg.trim_prefix("--seed="))
+		if arg.begins_with(prefix):
+			return arg.trim_prefix(prefix)
+	return ""
+
+
+func _pick_seed() -> int:
+	var given := _launch_option("seed")
+	if given != "":
+		return int(given)
 	randomize()
 	return randi()
+
+
+func _apply_launch_options() -> void:
+	if _launch_option("day") != "" or _launch_option("hour") != "":
+		var hour := int(_launch_option("hour")) if _launch_option("hour") != "" else 6
+		GameClock.set_time(int(_launch_option("day")), hour)
+	if _launch_option("speed") != "":
+		GameClock.set_speed(int(_launch_option("speed")))
+	if _launch_option("look") != "":
+		var cell := _launch_option("look").split(",")
+		if cell.size() == 2:
+			camera.position = Vector2(float(cell[0]) + 0.5, float(cell[1]) + 0.5) * MapView.TILE_SIZE
+	if _launch_option("zoom") != "":
+		var zoom_level := clampf(float(_launch_option("zoom")), CameraController.ZOOM_MIN, CameraController.ZOOM_MAX)
+		camera.zoom = Vector2(zoom_level, zoom_level)
 
 
 func _start_new_world(world_seed: int) -> void:

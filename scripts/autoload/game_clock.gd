@@ -96,12 +96,33 @@ func get_time_text() -> String:
 	return "%02d:%02d" % [floori(float(minute) / 60.0), minute % 60]
 
 
+## Where we are inside the year: { "index": which season, "progress": 0..1 through it }.
+## Unlike get_date() this moves smoothly through the day, so visuals can fade between seasons.
+func get_season_position() -> Dictionary:
+	var seasons: Array = _seasons()
+	var year_length := 0
+	for season in seasons:
+		year_length += maxi(1, int(season.get("days", 1)))
+	var into_year := fposmod(float(tick) / MINUTES_PER_DAY, float(year_length))
+	for i in seasons.size():
+		var days := float(maxi(1, int(seasons[i].get("days", 1))))
+		if into_year < days:
+			return { "index": i, "progress": into_year / days }
+		into_year -= days
+	return { "index": 0, "progress": 0.0 }
+
+
+## Jumps to a day (0 = the first day) and hour. Used by tools and screenshots.
+func set_time(day_number: int, hour: int = 6) -> void:
+	tick = day_number * MINUTES_PER_DAY + hour * 60
+	_accumulator = 0.0
+	time_set.emit()
+
+
 ## Returns { "year", "season_id", "season_name", "day" } with year and day counted from 1.
 ## Season names and lengths come from data/seasons.json, so mods can change them.
 func get_date() -> Dictionary:
-	var seasons: Array = DataRegistry.get_list("seasons")
-	if seasons.is_empty():
-		seasons = FALLBACK_SEASONS
+	var seasons: Array = _seasons()
 	var year_length := 0
 	for season in seasons:
 		year_length += maxi(1, int(season.get("days", 1)))
@@ -119,6 +140,13 @@ func get_date() -> Dictionary:
 			}
 		day_in_year -= days
 	return { "year": year + 1, "season_id": "season", "season_name": "Season", "day": 1 }
+
+
+func _seasons() -> Array:
+	var seasons: Array = DataRegistry.get_list("seasons")
+	if seasons.is_empty():
+		return FALLBACK_SEASONS
+	return seasons
 
 
 # --- saving --------------------------------------------------------------------

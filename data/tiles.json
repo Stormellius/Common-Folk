@@ -1,7 +1,7 @@
 [
-  { "id": "grass",  "name": "Grass",  "color": "#6b9a45", "walkable": true,  "move_cost": 1.0 },
-  { "id": "dirt",   "name": "Dirt",   "color": "#8a6d4b", "walkable": true,  "move_cost": 1.0 },
-  { "id": "forest", "name": "Forest", "color": "#3f6b35", "walkable": true,  "move_cost": 2.0 },
-  { "id": "water",  "name": "Water",  "color": "#3f6fa0", "walkable": false, "move_cost": 0.0 },
-  { "id": "stone",  "name": "Stone",  "color": "#7b7b78", "walkable": false, "move_cost": 0.0 }
+  { "id": "water",  "name": "Water",  "color": "#3d6c9c", "style": "water",  "priority": 0, "walkable": false, "move_cost": 0.0 },
+  { "id": "dirt",   "name": "Dirt",   "color": "#8a6d4b", "style": "dirt",   "priority": 1, "walkable": true,  "move_cost": 1.0 },
+  { "id": "grass",  "name": "Grass",  "color": "#6b9a45", "style": "grass",  "priority": 2, "walkable": true,  "move_cost": 1.0 },
+  { "id": "forest", "name": "Forest", "color": "#3f6b35", "style": "forest", "priority": 3, "walkable": true,  "move_cost": 2.0 },
+  { "id": "stone",  "name": "Stone",  "color": "#7d7d7a", "style": "stone",  "priority": 4, "walkable": false, "move_cost": 0.0 }
 ]

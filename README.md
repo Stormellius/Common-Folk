@@ -5,6 +5,8 @@ A medieval life sim sandbox with RimWorld-style looks: you live one person's lif
 ## What works now
 
 - Seeded random terrain (grass, forest, water, stone, dirt) with a flat clearing and crossroads in the middle for the future town
+- Terrain drawn by a GPU shader: textured grass and dirt, ragged soft borders between terrain types, animated water with shorelines, rocky cliffs with dark rims, and round tree canopies with shadows. No art files needed yet
+- Day and night light (blue nights, warm dawn and dusk) and seasons (green spring, golden summer, brown autumn, snowy winter) that follow the game clock
 - Camera: pan, zoom toward the cursor, middle-mouse drag
 - Game clock with pause and 1x / 2x / 3x speed, a calendar with seasons, and a clock panel
 - Hover a tile to see what it is and whether it is walkable
@@ -17,7 +19,13 @@ A medieval life sim sandbox with RimWorld-style looks: you live one person's lif
 2. Open Godot, click **Import**, choose this folder's `project.godot`, then press **F5** (or the play button).
 3. The first time, Godot builds its class cache. If you see "identifier not found" errors for `WorldState`, `MapView` and similar, close and reopen the project once.
 
-To play a specific world: `godot --path . -- --seed=1234`
+Options go after `--` on the command line, which is handy for testing and screenshots:
+
+```
+godot --path . -- --seed=1234 --day=50 --hour=12 --zoom=0.5 --look=70,30 --speed=0
+```
+
+`seed` is the world, `day` and `hour` set the date (day 0 is the first day, 15 days per season), `zoom` the camera zoom, `look` the tile to center on, and `speed` 0 to 3.
 
 ## Controls
 
@@ -41,6 +49,8 @@ The simulation never touches the screen, and the screen only reads the simulatio
 data/                  Base content as JSON (one file per kind of thing)
 mods/                  Mods, one folder each (example_mod is disabled by default)
 scenes/main.tscn       The only scene
+shaders/
+  terrain.gdshader     Paints the whole map on the GPU
 scripts/
   autoload/            Global singletons
     data_registry.gd     Loads data/ and mods, answers "what is tile X?"
@@ -50,7 +60,8 @@ scripts/
     map_generator.gd     Seed -> terrain
     save_game.gd         Writes and reads the save file
   view/                Drawing and input for the map
-    map_view.gd          Draws the tiles
+    map_view.gd          Feeds the world and season look to the terrain shader
+    day_night.gd         Tints the map by time of day
     tile_cursor.gd       Hover highlight and grid
     camera_controller.gd Pan and zoom
   ui/hud.gd            Clock panel, speed buttons, messages
@@ -66,14 +77,16 @@ Each file in `data/` is a JSON array, and the file name is the kind of content. 
 
 ```json
 [
-  { "id": "grass", "name": "Grass", "color": "#6b9a45", "walkable": true, "move_cost": 1.0 }
+  { "id": "grass", "name": "Grass", "color": "#6b9a45", "style": "grass", "priority": 2, "walkable": true, "move_cost": 1.0 }
 ]
 ```
+
+A tile's look comes from three fields: `color` (its base color), `style` (`flat`, `grass`, `dirt`, `water`, `stone` or `forest`, which picks the texture in the shader) and `priority` (higher-priority tiles bleed over the edges of lower ones, so grass overlaps dirt and stone overlaps grass). Seasons in `seasons.json` add `foliage_tint` (multiplied into grass and leaves) and `snow` (0 to 1). A season looks exactly like itself for its first two thirds, then eases toward the next one.
 
 A mod is a folder in `mods/` (or `user://mods/` in a built game) with the same kinds of files:
 
 - A new `id` adds content.
-- An existing `id` replaces the base entry.
+- An existing `id` replaces the whole base entry, so include all of its fields.
 - `{ "id": "water", "_remove": true }` deletes an entry.
 - A file with a new name (say `recipes.json`) adds a whole new kind of content.
 - An optional `mod.json` holds `name`, `enabled` and `load_order`.
@@ -91,6 +104,10 @@ godot --headless --path . res://tests/smoke_test.tscn
 ```
 
 This checks data loading, mods, the clock and calendar, world generation (same seed, same world) and the save round trip. Run it as a scene as shown; it needs the autoloads, which `--script` mode does not provide.
+
+## Graphics notes
+
+The terrain is procedural, so changing how it looks means editing `shaders/terrain.gdshader` (the `terrain()` function holds one block per style, and the sliders-in-code are plain numbers such as `0.80 + 0.40 * n`). The shader uses only features of Godot's Compatibility renderer, so it runs on modest GPUs. When characters, furniture and buildings arrive they will be sprites drawn on top, and the day and night tint (a `CanvasModulate` node) will apply to them automatically. To stop the dark nights, set the night colors in `day_night.gd` closer to white.
 
 ## Next: milestone 2, one pawn
 
