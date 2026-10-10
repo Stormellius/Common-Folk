@@ -1,0 +1,14 @@
+# Godot 4 generated files
+.godot/
+*.translation
+
+# Exports
+export/
+*.exe
+*.pck
+*.zip
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store

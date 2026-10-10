@@ -1,0 +1,8 @@
+{
+  "name": "Example Mod",
+  "version": "1.0",
+  "author": "you",
+  "description": "Turns grass a brighter green. Change \"enabled\" to true to try it, then restart the game.",
+  "enabled": false,
+  "load_order": 0
+}

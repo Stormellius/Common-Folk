@@ -1,0 +1,6 @@
+[
+  { "id": "spring", "name": "Spring", "days": 15 },
+  { "id": "summer", "name": "Summer", "days": 15 },
+  { "id": "autumn", "name": "Autumn", "days": 15 },
+  { "id": "winter", "name": "Winter", "days": 15 }
+]
