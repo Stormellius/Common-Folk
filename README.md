@@ -5,7 +5,7 @@ A medieval life sim sandbox with RimWorld-style looks: you live one person's lif
 ## What works now
 
 - Seeded random terrain (grass, forest, water, stone, dirt) with a flat clearing and crossroads in the middle for the future town
-- Terrain drawn by a GPU shader: textured grass and dirt, ragged soft borders between terrain types, animated water with shorelines, rocky cliffs with dark rims, and round tree canopies with shadows. No art files needed yet
+- Terrain drawn by a GPU shader in a gritty RimWorld-like style: muted earthy colors, grain, grass tufts, pebbly dirt, shallow-to-deep animated water, plated rock with a lit bevel and a cast shadow, and oak and pine trees with shadows. No art files needed yet
 - Day and night light (blue nights, warm dawn and dusk) and seasons (green spring, golden summer, brown autumn, snowy winter) that follow the game clock
 - Camera: pan, zoom toward the cursor, middle-mouse drag
 - Game clock with pause and 1x / 2x / 3x speed, a calendar with seasons, and a clock panel
@@ -64,7 +64,7 @@ scripts/
     day_night.gd         Tints the map by time of day
     tile_cursor.gd       Hover highlight and grid
     camera_controller.gd Pan and zoom
-  ui/hud.gd            Clock panel, speed buttons, messages
+  ui/hud.gd            Flat dark panels: clock and speed buttons, tile info, help, messages
   main.gd              Wires it together and handles shortcuts
 tests/                 Headless checks
 ```
@@ -107,7 +107,9 @@ This checks data loading, mods, the clock and calendar, world generation (same s
 
 ## Graphics notes
 
-The terrain is procedural, so changing how it looks means editing `shaders/terrain.gdshader` (the `terrain()` function holds one block per style, and the sliders-in-code are plain numbers such as `0.80 + 0.40 * n`). The shader uses only features of Godot's Compatibility renderer, so it runs on modest GPUs. When characters, furniture and buildings arrive they will be sprites drawn on top, and the day and night tint (a `CanvasModulate` node) will apply to them automatically. To stop the dark nights, set the night colors in `day_night.gd` closer to white.
+The terrain is procedural, so changing how it looks means editing `shaders/terrain.gdshader`. The `terrain()` function holds one block per style, `tree_shape()` and `tree_outline()` define the oak and pine silhouettes, and light always comes from the top-left (`LIGHT_DIR`). Colors come from `data/tiles.json`, so a mod can re-tint the whole world. The shader uses only features of Godot's Compatibility renderer, so it runs on modest GPUs.
+
+This is a procedural approximation of the RimWorld look. The real thing relies on hand-painted textures and sprites, so when characters, furniture and buildings arrive they will be sprites drawn on top (made in Krita or Aseprite, or from a free pack); the day and night tint (a `CanvasModulate` node) will apply to them automatically. To stop the dark nights, set the night colors in `day_night.gd` closer to white. The HUD colors are constants at the top of `scripts/ui/hud.gd`.
 
 ## Next: milestone 2, one pawn
 
