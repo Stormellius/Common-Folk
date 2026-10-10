@@ -152,7 +152,7 @@ float snow_cover(vec2 p, float amount) {
 vec3 terrain(int style, vec3 base, vec2 p, float depth) {
 	vec3 snow_color = vec3(0.90, 0.93, 0.96) * (0.92 + 0.08 * vnoise(p * 3.0));
 	vec3 col = base;
-	float grain = hash21(floor(world_pos / 2.0)) - 0.5;  // chunky 2-pixel grain
+	float grain = hash21(floor(world_pos / (tile_px / 16.0))) - 0.5;  // chunky grain, 1/16 of a tile
 	if (style == 1) {
 		col = base * (0.86 + 0.28 * fbm(p * 1.4));
 		col *= 0.93 + 0.14 * vnoise(p * 5.0);

@@ -9,7 +9,7 @@ extends Node2D
 ##   "priority": higher-priority tiles bleed over the edges of lower-priority ones
 ## The season look (foliage color, snow) comes from data/seasons.json.
 
-const TILE_SIZE := 32
+const TILE_SIZE := 48
 const TERRAIN_SHADER := preload("res://shaders/terrain.gdshader")
 const STYLES := { "flat": 0, "grass": 1, "dirt": 2, "water": 3, "stone": 4, "forest": 5 }
 const MAX_TILE_TYPES := 256
@@ -40,7 +40,7 @@ func _process(_delta: float) -> void:
 	var camera := get_viewport().get_camera_2d()
 	if camera == null:
 		return
-	var detail := smoothstep(0.35, 0.8, camera.zoom.x)
+	var detail := smoothstep(0.23, 0.53, camera.zoom.x)
 	if absf(detail - _last_detail) > 0.01:
 		_last_detail = detail
 		_material.set_shader_parameter("detail", detail)
