@@ -51,6 +51,19 @@ static func make(rng: RandomNumberGenerator, family: String, used_names: Array[S
 	return pawn
 
 
+## A child who turns 18 gets an orientation, like every adult starts with.
+static func give_orientation(pawn: Pawn, rng: RandomNumberGenerator) -> void:
+	for trait_id in pawn.traits:
+		if str(DataRegistry.get_def("traits", trait_id).get("group", "")) == "orientation":
+			return
+	var orientations: Array[String] = []
+	for trait_def in DataRegistry.get_list("traits"):
+		if str(trait_def.get("group", "")) == "orientation":
+			orientations.append(str(trait_def["id"]))
+	if not orientations.is_empty():
+		pawn.traits.append(orientations[rng.randi() % orientations.size()])
+
+
 static func pick_text(rng: RandomNumberGenerator, kind: String, id: String, key: String, fallback: Array) -> String:
 	var options: Array = DataRegistry.get_def(kind, id).get(key, [])
 	if options.is_empty():

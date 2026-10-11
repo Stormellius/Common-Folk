@@ -123,6 +123,8 @@ func _pawn_at(world_point: Vector2) -> Pawn:
 	var best: Pawn = null
 	var best_distance := PICK_RADIUS * MapView.TILE_SIZE
 	for pawn in sim.household.pawns:
+		if pawn.is_infant():
+			continue
 		var distance := visual_position(pawn.id).distance_to(world_point)
 		if distance < best_distance:
 			best_distance = distance

@@ -58,6 +58,10 @@
   { "id": "treated",      "text": "Seen to by the healer",  "mood": 4,   "hours": 24, "on": "treated" },
   { "id": "defended",     "text": "The town held",          "mood": 6,   "hours": 72, "on": "conflict:won" },
   { "id": "plundered",    "text": "The town was plundered", "mood": -8,  "hours": 72, "on": "conflict:lost" },
+  { "id": "expecting",   "text": "Expecting a child",      "mood": 4,   "when": { "pregnant": true }, "group": "pregnancy" },
+  { "id": "heavy",       "text": "Heavy with child",       "mood": -6,  "when": { "pregnant_above": 33 }, "group": "pregnancy" },
+  { "id": "new_baby",    "text": "A new baby in the house", "mood": 12, "hours": 144, "on": "birth" },
+  { "id": "evicted",      "text": "Turned out of their home", "mood": -12, "hours": 96, "on": "evicted" },
   { "id": "closeness",    "text": "Time with someone close", "mood": 10, "hours": 24, "on": "interaction:intimacy" },
   { "id": "grief",        "text": "Someone in the household died", "mood": -15, "hours": 72, "on": "death" }
 ]

@@ -32,6 +32,8 @@ var levy_multiplier := 1.0
 var last_tax_day := 0
 ## What the tax collector did last time, for the panel.
 var last_report := ""
+## Quarter days in a row on which tax was left unpaid; at the limit the household is evicted.
+var missed := 0
 ## Coin given to the town's defense fund (see Conflict).
 var fund := 0
 ## The threat on its way: { "id", "due_day", "strength" }, or empty.
@@ -102,7 +104,10 @@ func lot_blocker(sim: Simulation, lot_id: String, how: String) -> String:
 	if lot.is_empty():
 		return "there is no such lot"
 	var price := lot_price(world, lot_id, how)
-	if how == "buyout":
+	if lot_id == WorldState.HOME_LOT:  # taking the old home plot again after an eviction
+		if how != "lease" or not world.home_lost:
+			return "you still hold it" if how == "lease" else "it is not rented"
+	elif how == "buyout":
 		if str(world.titles.get(lot_id, "")) != "leasehold":
 			return "it is not rented"
 	else:
@@ -125,6 +130,10 @@ func acquire_lot(sim: Simulation, lot_id: String, how: String) -> Dictionary:
 	var price := lot_price(sim.world, lot_id, how)
 	sim.household.coins -= price
 	var lot := sim.world.get_lot(lot_id)
+	if lot_id == WorldState.HOME_LOT:
+		sim.world.home_lost = false
+		sim.world.titles[lot_id] = "leasehold"
+		return { "ok": true, "message": "You lease your old plot again for %s" % Economy.format(price) }
 	if how == "buyout":
 		sim.world.titles[lot_id] = "freehold"
 		return { "ok": true, "message": "%s is now yours outright (%s)" % [str(lot.get("name", "The lot")), Economy.format(price)] }
@@ -259,10 +268,58 @@ func collect(sim: Simulation) -> Array[String]:
 			last_report += " The collector took your %s." % ", ".join(seized_names)
 		if arrears > 0:
 			last_report += " %s is still owing." % Economy.format(arrears)
+	if arrears > 0:
+		missed += 1
+		var limit := int(config().get("eviction_after_quarters", 2))
+		if missed >= limit:
+			messages.append(last_report)
+			messages.append_array(evict(sim))
+			takings = 0
+			levy_multiplier = 1.0
+			return messages
+		last_report += " Pay what you owe by the next quarter day or you will be evicted."
+	else:
+		missed = 0
 	messages.append(last_report)
 	takings = 0
 	levy_multiplier = 1.0
 	return messages
+
+
+## The Crown turns the household out for unpaid tax. They lose every lot they hold: the furnishings
+## are taken (the house itself stays, now the Crown's), a business lot goes back to being empty, and
+## the debt is wiped. Nothing stops them leasing the old plot again, if they can pay the entry fee.
+func evict(sim: Simulation) -> Array[String]:
+	var world := sim.world
+	for lot_id in world.titles.keys():
+		var rect: Rect2i = world.get_lot(str(lot_id)).get("rect", Rect2i())
+		var is_home := str(lot_id) == WorldState.HOME_LOT
+		for placed in world.objects.duplicate():
+			if not rect.has_point(placed.tile):
+				continue
+			if is_home and (str(placed.def().get("category", "furniture")) == "structure" or not bool(placed.def().get("buildable", true))):
+				continue  # the walls stay with the house
+			sim.seize(placed)
+		if is_home:
+			world.home_lost = true
+		else:
+			for y in range(rect.position.y, rect.end.y):
+				for x in range(rect.position.x, rect.end.x):
+					world.set_floor(Vector2i(x, y), "")
+			for entry in world.lots:
+				if entry["id"] == lot_id:
+					entry["kind"] = "vacant"
+					entry["name"] = "Empty lot"
+					entry["public"] = false
+					entry.erase("owner")
+		world.titles.erase(lot_id)
+	arrears = 0
+	missed = 0
+	reputation = clampf(reputation + float(config().get("eviction_standing", -20)), float(config().get("reputation_min", -100)), float(config().get("reputation_max", 100)))
+	for pawn in sim.household.pawns:
+		Mood.add_event(pawn, "evicted", GameClock.tick)
+	last_report = "The Crown has evicted you for unpaid tax. Your furnishings are gone and the land is no longer yours."
+	return [last_report]
 
 
 ## Takes furnishings (dearest first, but never the beds, cooking pot or hearth: realm.json "distraint_exempt") from the land the household holds until `amount` is covered.
@@ -344,14 +401,14 @@ func on_death(sim: Simulation, dead_pawn: Pawn) -> Array[String]:
 
 ## A line for the panel: standing, title and the next quarter day.
 func summary(sim: Simulation) -> String:
-	var held := "Landless"
+	var held := "Landless (evicted)" if sim.world.home_lost else "Landless"
 	if sim.world.titles.has(WorldState.HOME_LOT):
 		held = str(DataRegistry.get_def("titles", str(sim.world.titles[WorldState.HOME_LOT])).get("name", "Freehold"))
 	var text := "%s, %s\nTax day in %d days (about %s)" % [Realm.class_name_of(Realm.household_class(sim.household)), held, days_until_tax(), Economy.format(total_due(sim))]
 	if guild != "":
 		text += "\n" + str(guild_def().get("name", guild))
 	if arrears > 0:
-		text += "\nOwing %s" % Economy.format(arrears)
+		text += "\nOwing %s%s" % [Economy.format(arrears), " (evicted next quarter day if unpaid)" if missed + 1 >= int(config().get("eviction_after_quarters", 2)) else ""]
 	if not threat.is_empty():
 		var days_left := maxi(0, int(threat["due_day"]) - GameClock.get_day_number())
 		text += "\n%s in %d days: strength %d, defense %d" % [str(DataRegistry.get_def("conflicts", str(threat["id"])).get("name", "Trouble")), days_left, int(threat["strength"]), roundi(float(Conflict.defense(sim)["total"]))]
@@ -364,7 +421,7 @@ func to_dict() -> Dictionary:
 	return {
 		"start": start_id, "guild": guild, "head": head_id, "reputation": snappedf(reputation, 0.01),
 		"fund": fund, "threat": threat.duplicate(), "conflicts": last_conflict_days.duplicate(),
-		"takings": takings, "arrears": arrears, "levy": levy_multiplier, "last_tax_day": last_tax_day, "report": last_report,
+		"missed": missed, "takings": takings, "arrears": arrears, "levy": levy_multiplier, "last_tax_day": last_tax_day, "report": last_report,
 	}
 
 
@@ -376,6 +433,7 @@ static func from_dict(data: Dictionary) -> Realm:
 	realm.reputation = float(data.get("reputation", 0.0))
 	realm.takings = int(data.get("takings", 0))
 	realm.arrears = int(data.get("arrears", 0))
+	realm.missed = int(data.get("missed", 0))
 	realm.levy_multiplier = float(data.get("levy", 1.0))
 	realm.last_tax_day = int(data.get("last_tax_day", 0))
 	realm.last_report = str(data.get("report", ""))

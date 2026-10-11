@@ -24,6 +24,15 @@ var class_id := "peasant"
 ## What this person is ill with, an id from data/illness.json ("" when well), and since which tick.
 var illness := ""
 var ill_since := 0
+## The day number a child was conceived ("" -1 when not expecting), and by whom (see Pregnancy).
+var pregnant_since := -1
+var pregnancy_father := 0
+## A mother cannot conceive again before this day number (she is recovering from the birth).
+var recovered_on := 0
+## Day of the year (0 to 59) the person has their birthday, or -1 for "work it out from the id".
+var birthday := -1
+## An infant is carried by someone from the household and cannot be controlled (see Pregnancy).
+var carried_by := 0
 ## Colors as hex strings plus a hair style number; see PawnArt.
 var look: Dictionary = {}
 
@@ -83,6 +92,14 @@ var think_cooldown := 0
 var step_to := Vector2i.ZERO
 var step_ticks_total := 0
 var step_ticks_done := 0
+
+
+func is_infant() -> bool:
+	return age < Pregnancy.infant_age()
+
+
+func is_pregnant() -> bool:
+	return pregnant_since >= 0
 
 
 func opinion_of(other_id: int) -> float:
@@ -171,6 +188,11 @@ func to_dict() -> Dictionary:
 		"class": class_id,
 		"illness": illness,
 		"ill_since": ill_since,
+		"pregnant_since": pregnant_since,
+		"pregnancy_father": pregnancy_father,
+		"recovered_on": recovered_on,
+		"birthday": birthday,
+		"carried_by": carried_by,
 		"coins": coins,
 		"pay_carry": snappedf(pay_carry, 0.001),
 		"work_lot": work_lot,
@@ -212,6 +234,11 @@ static func from_dict(data: Dictionary) -> Pawn:
 	pawn.class_id = str(data.get("class", "peasant"))
 	pawn.illness = str(data.get("illness", ""))
 	pawn.ill_since = int(data.get("ill_since", 0))
+	pawn.pregnant_since = int(data.get("pregnant_since", -1))
+	pawn.pregnancy_father = int(data.get("pregnancy_father", 0))
+	pawn.recovered_on = int(data.get("recovered_on", 0))
+	pawn.birthday = int(data.get("birthday", -1))
+	pawn.carried_by = int(data.get("carried_by", 0))
 	pawn.coins = int(data.get("coins", 0))
 	pawn.pay_carry = float(data.get("pay_carry", 0.0))
 	pawn.work_lot = str(data.get("work_lot", ""))

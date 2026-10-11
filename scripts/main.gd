@@ -214,6 +214,7 @@ func _show_world(new_world: WorldState, household: Household, town: Household = 
 	sim.realm_notice.connect(_on_realm_notice)
 	sim.health_notice.connect(_on_realm_notice)
 	sim.pawn_died.connect(_on_pawn_died)
+	sim.household_changed.connect(func() -> void: hud.set_household(sim.household))
 	sim.town_death.connect(_on_town_death)
 	sim.event_started.connect(_on_event_started)
 	sim.event_ended.connect(_on_event_ended)

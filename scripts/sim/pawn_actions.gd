@@ -53,7 +53,7 @@ static func list_for(sim: Simulation, pawn: Pawn, tile: Vector2i) -> Array[Dicti
 	if pawn.is_busy():
 		actions.append(_entry(STOP, "Stop"))
 	for other in sim.people():
-		if other.id == pawn.id or other.tile != tile:
+		if other.id == pawn.id or other.tile != tile or other.is_infant():
 			continue
 		for interaction in DataRegistry.get_list("interactions"):
 			var blocker := sim.interaction_blocker(pawn, other, str(interaction["id"]))
@@ -80,6 +80,14 @@ static func _land_entries(sim: Simulation, tile: Vector2i) -> Array[Dictionary]:
 	if lot.is_empty():
 		return entries
 	var lot_id := str(lot["id"])
+	if lot_id == WorldState.HOME_LOT:
+		if sim.world.home_lost:
+			var home_blocker := sim.realm.lot_blocker(sim, lot_id, "lease")
+			entries.append(_entry(LOT_PREFIX + "lease:" + lot_id, "Lease your old plot again (%s)" % Economy.format(sim.realm.lot_price(sim.world, lot_id, "lease")), home_blocker == "", home_blocker))
+		elif str(sim.world.titles.get(lot_id, "")) == "leasehold":
+			var buy_blocker := sim.realm.lot_blocker(sim, lot_id, "buyout")
+			entries.append(_entry(LOT_PREFIX + "buyout:" + lot_id, "Buy out the lease (%s)" % Economy.format(sim.realm.lot_price(sim.world, lot_id, "buyout")), buy_blocker == "", buy_blocker))
+		return entries
 	if str(lot.get("kind", "")) == "vacant" and not sim.world.titles.has(lot_id):
 		var lease_title := DataRegistry.get_def("titles", "leasehold")
 		var rent := roundi(sim.world.lot_area(lot_id) * float(lease_title.get("tax_per_tile", 0.0)))

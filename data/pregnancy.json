@@ -1,0 +1,12 @@
+[
+  { "id": "pregnancy",
+    "duration_days": 45,
+    "announce_after_days": 12,
+    "heavy_after_days": 33,
+    "recovery_days": 15,
+    "max_mother_age": 45,
+    "infant_until_age": 2,
+    "year_days": 60,
+    "need_drain_multipliers": { "hunger": 1.3, "rest": 1.2 },
+    "heavy_work_break": true }
+]

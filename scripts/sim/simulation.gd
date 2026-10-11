@@ -42,6 +42,8 @@ signal event_ended(event_name: String)
 signal realm_notice(text: String)
 ## Someone in the household fell ill, or got better.
 signal health_notice(text: String)
+## Who is in the household changed without a death: a baby was born, or grew old enough to be controlled.
+signal household_changed
 ## Ids of the needs in play; see Needs.
 var active_needs: Array[String] = []
 
@@ -72,16 +74,21 @@ func step() -> void:
 			event_ended.emit(event_name)
 	var season_multipliers := _season_multipliers()
 	var minute := GameClock.get_minute_of_day()
+	Pregnancy.carry_infants(self)
 	var everyone := people()
 	if minute == 0:
 		Relations.drift(everyone)
+		for notice in Pregnancy.new_day(self, _rng):
+			health_notice.emit(notice)
 		for notice in realm.new_day(self):
 			realm_notice.emit(notice)
 		_roll_illness(everyone)
 	if minute % EVENT_EVERY == 0:
 		_apply_events(everyone)
 	for pawn in everyone:
-		var cause := _drain_needs(pawn, Illness.drain_multipliers(pawn, season_multipliers))
+		if pawn.is_infant():
+			continue  # carried by the household: needs no seeing to
+		var cause := _drain_needs(pawn, Pregnancy.drain_multipliers(pawn, Illness.drain_multipliers(pawn, season_multipliers)))
 		if cause != "":
 			die(pawn, cause)
 			continue
@@ -174,6 +181,8 @@ func interaction_blocker(pawn: Pawn, other: Pawn, interaction_id: String) -> Str
 	if interaction.is_empty() or pawn.id == other.id:
 		return "not possible"
 	var other_name := _first_name(other)
+	if pawn.is_infant() or other.is_infant():
+		return "a baby cannot"
 	if bool(interaction.get("adults_only", false)) and not (pawn.adult and other.adult):
 		return "only adults can"
 	if other.is_busy():
@@ -351,7 +360,7 @@ func _on_shift(job: Dictionary, minute: int) -> bool:
 
 ## True when some need is bad enough that work can wait.
 func _needs_break(pawn: Pawn) -> bool:
-	if pawn.illness != "":
+	if pawn.illness != "" or Pregnancy.needs_rest_from_work(pawn):
 		return true
 	for need_id in active_needs:
 		if Needs.slows_when_empty(need_id) and float(pawn.needs.get(need_id, Needs.FULL)) < WORK_BREAK_BELOW:
@@ -572,8 +581,12 @@ func describe_activity(pawn: Pawn) -> String:
 		text = "Heading to the %s" % placed.display_name().to_lower()
 	elif pawn.has_orders():
 		text = "Walking"
+	if pawn.is_infant():
+		return "Being carried"
 	if pawn.slowed:
 		text += " (exhausted)"
+	if Pregnancy.is_known(pawn):
+		text += " (expecting)"
 	if pawn.illness != "":
 		text = "%s (%s)" % [text, str(Illness.def(pawn.illness).get("name", "ill")).to_lower()]
 	return text
@@ -685,7 +698,7 @@ func die(pawn: Pawn, cause: String) -> void:
 
 
 func is_game_over() -> bool:
-	return household.pawns.is_empty()
+	return household.playable().is_empty()
 
 
 ## What a customer pays for using something on the player's business lot goes into the household
@@ -818,6 +831,9 @@ func _finish_interaction(pawn: Pawn, partner: Pawn, interaction: Dictionary) -> 
 		Mood.add_event(partner, "interaction:%s" % pawn.job_interaction, GameClock.tick)
 	pawn.add_opinion(partner.id, delta)
 	partner.add_opinion(pawn.id, delta)
+	var conception := float(interaction.get("conception_chance", 0.0))
+	if conception > 0.0 and not flopped:
+		Pregnancy.try_conceive(self, pawn, partner, conception, _rng)
 
 
 ## Lines for the panel: who `pawn` knows best (or least well), as { "name", "label", "opinion" }.
@@ -944,6 +960,8 @@ func _roll_illness(everyone: Array[Pawn]) -> void:
 	var season_id := str(GameClock.get_date().get("season_id", ""))
 	var event_factor := events.illness_multiplier()
 	for pawn in everyone:
+		if pawn.is_infant():
+			continue
 		if pawn.illness != "":
 			var current := Illness.def(pawn.illness)
 			var days_ill := (GameClock.tick - pawn.ill_since) / GameClock.MINUTES_PER_DAY
@@ -974,7 +992,7 @@ func _recover(pawn: Pawn) -> void:
 func _seek_company(pawn: Pawn) -> bool:
 	var candidates: Array[Pawn] = []
 	for other in (town.pawns if town.get_pawn(pawn.id) != null else people()):
-		if other.id != pawn.id and _distance(pawn.tile, other.tile) <= SOCIAL_RADIUS and not other.is_busy():
+		if other.id != pawn.id and not other.is_infant() and _distance(pawn.tile, other.tile) <= SOCIAL_RADIUS and not other.is_busy():
 			candidates.append(other)
 	candidates.sort_custom(func(a: Pawn, b: Pawn) -> bool:
 		return _distance(pawn.tile, a.tile) - 0.3 * pawn.opinion_of(a.id) < _distance(pawn.tile, b.tile) - 0.3 * pawn.opinion_of(b.id))

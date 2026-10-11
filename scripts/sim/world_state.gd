@@ -32,6 +32,8 @@ var lots: Array[Dictionary] = []
 ## Land the player holds, by lot id, with the kind of title (an id from data/titles.json). The home
 ## lot ("home") always counts as theirs; a business lot is added when they take it on.
 var titles: Dictionary = {}
+## The household was evicted from the home lot (see Realm): it is no longer theirs to build on.
+var home_lost := false
 ## Floors laid on the ground (Vector2i -> floor id from data/floors.json). They sit under
 ## objects, so a bed can stand on planks.
 var floors: Dictionary = {}
@@ -165,7 +167,7 @@ func in_lot(tile: Vector2i) -> bool:
 ## Whether the player may build on this tile: the home lot or any other lot they hold.
 func can_build_at(tile: Vector2i) -> bool:
 	if lot.has_point(tile):
-		return true
+		return not home_lost
 	var here := lot_at(tile)
 	return not here.is_empty() and titles.has(str(here["id"]))
 
@@ -173,7 +175,7 @@ func can_build_at(tile: Vector2i) -> bool:
 ## The rectangles of every lot the player holds (the home lot first).
 func held_rects() -> Array[Rect2i]:
 	var rects: Array[Rect2i] = []
-	if lot.size != Vector2i.ZERO:
+	if lot.size != Vector2i.ZERO and not home_lost:
 		rects.append(lot)
 	for entry in lots:
 		if titles.has(str(entry["id"])):
@@ -262,6 +264,7 @@ func to_dict() -> Dictionary:
 		"objects": objects.map(func(placed: PlacedObject) -> Dictionary: return placed.to_dict()),
 		"lot": [lot.position.x, lot.position.y, lot.size.x, lot.size.y],
 		"titles": titles.duplicate(),
+		"home_lost": home_lost,
 		"lots": lots.map(func(entry: Dictionary) -> Dictionary:
 			var rect: Rect2i = entry["rect"]
 			var saved: Dictionary = entry.duplicate()
@@ -292,6 +295,7 @@ static func from_dict(data: Dictionary) -> WorldState:
 		world.lot = Rect2i(int(saved_lot[0]), int(saved_lot[1]), int(saved_lot[2]), int(saved_lot[3]))
 	else:  # a save from before there were lots
 		world.lot = centered_lot(world.width, world.height)
+	world.home_lost = bool(data.get("home_lost", false))
 	var saved_titles: Variant = data.get("titles")
 	if saved_titles is Dictionary:
 		for lot_id in saved_titles:

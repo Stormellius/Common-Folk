@@ -42,6 +42,8 @@ func _target() -> Vector2:
 	var here := Vector2(pawn.tile) + Vector2(0.5, 0.5)
 	if pawn.is_moving():
 		here = here.lerp(Vector2(pawn.step_to) + Vector2(0.5, 0.5), pawn.step_progress())
+	if pawn.is_infant():
+		here += Vector2(0.2, -0.12)  # on the carer's arm
 	return here * MapView.TILE_SIZE
 
 
@@ -72,7 +74,7 @@ func _draw() -> void:
 		return
 	_drawn_facing = pawn.facing
 	_drawn_pose = pawn.pose
-	var u := MapView.TILE_SIZE / 48.0 * (1.0 if pawn.adult else CHILD_SCALE)
+	var u := MapView.TILE_SIZE / 48.0 * (1.0 if pawn.adult else CHILD_SCALE * (0.6 if pawn.is_infant() else 1.0))
 	if selected:
 		var ring := PackedVector2Array()
 		for i in range(25):
@@ -87,7 +89,7 @@ func _draw() -> void:
 		_draw_hearts(u)
 	elif pawn.pose == "talk":
 		_draw_speech(u)
-	if show_name:
+	if show_name and not pawn.is_infant():
 		var font := ThemeDB.fallback_font
 		draw_set_transform(Vector2(0.0, 27.0 * u), 0.0, Vector2(label_scale, label_scale))
 		draw_string_outline(font, Vector2(-70.0, 0.0), pawn.display_name, HORIZONTAL_ALIGNMENT_CENTER, 140.0, 13, 4, Color(0, 0, 0, 0.85))

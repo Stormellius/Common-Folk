@@ -149,7 +149,7 @@ func set_household(household: Household) -> void:
 	_chips.clear()
 	_chip_marks.clear()
 	var group := ButtonGroup.new()
-	for pawn in household.pawns:
+	for pawn in household.playable():
 		var chip := Button.new()
 		chip.toggle_mode = true
 		chip.button_group = group

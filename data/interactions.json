@@ -43,6 +43,7 @@
     "max_use_minutes": 30,
     "adults_only": true,
     "requires_attraction": true,
+    "conception_chance": 0.18,
     "min_opinion": 25,
     "willing_below": { "libido": 85 },
     "unwilling": "isn't in the mood",

@@ -21,7 +21,7 @@ func add_pawn(pawn: Pawn) -> void:
 	pawn.id = _next_id
 	_next_id += 1
 	pawns.append(pawn)
-	if selected_id == -1:
+	if selected_id == -1 and not pawn.is_infant():
 		selected_id = pawn.id
 
 
@@ -50,16 +50,31 @@ func remove_pawn(id: int) -> Pawn:
 	if pawns.is_empty():
 		selected_id = -1
 	elif selected_id == id:
-		selected_id = pawns[index % pawns.size()].id
+		selected_id = -1
+		for offset in pawns.size():
+			var next := pawns[(index + offset) % pawns.size()]
+			if not next.is_infant():
+				selected_id = next.id
+				break
 	return selected()
 
 
 ## Returns false if there is no such pawn.
 func select(id: int) -> bool:
-	if get_pawn(id) == null:
-		return false
+	var chosen := get_pawn(id)
+	if chosen == null or chosen.is_infant():
+		return false  # babies are carried, not controlled
 	selected_id = id
 	return true
+
+
+## The people the player can control: everyone but the babies.
+func playable() -> Array[Pawn]:
+	var found: Array[Pawn] = []
+	for pawn in pawns:
+		if not pawn.is_infant():
+			found.append(pawn)
+	return found
 
 
 ## Selects the next (or with a negative step, previous) household member.
@@ -71,7 +86,11 @@ func cycle_selection(step: int = 1) -> void:
 		if pawns[i].id == selected_id:
 			index = i
 			break
-	selected_id = pawns[posmod(index + step, pawns.size())].id
+	for attempt in pawns.size():
+		index = posmod(index + step, pawns.size())
+		if not pawns[index].is_infant():
+			selected_id = pawns[index].id
+			return
 
 
 # --- saving --------------------------------------------------------------------
@@ -94,6 +113,8 @@ static func from_dict(data: Dictionary, first_id: int = 1) -> Household:
 	household.coins = int(data.get("coins", Economy.start_coins()))  # an older save gets a starting purse
 	household._next_id = int(data.get("next_id", first_id + household.pawns.size()))
 	household.selected_id = int(data.get("selected", -1))
-	if household.get_pawn(household.selected_id) == null:
-		household.selected_id = household.pawns[0].id if not household.pawns.is_empty() else -1
+	var chosen := household.get_pawn(household.selected_id)
+	if chosen == null or chosen.is_infant():
+		var playable := household.playable()
+		household.selected_id = playable[0].id if not playable.is_empty() else -1
 	return household
