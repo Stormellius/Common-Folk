@@ -136,10 +136,10 @@ To try it, set `"enabled": true` in `mods/example_mod/mod.json` and restart. Gra
 ```json
 { "id": "intimacy", "action": "Be intimate with {name}", "doing": "Spending private time together",
   "satisfies": { "libido": 200 }, "max_use_minutes": 30, "adults_only": true,
-  "willing_below": { "libido": 85 }, "unwilling": "isn't in the mood" }
+  "requires_attraction": true, "willing_below": { "libido": 85 }, "unwilling": "isn't in the mood" }
 ```
 
-Both people must be adults and willing (`willing_below`: each need listed must be under that number, otherwise the entry is greyed out with the `unwilling` reason), and the other person must not be busy. The asker walks over, both stand still side by side with hearts over their heads, both needs fill, and the panel says only what `doing` says. Nothing explicit is shown, and the people never do this on their own: only the player starts it. Ordering either person elsewhere ends it for both.
+Both people must be adults, attracted to each other (`requires_attraction` reads the orientation traits in `traits.json`: `attracted_to` is `opposite`, `same` or `both`; someone with none of them is open to anyone) and willing (`willing_below`: each need listed must be under that number, otherwise the entry is greyed out with the `unwilling` reason), and the other person must not be busy. The asker walks over, both stand still side by side with hearts over their heads, both needs fill, and the panel says only what `doing` says. Nothing explicit is shown, and the people never do this on their own: only the player starts it. Ordering either person elsewhere ends it for both.
 
 If you export the game, add `*.json` under **Resources > Filters to export non-resource files** so the data files are included.
 

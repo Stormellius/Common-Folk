@@ -5,7 +5,7 @@
   { "id": "loner",   "name": "Loner",    "description": "Needs company less than most.",                     "need_drain_multipliers": { "social": 0.5 } },
   { "id": "pious",   "name": "Pious",    "description": "Faith matters; the need drains faster.",           "need_drain_multipliers": { "faith": 1.5 } },
   { "id": "greedy",  "name": "Greedy",   "description": "Wants coin more than comfort.",                    "need_drain_multipliers": { "fun": 1.2 } },
-  { "id": "straight","name": "Straight", "description": "Is attracted to the opposite gender.",                    "need_drain_multipliers": { "libido": 0.5 } },
-  { "id": "gay",     "name": "Gay",      "description": "Is attracted to the same gender.",                    "need_drain_multipliers": { "libido": 0.5 } },
-  { "id": "bisexual","name": "Bisexual",  "description": "Is attracted to both genders.",                    "need_drain_multipliers": { "libido": 0.5 } }
+  { "id": "straight","name": "Straight", "description": "Is attracted to the opposite gender.",                    "attracted_to": "opposite", "need_drain_multipliers": { "libido": 0.5 } },
+  { "id": "gay",     "name": "Gay",      "description": "Is attracted to the same gender.",                    "attracted_to": "same", "need_drain_multipliers": { "libido": 0.5 } },
+  { "id": "bisexual","name": "Bisexual",  "description": "Is attracted to both genders.",                    "attracted_to": "both", "need_drain_multipliers": { "libido": 0.5 } }
 ]

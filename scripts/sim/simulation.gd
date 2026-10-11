@@ -103,6 +103,11 @@ func interaction_blocker(pawn: Pawn, other: Pawn, interaction_id: String) -> Str
 		return "only adults can"
 	if other.is_busy():
 		return "%s is busy" % other_name
+	if bool(interaction.get("requires_attraction", false)):
+		if not _attracted_to(other, pawn):
+			return "%s isn't interested" % other_name
+		if not _attracted_to(pawn, other):
+			return "%s isn't interested" % _first_name(pawn)
 	var limits: Dictionary = interaction.get("willing_below", {})
 	var unwilling := str(interaction.get("unwilling", "isn't willing"))
 	for need_id in limits:
@@ -113,6 +118,20 @@ func interaction_blocker(pawn: Pawn, other: Pawn, interaction_id: String) -> Str
 	if _plan_beside(pawn, other.tile).is_empty():
 		return "can't get there"
 	return ""
+
+
+## Whether `person` is attracted to `other`, from an orientation trait ("attracted_to" in
+## data/traits.json: opposite, same or both). Someone with no such trait is open to anyone.
+func _attracted_to(person: Pawn, other: Pawn) -> bool:
+	for trait_id in person.traits:
+		match str(DataRegistry.get_def("traits", trait_id).get("attracted_to", "")):
+			"both":
+				return true
+			"same":
+				return person.gender == other.gender
+			"opposite":
+				return person.gender != other.gender
+	return true
 
 
 ## Sends `pawn` to stand beside `other` and start an interaction from data/interactions.json.

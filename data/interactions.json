@@ -7,6 +7,7 @@
     "satisfies": { "libido": 200 },
     "max_use_minutes": 30,
     "adults_only": true,
+    "requires_attraction": true,
     "willing_below": { "libido": 85 },
     "unwilling": "isn't in the mood"
   }

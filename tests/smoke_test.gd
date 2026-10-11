@@ -543,6 +543,25 @@ func _test_needs() -> void:
 	pawn.needs["libido"] = 95.0
 	_check("mood" in sim.interaction_blocker(pawn, partner, "intimacy"), "the one asking has to be in the mood too")
 	pawn.needs["libido"] = 20.0
+	pawn.gender = "female"
+	partner.gender = "male"
+	pawn.traits.assign(["gay"])
+	_check("interested" in sim.interaction_blocker(pawn, partner, "intimacy"), "someone attracted to the same gender is not interested in the other")
+	pawn.traits.assign(["straight"])
+	partner.traits.assign(["straight"])
+	_check(sim.interaction_blocker(pawn, partner, "intimacy") == "", "two straight people of opposite genders are fine")
+	partner.gender = "female"
+	_check("interested" in sim.interaction_blocker(pawn, partner, "intimacy"), "two straight people of the same gender are not")
+	partner.traits.assign(["gay"])
+	pawn.traits.assign(["gay"])
+	_check(sim.interaction_blocker(pawn, partner, "intimacy") == "", "two gay people of the same gender are fine")
+	pawn.traits.assign(["bisexual"])
+	partner.gender = "male"
+	partner.traits.assign(["bisexual"])
+	_check(sim.interaction_blocker(pawn, partner, "intimacy") == "", "bisexual people are open to either")
+	pawn.traits.clear()
+	partner.traits.clear()
+	_check(sim.interaction_blocker(pawn, partner, "intimacy") == "", "no orientation trait means open to anyone")
 	partner.adult = false
 	_check("adults" in sim.interaction_blocker(pawn, partner, "intimacy") and not sim.order_interact(pawn, partner, "intimacy")["ok"], "it is only ever between adults")
 	partner.adult = true
