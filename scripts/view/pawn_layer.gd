@@ -1,6 +1,6 @@
 class_name PawnLayer
 extends Node2D
-## Shows every pawn of the household and turns mouse clicks into orders.
+## Shows every person in the world (the household and the townspeople) and turns mouse clicks into orders.
 ##
 ## Controls: left-click a person to switch to them; right-click anywhere to ask for the
 ## menu of things the selected person can do there (walk, stop, later sleep, eat and so on).
@@ -38,7 +38,7 @@ func bind(new_sim: Simulation) -> void:
 func visual_position(id: int) -> Vector2:
 	if _views.has(id):
 		return _views[id].position
-	var pawn := sim.household.get_pawn(id) if sim != null else null
+	var pawn := sim.person(id) if sim != null else null
 	if pawn != null:
 		return (Vector2(pawn.tile) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE
 	return Vector2.ZERO
@@ -47,7 +47,7 @@ func visual_position(id: int) -> Vector2:
 func _process(_delta: float) -> void:
 	if sim == null:
 		return
-	if _views.size() != sim.household.pawns.size():
+	if _views.size() != sim.household.pawns.size() + sim.town.pawns.size():
 		_sync_views()
 	var camera := get_viewport().get_camera_2d()
 	var names_visible := camera == null or camera.zoom.x >= HIDE_NAMES_BELOW
@@ -65,7 +65,7 @@ func _process(_delta: float) -> void:
 
 func _sync_views() -> void:
 	var wanted := {}
-	for pawn in sim.household.pawns:
+	for pawn in sim.people():
 		wanted[pawn.id] = true
 		if not _views.has(pawn.id):
 			var view := PawnView.new()

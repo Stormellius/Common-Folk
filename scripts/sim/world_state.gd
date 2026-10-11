@@ -6,6 +6,9 @@ extends RefCounted
 ## Tiles are stored as indexes into a palette of tile ids ("grass", "water"...),
 ## which keeps the data small and keeps save files readable and mod-friendly.
 
+## The id of the player's own lot (Pawn.home_lot of the household).
+const HOME_LOT := "home"
+
 var world_seed: int = 0
 var width: int = 0
 var height: int = 0
@@ -21,6 +24,11 @@ var tiles: PackedInt32Array = PackedInt32Array()
 var objects: Array[PlacedObject] = []
 ## The player's home lot: the only place they may build. An empty rect means no lot.
 var lot := Rect2i()
+## The other lots of the town (see TownGenerator): { "id", "kind", "name", "template", "facing",
+## "rect": Rect2i, "public": bool }. Things on a private lot can only be used by the people who
+## live there (Pawn.home_lot); public ones (tavern, shop, clinic, green) by anyone. Land outside
+## every lot is free to all.
+var lots: Array[Dictionary] = []
 ## Floors laid on the ground (Vector2i -> floor id from data/floors.json). They sit under
 ## objects, so a bed can stand on planks.
 var floors: Dictionary = {}
@@ -151,6 +159,26 @@ func in_lot(tile: Vector2i) -> bool:
 	return lot.has_point(tile)
 
 
+## The lot a tile belongs to: { "id", "public", ... }, or empty if it is open land. The player's
+## own lot is { "id": "home", "public": false }.
+func lot_at(tile: Vector2i) -> Dictionary:
+	if lot.has_point(tile):
+		return { "id": HOME_LOT, "kind": "home", "name": "Your lot", "public": false, "rect": lot }
+	for entry in lots:
+		if (entry["rect"] as Rect2i).has_point(tile):
+			return entry
+	return {}
+
+
+func get_lot(lot_id: String) -> Dictionary:
+	if lot_id == HOME_LOT and lot.size != Vector2i.ZERO:
+		return { "id": HOME_LOT, "kind": "home", "name": "Your lot", "public": false, "rect": lot }
+	for entry in lots:
+		if entry["id"] == lot_id:
+			return entry
+	return {}
+
+
 # --- floors ----------------------------------------------------------------------
 
 func floor_at(tile: Vector2i) -> String:
@@ -205,6 +233,11 @@ func to_dict() -> Dictionary:
 		"tiles": Array(tiles),
 		"objects": objects.map(func(placed: PlacedObject) -> Dictionary: return placed.to_dict()),
 		"lot": [lot.position.x, lot.position.y, lot.size.x, lot.size.y],
+		"lots": lots.map(func(entry: Dictionary) -> Dictionary:
+			var rect: Rect2i = entry["rect"]
+			var saved: Dictionary = entry.duplicate()
+			saved["rect"] = [rect.position.x, rect.position.y, rect.size.x, rect.size.y]
+			return saved),
 		"floors": floors.keys().map(func(cell: Vector2i) -> Array: return [cell.x, cell.y, floors[cell]]),
 	}
 
@@ -230,6 +263,13 @@ static func from_dict(data: Dictionary) -> WorldState:
 		world.lot = Rect2i(int(saved_lot[0]), int(saved_lot[1]), int(saved_lot[2]), int(saved_lot[3]))
 	else:  # a save from before there were lots
 		world.lot = centered_lot(world.width, world.height)
+	for saved in data.get("lots", []):
+		if saved is Dictionary and saved.get("rect") is Array and saved["rect"].size() >= 4:
+			var rect: Array = saved["rect"]
+			var entry: Dictionary = saved.duplicate()
+			entry["rect"] = Rect2i(int(rect[0]), int(rect[1]), int(rect[2]), int(rect[3]))
+			entry["public"] = bool(saved.get("public", false))
+			world.lots.append(entry)
 	for saved in data.get("floors", []):
 		if saved is Array and saved.size() >= 3 and DataRegistry.has_def("floors", str(saved[2])):
 			world.floors[Vector2i(int(saved[0]), int(saved[1]))] = str(saved[2])

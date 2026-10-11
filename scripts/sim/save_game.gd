@@ -8,15 +8,16 @@ extends RefCounted
 ##
 ## Older saves still load: format 1 had no household (the caller makes one), and formats 1 and 2
 ## had no objects or needs (the caller places a camp, and the simulation fills in the needs), and
-## formats 1 to 3 had no lot or floors (the world gives a centered lot and no floors).
+## formats 1 to 3 had no lot or floors (the world gives a centered lot and no floors), and formats
+## 1 to 4 had no town (no other lots and nobody living in them).
 
-const FORMAT_VERSION := 4
+const FORMAT_VERSION := 5
 
 
 ## Writes the save file. Returns OK or a Godot error code. `view` is anything the screen wants
 ## remembered (the camera), handed back by load_from. The file is written next to the real one
 ## and moved into place, so a crash in the middle never leaves a half-written save.
-static func save(path: String, world: WorldState, household: Household = null, view: Dictionary = {}) -> Error:
+static func save(path: String, world: WorldState, household: Household = null, view: Dictionary = {}, town: Household = null) -> Error:
 	var data := {
 		"format": FORMAT_VERSION,
 		"world": world.to_dict(),
@@ -25,6 +26,8 @@ static func save(path: String, world: WorldState, household: Household = null, v
 	}
 	if household != null:
 		data["household"] = household.to_dict()
+	if town != null:
+		data["town"] = town.to_dict()
 	var temp_path := path + ".tmp"
 	var file := FileAccess.open(temp_path, FileAccess.WRITE)
 	if file == null:
@@ -48,7 +51,7 @@ static func newest(paths: Array[String]) -> String:
 
 
 ## Loads a save and restores the clock. Returns
-## { "ok": bool, "error": String, "world": WorldState, "household": Household or null, "view": Dictionary }.
+## { "ok": bool, "error": String, "world": WorldState, "household": Household or null, "town": Household or null, "view": Dictionary }.
 ## The clock is only touched once the whole file has proved readable.
 static func load_from(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
@@ -68,5 +71,8 @@ static func load_from(path: String) -> Dictionary:
 	var household: Household = null
 	if parsed.get("household") is Dictionary:
 		household = Household.from_dict(parsed["household"])
+	var town: Household = null
+	if parsed.get("town") is Dictionary:
+		town = Household.from_dict(parsed["town"], NpcGenerator.FIRST_ID)
 	var view: Variant = parsed.get("view", {})
-	return { "ok": true, "world": world, "household": household, "view": view if view is Dictionary else {} }
+	return { "ok": true, "world": world, "household": household, "town": town, "view": view if view is Dictionary else {} }

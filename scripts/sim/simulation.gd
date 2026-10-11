@@ -10,20 +10,34 @@ extends RefCounted
 
 const THINK_COOLDOWN_TICKS := 30  # wait this long after finding nothing to fix a need with
 const OPTIONS_PER_NEED := 3       # how many nearest objects to try
+const MOOD_EVERY := 5             # minutes between mood checks for townspeople
+const ROAM_CHANCE := 0.012        # per minute, for an idle townsperson in the daytime
+const ROAM_FROM_MINUTE := 7 * 60
+const ROAM_UNTIL_MINUTE := 20 * 60
+const ROAM_RADIUS := 14           # how far from the crossroads they wander along the roads
 
 var world: WorldState
 var household: Household
+## The people of the town (not the player's): see NpcGenerator. They live by the same rules.
+var town: Household
 var pathfinder: PathFinder
 ## Someone died: their name, what killed them and the name of whoever you now control ("" if
 ## nobody is left, which ends the playthrough).
 signal pawn_died(person: String, cause: String, successor: String)
+## Someone in the town died (the player's own deaths come through pawn_died).
+signal town_death(person: String, cause: String)
 ## Ids of the needs in play; see Needs.
 var active_needs: Array[String] = []
 
 
-func _init(p_world: WorldState, p_household: Household) -> void:
+var _rng := RandomNumberGenerator.new()  # for townspeople's wandering (not part of the world seed's output)
+
+
+func _init(p_world: WorldState, p_household: Household, p_town: Household = null) -> void:
 	world = p_world
 	household = p_household
+	town = p_town if p_town != null else Household.new(NpcGenerator.FIRST_ID)
+	_rng.seed = world.world_seed + 4242
 	pathfinder = PathFinder.new(world)
 	active_needs = Needs.active_ids()
 	_repair_after_load()
@@ -33,18 +47,34 @@ func _init(p_world: WorldState, p_household: Household) -> void:
 func step() -> void:
 	var season_multipliers := _season_multipliers()
 	var minute := GameClock.get_minute_of_day()
-	for pawn in household.pawns.duplicate():
+	var everyone := people()
+	for pawn in everyone:
 		var cause := _drain_needs(pawn, season_multipliers)
 		if cause != "":
 			die(pawn, cause)
 			continue
-		_update_mood(pawn)
+		if household.get_pawn(pawn.id) != null or (GameClock.tick + pawn.id) % MOOD_EVERY == 0:
+			_update_mood(pawn, everyone)  # the town's mood changes slowly, so it is looked at less often
 		pawn.tick(world)
 		_step_job(pawn)
 		if pawn.think_cooldown > 0:
 			pawn.think_cooldown -= 1
 		elif not pawn.is_busy():
-			_think(pawn, minute)
+			if not _think(pawn, minute) and town.get_pawn(pawn.id) != null:
+				_roam(pawn, minute)
+
+
+## Everyone in the world: the player's household first, then the town.
+func people() -> Array[Pawn]:
+	var everyone: Array[Pawn] = household.pawns.duplicate()
+	everyone.append_array(town.pawns)
+	return everyone
+
+
+## Anyone, by id (the household uses small ids, the town 1000 and up), or null.
+func person(id: int) -> Pawn:
+	var found := household.get_pawn(id)
+	return found if found != null else town.get_pawn(id)
 
 
 # --- orders ----------------------------------------------------------------------
@@ -74,8 +104,11 @@ func order_stop(pawn: Pawn) -> void:
 ## Why `pawn` cannot use `placed` right now, or "" if it can.
 func use_blocker(pawn: Pawn, placed: PlacedObject) -> String:
 	if placed.user_id != 0 and placed.user_id != pawn.id:
-		var other := household.get_pawn(placed.user_id)
+		var other := person(placed.user_id)
 		return "%s is using it" % (_first_name(other) if other != null else "someone")
+	var lot := world.lot_at(placed.tile)
+	if not lot.is_empty() and not bool(lot["public"]) and str(lot["id"]) != pawn.home_lot:
+		return "it belongs to someone else"
 	if _plan_use(pawn, placed).is_empty():
 		return "can't get there"
 	return ""
@@ -185,7 +218,7 @@ func build_blocker(def_id: String, tile: Vector2i, ignoring: int = 0) -> String:
 		var tile_id := world.get_tile_id(tile.x, tile.y)
 		return "can't build on %s" % str(DataRegistry.get_def("tiles", tile_id).get("name", tile_id)).to_lower()
 	if bool(def.get("blocks_walking", true)):
-		for pawn in household.pawns:
+		for pawn in people():
 			if tile == pawn.tile or tile == pawn.committed_tile():
 				return "%s is standing there" % _first_name(pawn)
 	return ""
@@ -243,7 +276,7 @@ func build_floor(floor_id: String, tile: Vector2i) -> Dictionary:
 
 ## Whoever is using or heading for an object stops before it goes away or moves.
 func _release_user(placed: PlacedObject) -> void:
-	var user := household.get_pawn(placed.user_id) if placed.user_id != 0 else null
+	var user := person(placed.user_id) if placed.user_id != 0 else null
 	if user != null:
 		if user.job_stage == "walking":
 			user.path.clear()  # they were on their way there; no point finishing the walk
@@ -254,7 +287,7 @@ func _release_user(placed: PlacedObject) -> void:
 ## After a wall goes up, anyone whose planned route now runs into it finds another way
 ## to the same goal (or gives up if there is none).
 func _reroute_blocked_walks() -> void:
-	for pawn in household.pawns:
+	for pawn in people():
 		var blocked := false
 		for cell in pawn.path:
 			blocked = blocked or not world.is_walkable(cell.x, cell.y)
@@ -274,7 +307,7 @@ func _reroute_blocked_walks() -> void:
 func describe_activity(pawn: Pawn) -> String:
 	var text := "Idle"
 	var placed := world.get_object(pawn.job_object) if pawn.job_kind == "use" else null
-	var partner := household.get_pawn(pawn.job_partner) if pawn.job_kind == "interact" else null
+	var partner := person(pawn.job_partner) if pawn.job_kind == "interact" else null
 	if partner != null:
 		var interaction := DataRegistry.get_def("interactions", pawn.job_interaction)
 		if pawn.pose == "close":
@@ -303,10 +336,10 @@ func _season_multipliers() -> Dictionary:
 
 ## Fades old thoughts and works out mood. A miserable person drags their feet, like one with an
 ## empty need.
-func _update_mood(pawn: Pawn) -> void:
+func _update_mood(pawn: Pawn, everyone: Array[Pawn]) -> void:
 	var now := GameClock.tick
 	Mood.prune(pawn, now)
-	var result := Mood.evaluate(pawn, household, now)
+	var result := Mood.evaluate(pawn, everyone, now)
 	pawn.mood = result["value"]
 	pawn.mood_parts = result["parts"]
 	if pawn.mood < Mood.LOW_BELOW:
@@ -341,6 +374,12 @@ func die(pawn: Pawn, cause: String) -> void:
 	_end_job(pawn)
 	pawn.path.clear()
 	var spot := pawn.committed_tile()
+	if household.get_pawn(pawn.id) == null:  # someone from the town
+		town.dead.append({ "name": pawn.display_name, "cause": cause, "day": GameClock.get_day_number() })
+		town.remove_pawn(pawn.id)
+		_place_grave(spot)
+		town_death.emit(pawn.display_name, cause)
+		return
 	household.dead.append({ "name": pawn.display_name, "cause": cause, "day": GameClock.get_day_number() })
 	household.remove_pawn(pawn.id)
 	for survivor in household.pawns:
@@ -405,7 +444,7 @@ func _step_job(pawn: Pawn) -> void:
 
 ## Walk up to the other person, then spend time together; the one who asked drives it for both.
 func _step_interaction(pawn: Pawn) -> void:
-	var partner := household.get_pawn(pawn.job_partner)
+	var partner := person(pawn.job_partner)
 	var interaction := DataRegistry.get_def("interactions", pawn.job_interaction)
 	if partner == null or interaction.is_empty() or partner.job_kind != "interact" or partner.job_partner != pawn.id:
 		_end_job(pawn)
@@ -427,12 +466,12 @@ func _step_interaction(pawn: Pawn) -> void:
 		return
 	var satisfies: Dictionary = interaction.get("satisfies", {})
 	var all_full := true
-	for person in [pawn, partner]:
+	for who in [pawn, partner]:
 		for need_id in satisfies:
-			if not person.needs.has(need_id):
+			if not who.needs.has(need_id):
 				continue
-			var value := minf(Needs.FULL, float(person.needs[need_id]) + float(satisfies[need_id]) / 60.0)
-			person.needs[need_id] = value
+			var value := minf(Needs.FULL, float(who.needs[need_id]) + float(satisfies[need_id]) / 60.0)
+			who.needs[need_id] = value
 			if value < Needs.FULL:
 				all_full = false
 	pawn.job_minutes += 1
@@ -446,7 +485,7 @@ func _end_job(pawn: Pawn) -> void:
 	var placed := world.get_object(pawn.job_object)
 	if placed != null and placed.user_id == pawn.id:
 		placed.user_id = 0
-	var partner: Pawn = household.get_pawn(pawn.job_partner) if pawn.job_kind == "interact" else null
+	var partner: Pawn = person(pawn.job_partner) if pawn.job_kind == "interact" else null
 	pawn.job_kind = ""
 	pawn.job_object = 0
 	pawn.job_stage = ""
@@ -499,26 +538,61 @@ func _first_name(pawn: Pawn) -> String:
 
 
 ## An idle person with a low need goes to the nearest free thing that fills it.
-func _think(pawn: Pawn, minute: int) -> void:
+func _think(pawn: Pawn, minute: int) -> bool:
 	var wants: Array = []
 	for need_id in active_needs:
 		var value := float(pawn.needs.get(need_id, Needs.FULL))
 		if value < Needs.seek_below(need_id, minute):
 			wants.append([value, need_id])
 	if wants.is_empty():
-		return
+		return false
 	wants.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
 	for want in wants:
 		var options: Array[PlacedObject] = []
 		for placed in world.objects:
-			if placed.user_id == 0 and placed.def().get("satisfies", {}).has(want[1]):
+			if placed.user_id == 0 and placed.def().get("satisfies", {}).has(want[1]) and _may_use(pawn, placed):
 				options.append(placed)
 		options.sort_custom(func(a: PlacedObject, b: PlacedObject) -> bool:
 			return _distance(pawn.tile, a.tile) < _distance(pawn.tile, b.tile))
 		for placed in options.slice(0, OPTIONS_PER_NEED):
 			if order_use(pawn, placed)["ok"]:
-				return
+				return true
 	pawn.think_cooldown = THINK_COOLDOWN_TICKS  # nothing within reach; try again later
+	return false
+
+
+## Whether the thing stands on land `pawn` may use it on: their own lot, a public lot or open land.
+func _may_use(pawn: Pawn, placed: PlacedObject) -> bool:
+	var lot := world.lot_at(placed.tile)
+	return lot.is_empty() or bool(lot["public"]) or str(lot["id"]) == pawn.home_lot
+
+
+## A townsperson with nothing to do sometimes takes a walk by day: to a public place, along the
+## road, or round their own lot.
+func _roam(pawn: Pawn, minute: int) -> void:
+	if minute < ROAM_FROM_MINUTE or minute >= ROAM_UNTIL_MINUTE or _rng.randf() > ROAM_CHANCE:
+		return
+	var rect := Rect2i()
+	var roll := _rng.randf()
+	if roll < 0.5:
+		var public_lots: Array[Dictionary] = []
+		for entry in world.lots:
+			if bool(entry["public"]):
+				public_lots.append(entry)
+		if not public_lots.is_empty():
+			rect = public_lots[_rng.randi() % public_lots.size()]["rect"]
+	elif roll < 0.8:
+		var center := Vector2i(world.width / 2, world.height / 2)
+		rect = Rect2i(center - Vector2i(ROAM_RADIUS, 1), Vector2i(ROAM_RADIUS * 2 + 1, 3))
+	else:
+		rect = world.get_lot(pawn.home_lot).get("rect", Rect2i())
+	if rect.size == Vector2i.ZERO:
+		return
+	for attempt in 6:
+		var goal := rect.position + Vector2i(_rng.randi() % rect.size.x, _rng.randi() % rect.size.y)
+		if world.is_walkable(goal.x, goal.y) and goal != pawn.tile and world.object_at(goal) == null:
+			order_move(pawn, goal)
+			return
 
 
 func _distance(a: Vector2i, b: Vector2i) -> int:
@@ -527,7 +601,7 @@ func _distance(a: Vector2i, b: Vector2i) -> int:
 
 ## A loaded save may predate needs or objects, or name things that are gone: make it consistent.
 func _repair_after_load() -> void:
-	for pawn in household.pawns:
+	for pawn in people():
 		for need_id in active_needs:
 			if not pawn.needs.has(need_id):
 				pawn.needs[need_id] = 80.0
@@ -541,11 +615,11 @@ func _repair_after_load() -> void:
 			else:
 				placed.user_id = pawn.id
 		elif pawn.job_kind == "interact":
-			var partner := household.get_pawn(pawn.job_partner)
+			var partner := person(pawn.job_partner)
 			if partner == null or partner.job_kind != "interact" or partner.job_partner != pawn.id \
 					or not DataRegistry.has_def("interactions", pawn.job_interaction):
 				_end_job(pawn)
 	for placed in world.objects:
-		var user := household.get_pawn(placed.user_id)
+		var user := person(placed.user_id)
 		if user == null or user.job_object != placed.id:
 			placed.user_id = 0

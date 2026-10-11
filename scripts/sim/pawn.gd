@@ -15,6 +15,10 @@ var display_name := ""
 var gender := "female"
 ## Interactions marked "adults_only" in data/interactions.json need every person to be one.
 var adult := true
+## Years old. Under 18 is a child (`adult` false); children are drawn smaller.
+var age := 25
+## The lot this person lives on (WorldState lot id). Only they may use what stands on a private lot.
+var home_lot := WorldState.HOME_LOT
 ## Colors as hex strings plus a hair style number; see PawnArt.
 var look: Dictionary = {}
 
@@ -131,6 +135,8 @@ func to_dict() -> Dictionary:
 		"name": display_name,
 		"gender": gender,
 		"adult": adult,
+		"age": age,
+		"home_lot": home_lot,
 		"look": look.duplicate(),
 		"tile": _vec_to_array(tile),
 		"facing": _vec_to_array(facing),
@@ -161,6 +167,8 @@ static func from_dict(data: Dictionary) -> Pawn:
 	pawn.display_name = str(data.get("name", ""))
 	pawn.gender = str(data.get("gender", "female"))
 	pawn.adult = bool(data.get("adult", true))
+	pawn.age = int(data.get("age", 25 if pawn.adult else 10))
+	pawn.home_lot = str(data.get("home_lot", WorldState.HOME_LOT))
 	var saved_look: Variant = data.get("look", {})
 	pawn.look = saved_look.duplicate() if saved_look is Dictionary else {}
 	if pawn.look.has("hair_style"):

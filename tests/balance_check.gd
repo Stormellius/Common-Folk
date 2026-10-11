@@ -21,11 +21,14 @@ func _play(world_seed: int, start_day: int) -> void:
 		GameClock.reset()
 		GameClock.set_time(start_day, 6)
 		var world := MapGenerator.generate(world_seed, 128, 96)
+		TownGenerator.generate(world)
 		var household := HouseholdGenerator.create(world)
 		CampGenerator.place(world, household)
-		var sim := Simulation.new(world, household)
+		var sim := Simulation.new(world, household, NpcGenerator.create(world))
 		var deaths := [0]
+		var town_deaths := [0]
 		sim.pawn_died.connect(func(_person: String, _cause: String, _next: String) -> void: deaths[0] += 1)
+		sim.town_death.connect(func(_person: String, _cause: String) -> void: town_deaths[0] += 1)
 		var lowest := {}
 		var total := 0.0
 		var samples := 0
@@ -34,7 +37,7 @@ func _play(world_seed: int, start_day: int) -> void:
 			GameClock.advance_one_tick()
 			sim.step()
 			if minute % 60 == 0:
-				for pawn in household.pawns:
+				for pawn in sim.people():
 					total += pawn.mood
 					samples += 1
 					worst_mood = minf(worst_mood, pawn.mood)
@@ -43,4 +46,4 @@ func _play(world_seed: int, start_day: int) -> void:
 		var rounded := {}
 		for need_id in lowest:
 			rounded[need_id] = snappedf(lowest[need_id], 0.1)
-		print("seed %d, day %d: %d deaths, average mood %.1f, worst mood %.1f, lowest needs %s" % [world_seed, start_day, deaths[0], total / maxf(1.0, samples), worst_mood, rounded])
+		print("seed %d, day %d: %d deaths (%d in town), %d people, average mood %.1f, worst mood %.1f, lowest needs %s" % [world_seed, start_day, deaths[0], town_deaths[0], sim.people().size(), total / maxf(1.0, samples), worst_mood, rounded])

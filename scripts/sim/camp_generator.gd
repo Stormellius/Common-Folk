@@ -17,14 +17,19 @@ const SEARCH_RADIUS := 8
 
 static func place(world: WorldState, household: Household) -> void:
 	var center := Vector2i(world.width / 2, world.height / 2)
+	var inside := Rect2i()
+	if world.lot.size != Vector2i.ZERO:
+		center = world.lot.get_center()  # set out on the home lot, when there is one
+		inside = world.lot
 	for i in household.pawns.size():
-		_put(world, "bed", center, BED_ROW_START + Vector2i(2 * i, 0))
+		_put(world, "bed", center, BED_ROW_START + Vector2i(2 * i, 0), inside)
 	for entry in SHARED:
-		_put(world, str(entry[0]), center, entry[1])
+		_put(world, str(entry[0]), center, entry[1], inside)
 
 
 ## Puts the object at the wanted spot, or the nearest free tile if that one is taken.
-static func _put(world: WorldState, def_id: String, center: Vector2i, offset: Vector2i) -> void:
+## With `inside` set, stays within that rectangle; without, keeps the two roads through the middle clear.
+static func _put(world: WorldState, def_id: String, center: Vector2i, offset: Vector2i, inside: Rect2i = Rect2i()) -> void:
 	if not DataRegistry.has_def("objects", def_id):
 		return
 	var wanted := center + offset
@@ -34,8 +39,10 @@ static func _put(world: WorldState, def_id: String, center: Vector2i, offset: Ve
 				if maxi(absi(dx), absi(dy)) != radius:
 					continue
 				var tile := wanted + Vector2i(dx, dy)
-				# Keep the two roads through the middle clear.
-				if tile.x == center.x or tile.y == center.y:
+				if inside.size != Vector2i.ZERO:
+					if not inside.has_point(tile):
+						continue
+				elif tile.x == center.x or tile.y == center.y:
 					continue
 				if world.add_object(def_id, tile) != null:
 					return

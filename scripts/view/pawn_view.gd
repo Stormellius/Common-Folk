@@ -5,6 +5,7 @@ extends Node2D
 ## it and 3x speed just makes it follow faster.
 
 const FOLLOW_RATE := 18.0  # how quickly the picture catches up with the simulation
+const CHILD_SCALE := 0.75  # children are drawn smaller
 const STRIDE := 0.13       # walk-cycle phase per pixel moved (at 48 px tiles)
 
 var pawn: Pawn
@@ -71,7 +72,7 @@ func _draw() -> void:
 		return
 	_drawn_facing = pawn.facing
 	_drawn_pose = pawn.pose
-	var u := MapView.TILE_SIZE / 48.0
+	var u := MapView.TILE_SIZE / 48.0 * (1.0 if pawn.adult else CHILD_SCALE)
 	if selected:
 		var ring := PackedVector2Array()
 		for i in range(25):

@@ -24,6 +24,7 @@ func _ready() -> void:
 	_test_actions()
 	_test_needs()
 	_test_building()
+	_test_town()
 	_test_death()
 	_test_mood()
 	_test_save_and_load()
@@ -651,6 +652,206 @@ func _test_needs() -> void:
 	_check(again.to_dict()["objects"] == big_world.to_dict()["objects"], "the same seed gives the same camp")
 	GameClock.reset()
 	GameClock.set_speed(1)
+
+
+func _test_town() -> void:
+	print("The town")
+	var world := MapGenerator.generate(42, 128, 96)
+	var report := TownGenerator.generate(world)
+	var config := DataRegistry.get_def("worldgen", "town")
+	var wanted: Dictionary = config["buildings"]
+	var all_placed: bool = report["removed"] == 0
+	for kind in wanted:
+		all_placed = all_placed and int(report["placed"].get(kind, 0)) == int(wanted[kind])
+	_check(all_placed, "every building in worldgen.json found a lot (%s)" % str(report["placed"]))
+	var again := MapGenerator.generate(42, 128, 96)
+	TownGenerator.generate(again)
+	_check(again.to_dict() == world.to_dict(), "the same seed gives the same town")
+	var other := MapGenerator.generate(43, 128, 96)
+	TownGenerator.generate(other)
+	_check(other.to_dict()["lots"] != world.to_dict()["lots"], "another seed gives another town")
+
+	# Lots keep apart, and off the roads.
+	var center := Vector2i(world.width / 2, world.height / 2)
+	var apart := true
+	var rects: Array[Rect2i] = [world.lot]
+	for entry in world.lots:
+		rects.append(entry["rect"])
+	for i in rects.size():
+		var on_road := rects[i].intersects(Rect2i(center.x - 44, center.y, 89, 2)) or rects[i].intersects(Rect2i(center.x, center.y - 26, 2, 55))
+		apart = apart and not on_road
+		for j in range(i + 1, rects.size()):
+			apart = apart and not rects[i].intersects(rects[j])
+	_check(apart, "no two lots overlap and none sits on a road")
+	_check(world.get_tile_id(center.x, center.y) == "dirt" and world.get_tile_id(center.x + 1, center.y + 1) == "dirt", "the roads cross in the middle")
+	_check(world.lot.size == Vector2i(16, 13), "the player's lot is the size worldgen.json says")
+	var home_ground := true
+	for y in range(world.lot.position.y, world.lot.end.y):
+		for x in range(world.lot.position.x, world.lot.end.x):
+			home_ground = home_ground and world.get_tile_id(x, y) == "grass"
+	_check(home_ground, "the player's lot is level grass")
+
+	# The household's camp sits on the lot.
+	var household := HouseholdGenerator.create(world)
+	CampGenerator.place(world, household)
+	var camp_count := 0
+	for placed in world.objects:
+		camp_count += 1 if world.in_lot(placed.tile) else 0
+	_check(camp_count == household.pawns.size() + CampGenerator.SHARED.size(), "the whole camp is on the player's lot")
+	var people_on_lot := true
+	for pawn in household.pawns:
+		people_on_lot = people_on_lot and world.in_lot(pawn.tile) and pawn.home_lot == WorldState.HOME_LOT
+	_check(people_on_lot, "and so are the household's people")
+
+	# Everything can be reached from the crossroads.
+	var town := NpcGenerator.create(world)
+	var sim := Simulation.new(world, household, town)
+	var visitor := Pawn.new()
+	visitor.tile = center
+	visitor.step_to = center
+	var reachable := true
+	var unreachable := ""
+	for placed in world.objects:
+		if placed.def().has("satisfies") and sim._plan_use(visitor, placed).is_empty():
+			reachable = false
+			unreachable = placed.def_id
+	_check(reachable, "every bed, pot and hearth in town can be walked to from the crossroads %s" % unreachable)
+	var doors_open := true
+	for entry in world.lots:
+		for placed in world.objects:
+			if placed.def_id == "door" and (entry["rect"] as Rect2i).has_point(placed.tile):
+				doors_open = doors_open and not sim.pathfinder.find_path(center, placed.tile).is_empty()
+	_check(doors_open, "every door can be walked to")
+
+	# Public places are really public, houses are not.
+	var public_kinds := {}
+	var houses := 0
+	var homes_equipped := true
+	for entry in world.lots:
+		if bool(entry["public"]):
+			public_kinds[entry["kind"]] = true
+		if entry["kind"] == "house":
+			houses += 1
+			var have := {}
+			for placed in world.objects:
+				if (entry["rect"] as Rect2i).has_point(placed.tile):
+					have[placed.def_id] = true
+			for needed in ["bed", "cooking_pot", "hearth", "wash_basin", "chamber_pot"]:
+				homes_equipped = homes_equipped and have.has(needed)
+	_check(public_kinds.has("tavern") and public_kinds.has("shop") and public_kinds.has("clinic") and public_kinds.has("park"), "the tavern, shop, clinic and green are public")
+	_check(houses == int(wanted["house"]), "there are %d houses" % houses)
+	_check(homes_equipped, "every house has a bed, a pot, a hearth, a basin and a chamber pot")
+
+	# The people.
+	var house_beds := 0
+	for placed in world.objects:
+		var home_lot := world.lot_at(placed.tile)
+		house_beds += 1 if placed.def_id == "bed" and not home_lot.is_empty() and home_lot["kind"] == "house" else 0
+	var expected_people := mini(int(config["npc_count"]), house_beds)
+	_check(town.pawns.size() == expected_people, "the town has %d people, as many as the houses have beds for, up to %d" % [town.pawns.size(), int(config["npc_count"])])
+	var ids_ok := true
+	var traits_ok := true
+	var homes_ok := true
+	var children := 0
+	for pawn in town.pawns:
+		ids_ok = ids_ok and pawn.id >= NpcGenerator.FIRST_ID
+		var orientation := 0
+		for trait_id in pawn.traits:
+			orientation += 1 if str(DataRegistry.get_def("traits", trait_id).get("group", "")) == "orientation" else 0
+		if pawn.adult:
+			traits_ok = traits_ok and pawn.traits.size() == 3 and orientation == 1 and pawn.age >= 18
+		else:
+			children += 1
+			traits_ok = traits_ok and pawn.traits.size() == 2 and orientation == 0 and pawn.age < 18
+		var home := world.get_lot(pawn.home_lot)
+		homes_ok = homes_ok and not home.is_empty() and home["kind"] == "house" and (home["rect"] as Rect2i).has_point(pawn.tile)
+	_check(ids_ok and sim.person(NpcGenerator.FIRST_ID) != null and sim.person(1) == household.pawns[0], "townspeople are numbered apart from the household")
+	_check(traits_ok, "adults have an orientation and two other traits, children just two")
+	_check(children > 0, "some of them are children (%d)" % children)
+	_check(homes_ok, "everyone starts inside a house on their own lot")
+	var surnames := {}
+	for pawn in town.pawns:
+		surnames[pawn.display_name.get_slice(" ", 1)] = surnames.get(pawn.display_name.get_slice(" ", 1), 0) + 1
+	_check(surnames.size() < town.pawns.size() and surnames.size() >= 4, "they live in families (%d surnames)" % surnames.size())
+	var again_town := NpcGenerator.create(world)
+	_check(again_town.to_dict() == town.to_dict(), "the same seed gives the same people")
+
+	# Whose things are whose.
+	var home_bed: PlacedObject = null
+	for placed in world.objects:
+		if placed.def_id == "bed" and world.in_lot(placed.tile):
+			home_bed = placed
+	var neighbor: Pawn = town.pawns[0]
+	_check("belongs to someone else" in sim.use_blocker(neighbor, home_bed), "a neighbor cannot use the household's bed")
+	var neighbor_pot: PlacedObject = null
+	var tavern_lute: PlacedObject = null
+	for placed in world.objects:
+		var lot := world.lot_at(placed.tile)
+		if placed.def_id == "cooking_pot" and not lot.is_empty() and lot["id"] == neighbor.home_lot:
+			neighbor_pot = placed
+		if placed.def_id == "lute" and not lot.is_empty() and lot["kind"] == "tavern":
+			tavern_lute = placed
+	_check("belongs to someone else" in sim.use_blocker(household.pawns[0], neighbor_pot), "and the household cannot use a neighbor's pot")
+	_check(sim.use_blocker(neighbor, neighbor_pot) == "", "a family uses its own pot")
+	_check(tavern_lute != null and sim.use_blocker(household.pawns[0], tavern_lute) == "" and sim.use_blocker(neighbor, tavern_lute) == "", "anyone may use what is in the tavern")
+
+	# A day in the town.
+	GameClock.reset()
+	GameClock.set_time(0, 6)
+	var strayed := false
+	var trespassed := false
+	var busy_seen := 0
+	for minute in GameClock.MINUTES_PER_DAY:
+		GameClock.advance_one_tick()
+		sim.step()
+		if minute % 20 == 0:
+			for pawn in town.pawns:
+				strayed = strayed or not (world.get_lot(pawn.home_lot)["rect"] as Rect2i).has_point(pawn.tile)
+				busy_seen += 1 if pawn.job_kind == "use" else 0
+		for placed in world.objects:
+			if placed.user_id >= NpcGenerator.FIRST_ID and world.in_lot(placed.tile):
+				trespassed = true
+	_check(busy_seen > 0, "townspeople look after their own needs")
+	_check(strayed, "and some walk out of their own lot during the day")
+	_check(not trespassed, "but none ever uses the player's belongings")
+	_check(town.pawns.size() == expected_people and household.pawns.size() == HouseholdGenerator.SIZE, "nobody died in the first day")
+
+	# A death in town.
+	var heard := []
+	sim.town_death.connect(func(person: String, cause: String) -> void: heard.append([person, cause]))
+	var victim: Pawn = town.pawns[0]
+	var victim_name := victim.display_name
+	var graves_before := 0
+	for placed in world.objects:
+		graves_before += 1 if placed.def_id == "grave" else 0
+	sim.die(victim, "fell ill")
+	var graves_after := 0
+	for placed in world.objects:
+		graves_after += 1 if placed.def_id == "grave" else 0
+	_check(heard == [[victim_name, "fell ill"]] and sim.person(victim.id) == null and town.dead.size() == 1, "a death in town is announced and recorded apart from the household's")
+	_check(graves_after == graves_before + 1 and not sim.is_game_over() and household.dead.is_empty(), "it leaves a grave and does not touch the household")
+
+	# Saving the town.
+	var copy := WorldState.from_dict(world.to_dict())
+	_check(copy.to_dict()["lots"] == world.to_dict()["lots"] and copy.lots.size() == world.lots.size(), "the lots survive a round trip")
+	_check(SaveGame.save(TEST_SAVE, world, household, {}, town) == OK, "a save with a town is written")
+	var loaded := SaveGame.load_from(TEST_SAVE)
+	var loaded_town: Household = loaded["town"]
+	_check(loaded["ok"] and loaded_town != null and loaded_town.to_dict() == town.to_dict(), "the townspeople, the dead included, survive a round trip")
+	var kept_on := Simulation.new(loaded["world"], loaded["household"], loaded_town)
+	_check(kept_on.person(town.pawns[0].id) != null and kept_on.people().size() == town.pawns.size() + household.pawns.size(), "a loaded game has everyone")
+	var older := FileAccess.open(TEST_SAVE, FileAccess.WRITE)
+	var old_data := { "format": 4, "world": world.to_dict(), "clock": GameClock.to_dict(), "household": household.to_dict() }
+	old_data["world"].erase("lots")
+	older.store_string(JSON.stringify(old_data))
+	older.close()
+	var old_save := SaveGame.load_from(TEST_SAVE)
+	_check(old_save["ok"] and old_save["town"] == null and old_save["world"].lots.is_empty(), "a version 4 save loads with no town")
+	var quiet := Simulation.new(old_save["world"], old_save["household"], old_save["town"])
+	quiet.step()
+	_check(quiet.town.pawns.is_empty() and quiet.people().size() == household.pawns.size(), "and plays on without one")
+	DirAccess.remove_absolute(TEST_SAVE)
+	GameClock.reset()
 
 
 func _building_setup() -> Dictionary:

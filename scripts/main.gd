@@ -88,6 +88,7 @@ func _unhandled_input(event: InputEvent) -> void:
 ## build = start in build mode with a tool, such as place:wall, floor:planks, remove or move,
 ## load = load the newest save right away (as F9 does),
 ## dying = the selected person is minutes from starving (to see the death and the hand-over),
+## shot = save a screenshot to this path a moment after starting, then quit,
 ## demohouse = build a small walled room with a door and a floor on the lot, using the real build commands.
 ## Handy for screenshots and testing.
 func _launch_option(name: String) -> String:
@@ -148,12 +149,23 @@ func _apply_launch_options() -> void:
 	if _launch_option("zoom") != "":
 		var zoom_level := clampf(float(_launch_option("zoom")), CameraController.ZOOM_MIN, CameraController.ZOOM_MAX)
 		camera.zoom = Vector2(zoom_level, zoom_level)
+	if _launch_option("shot") != "":
+		_take_screenshot(_launch_option("shot"))
+
+
+## Saves the picture after a few frames and quits (for documentation and checking the look).
+func _take_screenshot(path: String) -> void:
+	for frame in 8:
+		await get_tree().process_frame
+	get_viewport().get_texture().get_image().save_png(path)
+	get_tree().quit()
 
 
 func _build_demo_house() -> void:
-	var origin := world.lot.position + Vector2i(21, 2)
+	var origin := world.lot.position + Vector2i(world.lot.size.x - 11, 2)
 	for dy in 7:
 		for dx in 9:
+			sim.build_remove(origin + Vector2i(dx, dy))  # clear the camp's things out of the way
 			sim.build_floor("planks" if dx < 5 else "flagstone", origin + Vector2i(dx, dy))
 	for dx in 9:
 		for dy in [0, 6]:
@@ -171,16 +183,19 @@ func _build_demo_house() -> void:
 func _start_new_world(world_seed: int) -> void:
 	GameClock.reset()
 	var new_world := MapGenerator.generate(world_seed, MAP_WIDTH, MAP_HEIGHT)
-	new_world.lot = WorldState.centered_lot(new_world.width, new_world.height)
+	TownGenerator.generate(new_world)  # roads, the player's lot and the buildings
+	if new_world.lot.size == Vector2i.ZERO:  # no town described in the data
+		new_world.lot = WorldState.centered_lot(new_world.width, new_world.height)
 	var household := HouseholdGenerator.create(new_world)
 	CampGenerator.place(new_world, household)
-	_show_world(new_world, household)
+	_show_world(new_world, household, NpcGenerator.create(new_world))
 
 
-func _show_world(new_world: WorldState, household: Household) -> void:
+func _show_world(new_world: WorldState, household: Household, town: Household = null) -> void:
 	world = new_world
-	sim = Simulation.new(world, household)
+	sim = Simulation.new(world, household, town)
 	sim.pawn_died.connect(_on_pawn_died)
+	sim.town_death.connect(_on_town_death)
 	hud.show_game_over("")
 	map_view.set_world(world)
 	tile_cursor.set_world(world)
@@ -211,6 +226,10 @@ func _on_pawn_died(person: String, cause: String, successor: String) -> void:
 		GameClock.set_speed(0)
 		var days := GameClock.get_day_number() + 1
 		hud.show_game_over("%s %s.\n\nThe household has died out, after %d days.\n\nN: new world     F9: load a save" % [person, cause, days])
+
+
+func _on_town_death(person: String, cause: String) -> void:
+	hud.show_message("%s of the town %s." % [person, cause], 5.0)
 
 
 func _on_tick(_tick: int) -> void:
@@ -274,7 +293,7 @@ func _on_day_changed(_day: int) -> void:
 
 func _write_save(path: String) -> Error:
 	var view := { "camera": [camera.position.x, camera.position.y], "zoom": camera.zoom.x }
-	return SaveGame.save(path, world, sim.household, view)
+	return SaveGame.save(path, world, sim.household, view, sim.town)
 
 
 ## F9: loads whichever of the quick save and the autosave is newer.
@@ -292,7 +311,7 @@ func _load() -> void:
 		if loaded_world.objects.is_empty():  # a save from before there were things
 			CampGenerator.place(loaded_world, household)
 		_loading = true
-		_show_world(loaded_world, household)
+		_show_world(loaded_world, household, result["town"])
 		_loading = false
 		var view: Dictionary = result["view"]
 		if view.has("camera") and view["camera"] is Array and view["camera"].size() == 2:

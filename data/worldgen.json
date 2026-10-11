@@ -1,0 +1,25 @@
+[
+  {
+    "id": "town",
+    "npc_count": 12,
+    "buildings": {
+      "tavern": 1,
+      "shop": 1,
+      "clinic": 1,
+      "park": 1,
+      "house": 5,
+      "vacant": 2
+    },
+    "half_width": 44,
+    "half_height_up": 26,
+    "half_height_down": 28,
+    "home_lot_size": [
+      16,
+      13
+    ],
+    "vacant_lot_size": [
+      12,
+      10
+    ]
+  }
+]

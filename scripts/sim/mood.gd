@@ -19,12 +19,14 @@ const ALONE_DISTANCE := 6  # tiles; nobody else this close counts as alone
 
 
 ## { "value": float, "parts": Array of { "id", "text", "mood" } strongest first }.
-static func evaluate(pawn: Pawn, household: Household, now: int) -> Dictionary:
+## `others` is everyone who might be near (an Array of Pawn, or a Household).
+static func evaluate(pawn: Pawn, others: Variant, now: int) -> Dictionary:
+	var people: Array = others.pawns if others is Household else others
 	var strongest := {}  # group -> part
 	for def in DataRegistry.get_list("thoughts"):
 		if not def.has("when") or not _applies(def, pawn):
 			continue
-		if _holds(def["when"], pawn, household):
+		if _holds(def["when"], pawn, people):
 			var part := _part(def, pawn)
 			var group := str(def.get("group", def["id"]))
 			if not strongest.has(group) or absf(part["mood"]) > absf(strongest[group]["mood"]):
@@ -100,7 +102,7 @@ static func _applies(def: Dictionary, pawn: Pawn) -> bool:
 	return true
 
 
-static func _holds(condition: Dictionary, pawn: Pawn, household: Household) -> bool:
+static func _holds(condition: Dictionary, pawn: Pawn, people: Array) -> bool:
 	if condition.has("need"):
 		var need_id := str(condition["need"])
 		if not pawn.needs.has(need_id):
@@ -114,7 +116,7 @@ static func _holds(condition: Dictionary, pawn: Pawn, household: Household) -> b
 		return false
 	if condition.has("alone"):
 		var alone := true
-		for other in household.pawns:
+		for other in people:
 			if other.id != pawn.id and absi(other.tile.x - pawn.tile.x) + absi(other.tile.y - pawn.tile.y) <= ALONE_DISTANCE:
 				alone = false
 		if alone != bool(condition["alone"]):

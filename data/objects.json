@@ -8,5 +8,11 @@
   { "id": "wall",       "name": "Timber wall",  "category": "structure", "blocks_walking": true,  "connects": "wall", "drag": true },
   { "id": "stone_wall", "name": "Stone wall",   "category": "structure", "blocks_walking": true,  "connects": "wall", "drag": true },
   { "id": "door",       "name": "Wooden door",  "category": "structure", "blocks_walking": false, "connects": "wall" },
-  { "id": "grave",      "name": "Grave",        "category": "structure", "blocks_walking": false, "buildable": false }
+  { "id": "grave",      "name": "Grave",        "category": "structure", "blocks_walking": false, "buildable": false },
+  { "id": "table",      "name": "Table",        "category": "furniture", "blocks_walking": true },
+  { "id": "counter",    "name": "Counter",      "category": "furniture", "blocks_walking": true },
+  { "id": "shelf",      "name": "Shelf",        "category": "furniture", "blocks_walking": true },
+  { "id": "barrel",     "name": "Barrel",       "category": "furniture", "blocks_walking": true },
+  { "id": "bench",      "name": "Bench",        "category": "furniture", "blocks_walking": false },
+  { "id": "well",       "name": "Well",         "category": "structure", "blocks_walking": true, "buildable": false }
 ]

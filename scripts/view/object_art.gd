@@ -39,6 +39,18 @@ static func draw(ci: CanvasItem, def_id: String, u: float, t: float, occupied: b
 			_chamber_pot(ci, u)
 		"lute":
 			_lute(ci, u)
+		"table":
+			_table(ci, u)
+		"counter":
+			_counter(ci, u)
+		"shelf":
+			_shelf(ci, u)
+		"barrel":
+			_barrel(ci, u)
+		"bench":
+			_bench(ci, u)
+		"well":
+			_well(ci, u)
 		_:
 			_crate(ci, u)
 
@@ -198,6 +210,65 @@ static func _grave(ci: CanvasItem, u: float) -> void:
 	_ellipse(ci, u, Vector2(0, 4), Vector2(11.0, 6.5), Color(0.41, 0.31, 0.22), 0.0)
 	_rect(ci, u, -2, -15, 4, 18, Color(0.45, 0.33, 0.21), 1.0)  # a wooden cross
 	_rect(ci, u, -7, -10, 14, 4, Color(0.45, 0.33, 0.21), 1.0)
+
+
+static func _table(ci: CanvasItem, u: float) -> void:
+	_shadow(ci, u, 18.0)
+	_rect(ci, u, -19, -16, 38, 32, Color(0.55, 0.40, 0.25), 1.3)
+	_rect(ci, u, -16, -13, 32, 26, Color(0.66, 0.50, 0.32), 0.0)
+	for y in [-4, 4]:
+		ci.draw_line(Vector2(-16, y) * u, Vector2(16, y) * u, Color(0.52, 0.38, 0.23), maxf(1.0, u))
+	ci.draw_circle(Vector2(-6, -3) * u, 3.4 * u, OUTLINE)  # a mug and a loaf
+	ci.draw_circle(Vector2(-6, -3) * u, 2.6 * u, Color(0.70, 0.62, 0.50))
+	_ellipse(ci, u, Vector2(7, 5), Vector2(5.5, 3.5), Color(0.74, 0.56, 0.30), 0.9)
+
+
+## Runs the full width of the tile, so a row of counters reads as one long counter.
+static func _counter(ci: CanvasItem, u: float) -> void:
+	ci.draw_rect(Rect2(Vector2(-24, -15) * u, Vector2(48, 30) * u), OUTLINE)
+	ci.draw_rect(Rect2(Vector2(-24, -13.5) * u, Vector2(48, 27) * u), Color(0.45, 0.31, 0.19))
+	ci.draw_rect(Rect2(Vector2(-24, -13.5) * u, Vector2(48, 17) * u), Color(0.66, 0.50, 0.32))
+	ci.draw_line(Vector2(-24, 4) * u, Vector2(24, 4) * u, Color(0.32, 0.22, 0.13), maxf(1.0, u))
+
+
+static func _shelf(ci: CanvasItem, u: float) -> void:
+	_shadow(ci, u, 18.0)
+	_rect(ci, u, -20, -14, 40, 28, Color(0.42, 0.30, 0.19), 1.3)
+	_rect(ci, u, -17, -11, 34, 22, Color(0.30, 0.21, 0.13), 0.0)
+	ci.draw_line(Vector2(-17, 0) * u, Vector2(17, 0) * u, Color(0.50, 0.37, 0.23), 2.0 * u)
+	var colors := [Color(0.72, 0.30, 0.25), Color(0.80, 0.68, 0.35), Color(0.35, 0.50, 0.62), Color(0.55, 0.62, 0.35)]
+	for i in 4:
+		ci.draw_rect(Rect2(Vector2(-15 + i * 8.5, -9) * u, Vector2(6, 7) * u), colors[i])
+		ci.draw_rect(Rect2(Vector2(-15 + (3 - i) * 8.5, 3) * u, Vector2(6, 6) * u), colors[(i + 1) % 4])
+
+
+static func _barrel(ci: CanvasItem, u: float) -> void:
+	_shadow(ci, u, 15.0)
+	ci.draw_circle(Vector2.ZERO, 16.0 * u, OUTLINE)
+	ci.draw_circle(Vector2.ZERO, 14.5 * u, Color(0.50, 0.35, 0.20))
+	ci.draw_arc(Vector2.ZERO, 11.0 * u, 0.0, TAU, 24, Color(0.30, 0.22, 0.14), 1.5 * u)
+	ci.draw_circle(Vector2.ZERO, 9.5 * u, Color(0.60, 0.44, 0.26))
+	ci.draw_line(Vector2(-9, -2) * u, Vector2(9, -2) * u, Color(0.46, 0.33, 0.19), maxf(1.0, u))
+	ci.draw_line(Vector2(-9, 3) * u, Vector2(9, 3) * u, Color(0.46, 0.33, 0.19), maxf(1.0, u))
+
+
+static func _bench(ci: CanvasItem, u: float) -> void:
+	_shadow(ci, u, 16.0)
+	_rect(ci, u, -20, -8, 40, 16, Color(0.52, 0.38, 0.23), 1.2)
+	_rect(ci, u, -18, -6, 36, 8, Color(0.68, 0.52, 0.33), 0.0)
+	for x in [-14, 12]:
+		_rect(ci, u, x, 4, 4, 5, Color(0.33, 0.23, 0.14), 0.8)
+
+
+static func _well(ci: CanvasItem, u: float) -> void:
+	_shadow(ci, u, 22.0)
+	ci.draw_circle(Vector2.ZERO, 22.0 * u, OUTLINE)
+	for i in 12:
+		var a := TAU * i / 12.0
+		_ellipse(ci, u, Vector2(cos(a), sin(a)) * 16.0, Vector2(6.5, 5.5), Color(0.58, 0.58, 0.56) if i % 2 == 0 else Color(0.50, 0.50, 0.49), 1.0)
+	ci.draw_circle(Vector2.ZERO, 11.0 * u, Color(0.10, 0.12, 0.14))
+	ci.draw_circle(Vector2.ZERO, 9.0 * u, Color(0.22, 0.38, 0.52))
+	ci.draw_arc(Vector2(-1, -1) * u, 5.0 * u, 3.4, 5.6, 10, Color(0.55, 0.72, 0.84), maxf(1.0, u))
 
 
 static func _crate(ci: CanvasItem, u: float) -> void:

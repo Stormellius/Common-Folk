@@ -1,0 +1,83 @@
+[
+  { "id": "cottage", "name": "Cottage", "kind": "house", "floor": "planks",
+    "grid": [
+      "#########",
+      "#b.b.b.p#",
+      "#......h#",
+      "#.......#",
+      "#w.c..l.#",
+      "#.......#",
+      "####+####"
+    ] },
+  { "id": "cottage_small", "name": "Small cottage", "kind": "house", "floor": "planks",
+    "grid": [
+      "########",
+      "#b.b.p.#",
+      "#.....h#",
+      "#w.c...#",
+      "#......#",
+      "###+####"
+    ] },
+  { "id": "farmhouse", "name": "Farmhouse", "kind": "house", "floor": "planks",
+    "grid": [
+      "##########",
+      "#b.b#.p.h#",
+      "#...#....#",
+      "#...+....#",
+      "#####....#",
+      "#w.c.....#",
+      "#.b....l.#",
+      "####+#####"
+    ] },
+  { "id": "stone_house", "name": "Stone house", "kind": "house", "floor": "flagstone",
+    "grid": [
+      "SSSSSSSSS",
+      "Sb.b.b.pS",
+      "S......hS",
+      "S.......S",
+      "Sw.c...lS",
+      "S.......S",
+      "SSSS+SSSS"
+    ] },
+  { "id": "tavern", "name": "Tavern", "kind": "tavern", "floor": "planks", "public": true,
+    "grid": [
+      "##########",
+      "#h..p..l.#",
+      "#........#",
+      "#t.t.t.t.#",
+      "#........#",
+      "#n.n.n.nr#",
+      "#........#",
+      "####+#####"
+    ] },
+  { "id": "shop", "name": "Shop", "kind": "shop", "floor": "planks", "public": true,
+    "grid": [
+      "#########",
+      "#s.s.s.r#",
+      "#.......#",
+      "#kkkkk..#",
+      "#.......#",
+      "#.t...t.#",
+      "####+####"
+    ] },
+  { "id": "clinic", "name": "Clinic", "kind": "clinic", "floor": "flagstone", "public": true,
+    "grid": [
+      "SSSSSSSSS",
+      "Sb.b.b.sS",
+      "S.......S",
+      "S.......S",
+      "Sw.....kS",
+      "S.......S",
+      "SSSS+SSSS"
+    ] },
+  { "id": "green", "name": "Village green", "kind": "park", "floor": "", "public": true,
+    "grid": [
+      "          ",
+      " n      n ",
+      "          ",
+      "    W     ",
+      "          ",
+      " n      n ",
+      "          "
+    ] }
+]
