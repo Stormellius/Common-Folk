@@ -2,14 +2,15 @@ class_name PawnLayer
 extends Node2D
 ## Shows every pawn of the household and turns mouse clicks into orders.
 ##
-## Controls (Sims style): left-click a person to switch to them, left-click a tile to
-## send the selected person there, right-click to stop them. The layer draws the planned
-## route of the selected pawn underneath the pawns.
+## Controls: left-click a person to switch to them; right-click anywhere to ask for the
+## menu of things the selected person can do there (walk, stop, later sleep, eat and so on).
+## The layer draws the planned route of the selected pawn underneath the pawns.
 
 ## A person was clicked in the world.
 signal pawn_selected(id: int)
-## Something the player should be told, such as "Can't walk there".
-signal notice(text: String)
+## The player right-clicked: show the action menu for this tile. `screen_position` is where
+## to put it, in the same coordinates as the HUD.
+signal context_menu_requested(screen_position: Vector2, tile: Vector2i)
 
 const PICK_RADIUS := 0.55    # in tiles, around the middle of a pawn
 const HIDE_NAMES_BELOW := 0.5  # camera zoom
@@ -105,20 +106,17 @@ func _tile_center(cell: Vector2i) -> Vector2:
 func _unhandled_input(event: InputEvent) -> void:
 	if sim == null or not (event is InputEventMouseButton and event.pressed):
 		return
+	var world_point: Vector2 = (make_input_local(event) as InputEventMouseButton).position  # world pixels
 	if event.button_index == MOUSE_BUTTON_LEFT:
-		var mouse: Vector2 = (make_input_local(event) as InputEventMouseButton).position  # world pixels
-		var clicked := _pawn_at(mouse)
-		if clicked != null:
-			if sim.household.select(clicked.id):
-				pawn_selected.emit(clicked.id)
-		else:
-			_order_selected_to(Vector2i(floori(mouse.x / MapView.TILE_SIZE), floori(mouse.y / MapView.TILE_SIZE)))
-		get_viewport().set_input_as_handled()
+		var clicked := _pawn_at(world_point)
+		if clicked != null and sim.household.select(clicked.id):
+			pawn_selected.emit(clicked.id)
+			get_viewport().set_input_as_handled()
 	elif event.button_index == MOUSE_BUTTON_RIGHT:
-		var chosen := sim.household.selected()
-		if chosen != null:
-			sim.order_stop(chosen)
-		get_viewport().set_input_as_handled()
+		if sim.household.selected() != null:
+			var tile := Vector2i(floori(world_point.x / MapView.TILE_SIZE), floori(world_point.y / MapView.TILE_SIZE))
+			context_menu_requested.emit(event.position, tile)
+			get_viewport().set_input_as_handled()
 
 
 func _pawn_at(world_point: Vector2) -> Pawn:
@@ -130,12 +128,3 @@ func _pawn_at(world_point: Vector2) -> Pawn:
 			best_distance = distance
 			best = pawn
 	return best
-
-
-func _order_selected_to(cell: Vector2i) -> void:
-	var chosen := sim.household.selected()
-	if chosen == null:
-		return
-	var result := sim.order_move(chosen, cell)
-	if not result["ok"]:
-		notice.emit(result["message"])

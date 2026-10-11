@@ -21,6 +21,7 @@ func _ready() -> void:
 	_test_pathfinding()
 	_test_pawn_movement()
 	_test_household()
+	_test_actions()
 	_test_save_and_load()
 	print("")
 	if _failures == 0:
@@ -319,6 +320,60 @@ func _test_household() -> void:
 	_check(a.select(a.pawns[1].id) and a.selected_id == a.pawns[1].id, "select picks a given person")
 	_check(not a.select(9999), "selecting a missing person fails")
 	_check(PawnArt.facing_kind(Vector2i(0, 1)) == PawnArt.SOUTH and PawnArt.facing_kind(Vector2i(-1, -1)) == PawnArt.WEST, "walking direction picks the view to draw")
+
+
+func _test_actions() -> void:
+	print("Actions and right-click menu")
+	var world := _make_test_world()
+	var household := Household.new()
+	for start in [Vector2i(1, 4), Vector2i(2, 4)]:
+		var person := Pawn.new()
+		person.display_name = "Person %d" % start.x
+		person.tile = start
+		person.step_to = start
+		household.add_pawn(person)
+	var sim := Simulation.new(world, household)
+	var pawn := household.selected()
+	var by_id := func(list: Array[Dictionary], id: String) -> Dictionary:
+		for entry in list:
+			if entry["id"] == id:
+				return entry
+		return {}
+
+	var on_grass := PawnActions.list_for(sim, pawn, Vector2i(4, 4))
+	_check(by_id.call(on_grass, PawnActions.WALK).get("enabled", false), "walking to open ground is offered")
+	_check(by_id.call(on_grass, PawnActions.STOP).is_empty(), "stop is not offered to someone standing still")
+	var on_water := PawnActions.list_for(sim, pawn, Vector2i(6, 3))
+	var water_walk: Dictionary = by_id.call(on_water, PawnActions.WALK)
+	_check(not water_walk.get("enabled", true) and "water" in str(water_walk.get("reason", "")), "walking into water is listed but off, and says why")
+	var here := PawnActions.list_for(sim, pawn, pawn.tile)
+	_check(not by_id.call(here, PawnActions.WALK).get("enabled", true), "walking to where you stand is off")
+	_check(PawnActions.list_for(sim, pawn, Vector2i(-1, 0)).is_empty(), "no menu outside the map")
+	var neighbor := PawnActions.list_for(sim, pawn, Vector2i(2, 4))
+	_check(not by_id.call(neighbor, PawnActions.SWITCH_PREFIX + str(household.pawns[1].id)).is_empty(), "right-clicking another person offers to switch to them")
+
+	var walked := PawnActions.perform(sim, pawn, PawnActions.WALK, Vector2i(5, 4))
+	_check(walked["ok"] and pawn.goal_tile() == Vector2i(5, 4), "the walk entry sends the person there")
+	_check(not by_id.call(PawnActions.list_for(sim, pawn, Vector2i(4, 1)), PawnActions.STOP).is_empty(), "stop is offered while walking")
+	PawnActions.perform(sim, pawn, PawnActions.STOP, Vector2i.ZERO)
+	_check(pawn.path.is_empty(), "the stop entry cancels the walk")
+	var switched := PawnActions.perform(sim, pawn, PawnActions.SWITCH_PREFIX + str(household.pawns[1].id), Vector2i.ZERO)
+	_check(switched["ok"] and household.selected_id == household.pawns[1].id, "the switch entry changes who is selected")
+	_check(not PawnActions.perform(sim, pawn, "nonsense", Vector2i.ZERO)["ok"], "an unknown entry is refused")
+
+	var menu := ActionMenu.new()
+	add_child(menu)
+	var chosen: Array[String] = []
+	menu.action_chosen.connect(func(id: String) -> void: chosen.append(id))
+	menu.open(Vector2(50, 50), "Title", on_water)
+	_check(menu.visible and menu.buttons.size() == on_water.size(), "the menu shows one button per entry")
+	_check(menu.buttons[0].disabled and "water" in menu.buttons[0].text, "a switched-off entry is greyed out and shows its reason")
+	menu.close()
+	_check(not menu.visible and menu.buttons.is_empty(), "closing hides the menu")
+	menu.open(Vector2(50, 50), "Title", on_grass)
+	menu.buttons[0].pressed.emit()
+	_check(chosen == [PawnActions.WALK] and not menu.visible, "picking an entry reports it and closes the menu")
+	menu.queue_free()
 
 
 func _test_save_and_load() -> void:

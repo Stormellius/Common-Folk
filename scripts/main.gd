@@ -8,6 +8,8 @@ const SAVE_PATH := "user://savegame.json"
 
 var world: WorldState
 var sim: Simulation
+var _menu_pawn_id := -1     # who the open right-click menu is for
+var _menu_tile := Vector2i.ZERO  # and which tile it was opened on
 
 @onready var map_view: MapView = $MapView
 @onready var pawn_layer: PawnLayer = $PawnLayer
@@ -19,7 +21,8 @@ var sim: Simulation
 func _ready() -> void:
 	tile_cursor.hovered_changed.connect(_on_tile_hovered)
 	pawn_layer.pawn_selected.connect(hud.set_selected)
-	pawn_layer.notice.connect(func(text: String) -> void: hud.show_message(text))
+	pawn_layer.context_menu_requested.connect(_on_context_menu_requested)
+	hud.action_chosen.connect(_on_action_chosen)
 	hud.pawn_chosen.connect(_on_pawn_chosen)
 	GameClock.ticked.connect(_on_tick)
 	_start_new_world(_pick_seed())
@@ -66,7 +69,8 @@ func _unhandled_input(event: InputEvent) -> void:
 ##   godot --path . -- --seed=1234 --day=50 --hour=12 --zoom=0.5 --speed=0
 ## seed = world seed, day = day number to start on (0 = first), hour = hour of day,
 ## zoom = camera zoom, look = tile to center the camera on (x,y), speed = 0 (paused) to 3,
-## walk = tile (x,y) to send the selected person to at the start.
+## walk = tile (x,y) to send the selected person to at the start,
+## menu = tile (x,y) to open the right-click menu on at the start.
 ## Handy for screenshots and testing.
 func _launch_option(name: String) -> String:
 	var prefix := "--%s=" % name
@@ -98,6 +102,10 @@ func _apply_launch_options() -> void:
 		var goal := _launch_option("walk").split(",")
 		if goal.size() == 2 and sim.household.selected() != null:
 			sim.order_move(sim.household.selected(), Vector2i(int(goal[0]), int(goal[1])))
+	if _launch_option("menu") != "" and sim != null:
+		var spot := _launch_option("menu").split(",")
+		if spot.size() == 2:
+			_on_context_menu_requested(Vector2(700, 260), Vector2i(int(spot[0]), int(spot[1])))
 	if _launch_option("zoom") != "":
 		var zoom_level := clampf(float(_launch_option("zoom")), CameraController.ZOOM_MIN, CameraController.ZOOM_MAX)
 		camera.zoom = Vector2(zoom_level, zoom_level)
@@ -115,6 +123,7 @@ func _show_world(new_world: WorldState, household: Household) -> void:
 	map_view.set_world(world)
 	tile_cursor.set_world(world)
 	pawn_layer.bind(sim)
+	hud.close_action_menu()
 	hud.set_household(household)
 	camera.set_world_size(Vector2(world.width, world.height) * MapView.TILE_SIZE)
 	_center_on_selected()
@@ -126,7 +135,31 @@ func _on_tick(_tick: int) -> void:
 		sim.step()
 
 
+func _on_context_menu_requested(screen_position: Vector2, tile: Vector2i) -> void:
+	var pawn := sim.household.selected()
+	if pawn == null:
+		return
+	var actions := PawnActions.list_for(sim, pawn, tile)
+	if actions.is_empty():
+		return
+	_menu_pawn_id = pawn.id
+	_menu_tile = tile
+	var tile_name := str(DataRegistry.get_def("tiles", world.get_tile_id(tile.x, tile.y)).get("name", ""))
+	hud.open_action_menu(screen_position, "%s  -  %s" % [pawn.display_name.get_slice(" ", 0), tile_name], actions)
+
+
+func _on_action_chosen(action_id: String) -> void:
+	var pawn := sim.household.get_pawn(_menu_pawn_id)
+	if pawn == null:
+		return
+	var result := PawnActions.perform(sim, pawn, action_id, _menu_tile)
+	if not result["ok"] and result["message"] != "":
+		hud.show_message(result["message"])
+	hud.set_selected(sim.household.selected_id)  # an action may have switched person
+
+
 func _on_pawn_chosen(id: int) -> void:
+	hud.close_action_menu()
 	if sim.household.select(id):
 		hud.set_selected(id)
 		camera.focus_on(pawn_layer.visual_position(id))

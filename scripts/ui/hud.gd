@@ -8,10 +8,12 @@ extends CanvasLayer
 ## live in main.gd.
 
 const SPEED_LABELS: Array[String] = ["II", "1x", "2x", "3x"]
-const HELP_TEXT := "Click: walk / switch person   Right-click: stop   Tab: next person   C: center   WASD: camera   Wheel: zoom   Space: pause   1-3: speed   G: grid   F5/F9: save/load   N: new world"
+const HELP_TEXT := "Click: pick person   Right-click: actions   Tab: next person   C: center   WASD: camera   Wheel: zoom   Space: pause   1-3: speed   G: grid   F5/F9: save/load   N: new world"
 
 ## The player picked a household member in the bar at the bottom.
 signal pawn_chosen(id: int)
+## An entry of the right-click menu was picked (its id comes from PawnActions).
+signal action_chosen(id: String)
 
 # Flat dark panels with thin light borders, in the spirit of RimWorld's interface.
 const PANEL_COLOR := Color(0.11, 0.11, 0.12, 0.92)
@@ -28,6 +30,7 @@ var _info_label: Label
 var _toast_label: Label
 var _speed_buttons: Array[Button] = []
 var _household_row: HBoxContainer
+var _action_menu := ActionMenu.new()
 var _chips: Dictionary = {}  # pawn id -> Button
 var _toast_serial := 0
 
@@ -37,6 +40,8 @@ func _ready() -> void:
 	_build_clock_panel()
 	_build_corner_labels()
 	_build_household_bar()
+	add_child(_action_menu)  # last, so it sits above the other panels
+	_action_menu.action_chosen.connect(func(id: String) -> void: action_chosen.emit(id))
 	GameClock.ticked.connect(func(_tick: int) -> void: refresh_clock())
 	GameClock.time_set.connect(refresh_clock)
 	GameClock.speed_changed.connect(_on_speed_changed)
@@ -82,6 +87,15 @@ func set_household(household: Household) -> void:
 		_household_row.add_child(chip)
 		_chips[pawn.id] = chip
 	set_selected(household.selected_id)
+
+
+## Pops up the right-click menu at a screen position.
+func open_action_menu(screen_position: Vector2, title: String, actions: Array[Dictionary]) -> void:
+	_action_menu.open(screen_position, title, actions)
+
+
+func close_action_menu() -> void:
+	_action_menu.close()
 
 
 ## Highlights one household member without sending a signal.

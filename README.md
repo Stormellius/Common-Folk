@@ -9,7 +9,7 @@
 - Day and night light (blue nights, warm dawn and dusk) and seasons (green spring, golden summer, brown autumn, snowy winter) that follow the game clock
 - Camera: pan, zoom toward the cursor, middle-mouse drag
 - Game clock with pause and 1x / 2x / 3x speed, a calendar with seasons, and a clock panel
-- A household of three people (names and looks from the world seed) drawn in RimWorld-style top-down art made by code. Control one at a time Sims style: click a tile to walk there, click a person (or their portrait at the bottom, or press Tab) to switch. The others keep walking if they have orders
+- A household of three people (names and looks from the world seed) drawn in RimWorld-style top-down art made by code. Control one at a time: click a person (or their portrait at the bottom, or press Tab) to select them, then right-click anywhere for a menu of what they can do there (walk, stop, switch to a neighbor, and later sleep, eat and work). The others keep walking if they have orders
 - Pathfinding around water and rock with A* (forest is slower to cross, diagonals never cut corners), walking at one step per clock tick so pause and speed control apply
 - Hover a tile to see what it is and whether it is walkable
 - Save and load (F5 / F9), new world (N)
@@ -27,16 +27,16 @@ Options go after `--` on the command line, which is handy for testing and screen
 godot --path . -- --seed=1234 --day=50 --hour=12 --zoom=0.5 --look=70,30 --speed=0
 ```
 
-`seed` is the world, `day` and `hour` set the date (day 0 is the first day, 15 days per season), `zoom` the camera zoom, `look` the tile to center on, and `speed` 0 to 3, and `walk` a tile (such as `--walk=70,50`) to send the selected person to.
+`seed` is the world, `day` and `hour` set the date (day 0 is the first day, 15 days per season), `zoom` the camera zoom, `look` the tile to center on, and `speed` 0 to 3, `walk` a tile (such as `--walk=70,50`) to send the selected person to, and `menu` a tile to open the right-click menu on.
 
 ## Controls
 
 | Key | Action |
 | --- | --- |
 | WASD / arrow keys | Move the camera (hold Shift for faster) |
-| Left-click a tile | Selected person walks there |
-| Left-click a person | Switch to that person |
-| Right-click | Selected person stops |
+| Left-click a person | Select that person |
+| Right-click | Menu of actions for the selected person at that spot (Walk here, Stop, Switch to...) |
+| Escape | Close the menu |
 | Tab / Shift+Tab | Next / previous person (camera jumps to them) |
 | C | Center the camera on the selected person |
 | Mouse wheel | Zoom |
@@ -66,6 +66,7 @@ scripts/
     world_state.gd       The map as plain data, turns into a Dictionary
     map_generator.gd     Seed -> terrain
     pawn.gd              One person: position, walking path, one step per tick
+    pawn_actions.gd      What a person can do at a spot (the right-click menu's entries)
     household.gd         The people you control and who is selected
     household_generator.gd  Seed -> starting family (names, looks, where they stand)
     path_finder.gd       A* over the tile map
@@ -81,6 +82,7 @@ scripts/
     camera_controller.gd Pan and zoom
   ui/hud.gd            Flat dark panels: clock and speed buttons, household bar, tile info, help, messages
   ui/pawn_portrait.gd  Small person picture for the household bar
+  ui/action_menu.gd    The right-click pop-up list
   main.gd              Wires it together and handles shortcuts
 tests/                 Headless checks
 ```
@@ -119,7 +121,7 @@ If you export the game, add `*.json` under **Resources > Filters to export non-r
 godot --headless --path . res://tests/smoke_test.tscn
 ```
 
-This checks data loading, mods, the clock and calendar, world generation (same seed, same world), pathfinding, pawn movement, the household and the save round trip. Run it as a scene as shown; it needs the autoloads, which `--script` mode does not provide.
+This checks data loading, mods, the clock and calendar, world generation (same seed, same world), pathfinding, pawn movement, the household, the right-click actions and the save round trip. Run it as a scene as shown; it needs the autoloads, which `--script` mode does not provide.
 
 ## Graphics notes
 
