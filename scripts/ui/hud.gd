@@ -86,8 +86,9 @@ func set_household(household: Household) -> void:
 
 ## Highlights one household member without sending a signal.
 func set_selected(id: int) -> void:
-	if _chips.has(id):
-		_chips[id].set_pressed_no_signal(true)
+	# set_pressed_no_signal does not release the others in a ButtonGroup, so set every one.
+	for chip_id in _chips:
+		_chips[chip_id].set_pressed_no_signal(chip_id == id)
 
 
 func set_info(text: String) -> void:
@@ -245,5 +246,6 @@ func _on_speed_button_pressed(level: int) -> void:
 
 
 func _on_speed_changed(level: int) -> void:
-	if level >= 0 and level < _speed_buttons.size():
-		_speed_buttons[level].set_pressed_no_signal(true)
+	# set_pressed_no_signal does not release the others in a ButtonGroup, so set every one.
+	for i in _speed_buttons.size():
+		_speed_buttons[i].set_pressed_no_signal(i == level)

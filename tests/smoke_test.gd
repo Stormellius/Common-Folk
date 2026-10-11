@@ -17,6 +17,7 @@ func _ready() -> void:
 	_test_clock()
 	_test_generator()
 	_test_map_view()
+	_test_hud()
 	_test_pathfinding()
 	_test_pawn_movement()
 	_test_household()
@@ -161,6 +162,40 @@ func _test_map_view() -> void:
 		var def := DataRegistry.get_def("tiles", tile_id)
 		_check(def.has("style") and def.has("priority"), "tile '%s' has a style and priority" % tile_id)
 	view.queue_free()
+
+func _test_hud() -> void:
+	print("HUD")
+	var hud := Hud.new()
+	add_child(hud)  # runs _ready, which builds the panels
+	var household := HouseholdGenerator.create(MapGenerator.generate(3, 64, 48))
+	hud.set_household(household)
+	var pressed_count := func() -> int:
+		var count := 0
+		for button in hud._speed_buttons:
+			if button.button_pressed:
+				count += 1
+		return count
+	GameClock.set_speed(3)
+	_check(hud._speed_buttons[3].button_pressed and pressed_count.call() == 1, "going to 3x shows only 3x")
+	GameClock.set_speed(1)
+	_check(hud._speed_buttons[1].button_pressed and not hud._speed_buttons[3].button_pressed and pressed_count.call() == 1, "going back to 1x releases 3x")
+	GameClock.set_speed(0)
+	_check(hud._speed_buttons[0].button_pressed and pressed_count.call() == 1, "pausing shows only Pause")
+	GameClock.set_speed(2)
+	_check(hud._speed_buttons[2].button_pressed and pressed_count.call() == 1, "2x shows only 2x")
+	var first: int = household.pawns[0].id
+	var second: int = household.pawns[1].id
+	hud.set_selected(second)
+	hud.set_selected(first)
+	var chip_count := 0
+	for id in hud._chips:
+		if hud._chips[id].button_pressed:
+			chip_count += 1
+	_check(hud._chips[first].button_pressed and chip_count == 1, "switching person highlights only that person")
+	GameClock.reset()
+	GameClock.set_speed(1)
+	hud.queue_free()
+
 
 ## A 12x8 meadow with a wall of water down column 6 that has one gap at row 7,
 ## and a patch of forest at (3..4, 2).
