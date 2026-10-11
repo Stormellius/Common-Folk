@@ -17,6 +17,10 @@ const USE_PREFIX := "use:"
 const INTERACT_PREFIX := "interact:"  # "interact:<interaction id>:<other person's id>"
 const HIRE_PREFIX := "hire:"          # "hire:<lot id>:<job id>"
 const QUIT_JOB := "quit_job"
+const LOT_PREFIX := "lot:"           # "lot:<lease|buy|buyout>:<lot id>"
+const GUILD_PREFIX := "guild:"       # "guild:<guild id>"
+const FUND_PREFIX := "fund:"         # "fund:<amount>"
+const FUND_STEPS := [10, 50]
 
 
 ## One entry: { "id": String, "label": String, "enabled": bool, "reason": String }.
@@ -39,6 +43,12 @@ static func list_for(sim: Simulation, pawn: Pawn, tile: Vector2i) -> Array[Dicti
 		actions.append(_entry(USE_PREFIX + str(placed.id), label, blocker == "", blocker))
 	if placed != null and placed.def().has("offers_work"):
 		actions.append_array(_work_entries(sim, pawn, placed))
+	if placed != null and str(placed.def().get("offers_work", "")) == "town":
+		actions.append_array(_guild_entries(sim))
+		for amount in FUND_STEPS:
+			var short: bool = amount > sim.household.coins
+			actions.append(_entry(FUND_PREFIX + str(amount), "Give %s to the town's defense fund (now %s)" % [Economy.format(amount), Economy.format(sim.realm.fund)], not short, "you only have %s" % Economy.format(sim.household.coins) if short else ""))
+	actions.append_array(_land_entries(sim, tile))
 	actions.append(_walk_entry(sim, pawn, tile))
 	if pawn.is_busy():
 		actions.append(_entry(STOP, "Stop"))
@@ -50,6 +60,38 @@ static func list_for(sim: Simulation, pawn: Pawn, tile: Vector2i) -> Array[Dicti
 			var label := str(interaction.get("action", "Interact with {name}")).replace("{name}", other.display_name.get_slice(" ", 0))
 			actions.append(_entry(INTERACT_PREFIX + "%s:%d" % [interaction["id"], other.id], label, blocker == "", blocker))
 	return actions
+
+
+## Joining a guild, from the notice board.
+static func _guild_entries(sim: Simulation) -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	for guild in DataRegistry.get_list("guilds"):
+		if sim.realm.guild == str(guild["id"]):
+			continue
+		var blocker := sim.realm.join_blocker(sim, str(guild["id"]))
+		entries.append(_entry(GUILD_PREFIX + str(guild["id"]), "Join the %s (%s)" % [guild.get("name", guild["id"]), Economy.format(int(guild.get("join_fee", 0)))], blocker == "", blocker))
+	return entries
+
+
+## Taking an empty lot on lease or for good, or buying out a lease, when the tile is on such land.
+static func _land_entries(sim: Simulation, tile: Vector2i) -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	var lot := sim.world.lot_at(tile)
+	if lot.is_empty():
+		return entries
+	var lot_id := str(lot["id"])
+	if str(lot.get("kind", "")) == "vacant" and not sim.world.titles.has(lot_id):
+		var lease_title := DataRegistry.get_def("titles", "leasehold")
+		var rent := roundi(sim.world.lot_area(lot_id) * float(lease_title.get("tax_per_tile", 0.0)))
+		for how in ["lease", "buy"]:
+			var blocker := sim.realm.lot_blocker(sim, lot_id, how)
+			var price := Economy.format(sim.realm.lot_price(sim.world, lot_id, how))
+			var label := "Lease this lot (%s, then about %s a quarter)" % [price, Economy.format(rent)] if how == "lease" else "Buy this lot (%s)" % price
+			entries.append(_entry(LOT_PREFIX + "%s:%s" % [how, lot_id], label, blocker == "", blocker))
+	elif str(sim.world.titles.get(lot_id, "")) == "leasehold":
+		var blocker := sim.realm.lot_blocker(sim, lot_id, "buyout")
+		entries.append(_entry(LOT_PREFIX + "buyout:" + lot_id, "Buy out the lease (%s)" % Economy.format(sim.realm.lot_price(sim.world, lot_id, "buyout")), blocker == "", blocker))
+	return entries
 
 
 ## The job entries for a notice board (every vacancy in town) or a counter (that business's own).
@@ -80,6 +122,13 @@ static func perform(sim: Simulation, pawn: Pawn, action_id: String, tile: Vector
 
 
 static func _perform(sim: Simulation, pawn: Pawn, action_id: String, tile: Vector2i) -> Dictionary:
+	if action_id.begins_with(LOT_PREFIX):
+		var lot_parts := action_id.trim_prefix(LOT_PREFIX).split(":")
+		return sim.realm.acquire_lot(sim, lot_parts[1], lot_parts[0]) if lot_parts.size() == 2 else { "ok": false, "message": "Unknown lot" }
+	if action_id.begins_with(FUND_PREFIX):
+		return sim.realm.give_to_fund(sim, int(action_id.trim_prefix(FUND_PREFIX)))
+	if action_id.begins_with(GUILD_PREFIX):
+		return sim.realm.join_guild(sim, action_id.trim_prefix(GUILD_PREFIX))
 	if action_id.begins_with(HIRE_PREFIX):
 		var parts := action_id.trim_prefix(HIRE_PREFIX).split(":")
 		return sim.hire(pawn, parts[0], parts[1]) if parts.size() == 2 else { "ok": false, "message": "Unknown job" }

@@ -1,0 +1,6 @@
+[
+  { "id": "realm", "ruler": "the Crown", "tax_every_days": 15, "business_tax_percent": 20,
+    "death_duty_percent": 10, "max_business_lots": 1, "decree_chance": 0.6, "conflict_from_day": 10, "defense": { "supplies_weight": 0.5, "supplies_cap": 8, "fund_weight": 0.08, "reputation_weight": 0.08, "readiness_weight": 0.3, "fund_kept_percent": 50, "luck": 3 },
+    "distraint_exempt": ["bed", "cooking_pot", "hearth"],
+    "reputation_on_time": 4, "reputation_default": -12, "reputation_min": -100, "reputation_max": 100 }
+]

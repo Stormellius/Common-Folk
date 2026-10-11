@@ -18,6 +18,28 @@
     "announce": "A bitter cold snap settles over the town. Keep the fires lit.",
     "chance": 0.10, "seasons": ["winter"], "cooldown_days": 10,
     "start_hour": 0, "duration_hours": 72,
-    "need_drain_multipliers": { "warmth": 1.6 }
+    "need_drain_multipliers": { "warmth": 1.6 }, "illness_multiplier": 2.0
+  },
+  {
+    "id": "service", "name": "Service",
+    "announce": "The chapel bell rings for the weekly service.",
+    "chance": 1.0, "cooldown_days": 7,
+    "start_hour": 9, "duration_hours": 2,
+    "gather": "chapel", "restore": { "faith": 80, "social": 20 }, "thought": "event:service"
+  },
+  {
+    "id": "royal_jubilee", "name": "Royal jubilee", "decree": true,
+    "announce": "Decree: the Crown celebrates a jubilee. Taxes are halved this quarter.",
+    "start_hour": 6, "duration_hours": 360, "tax_multiplier": 0.5
+  },
+  {
+    "id": "war_levy", "name": "War levy", "decree": true,
+    "announce": "Decree: the Crown levies the realm for war. Taxes are half as much again this quarter and bread costs more.",
+    "start_hour": 6, "duration_hours": 360, "tax_multiplier": 1.5, "price_multipliers": { "food_shelf": 1.5 }
+  },
+  {
+    "id": "fair_prices", "name": "Fair prices", "decree": true,
+    "announce": "Decree: the Crown fixes fair prices. Meals and bread are cheaper this quarter.",
+    "start_hour": 6, "duration_hours": 360, "price_multipliers": { "food_shelf": 0.7, "meal_table": 0.75 }
   }
 ]

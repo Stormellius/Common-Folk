@@ -1,6 +1,6 @@
 # Common Folk
 
-**Common Folk** is a medieval life sim sandbox with RimWorld-style looks: you live one person's life at a time in a randomly generated town that keeps running without you. The full plan is in the design document; this project is at **milestone 10 (Social and events)**.
+**Common Folk** is a medieval life sim sandbox with RimWorld-style looks: you live one person's life at a time in a randomly generated town that keeps running without you. The full plan is in the design document; this project is at **milestone 11 (Medieval layer)**.
 
 ## What works now
 
@@ -20,8 +20,15 @@
 - Coin and work: your household shares a purse (shown under the clock, 120d to start). Right-click the notice board on the village green, or a counter in the shop, tavern or clinic, to take a job from the open vacancies; right-click again to quit. Each job has a shift and a wage: an idle worker walks to a free spot beside the business's counter when the shift starts, is paid by the hour on leaving, and goes home early if a need gets critical. Giving a worker any other order takes them off their shift for the day. The tavern sells meals and ale, the shop sells bread (the price shows in the menu); building now costs coin and taking something down gives half back. Some of the townspeople work too (each business keeps a vacancy for you), and they earn and spend by the same rules
 - Talking and opinions: everyone has an opinion (-100 to 100) of the people they know, shown with a label (Friend, Rival...) in the panel. Family starts fond of each other, strangers at zero, and opinions drift back toward neutral over the days. Right-click another person to chat, joke or argue (adults can also be intimate once they like each other enough). Chatting fills Social and warms the opinion, a joke can fall flat, an argument sours it. People also chat on their own when lonely: villagers talk to villagers, your household talks to anyone nearby. Speech bubbles show who is talking
 - Town events: a seeded roll each morning can bring a festival (people gather on the green and feel less lonely), a market day (food is half price) or a cold snap (winter only; warmth drains faster for three days). A message appears when one starts and ends
+- Three ways to begin (a start screen on a new world; `--start=bought|inherited|arrived` skips it): **bought land** (freehold, a camp, 90d, burghers), an **inherited cottage** (freehold, a standing house, 100d, gentry who will not do menial work and pay more tax) or **arrived with nothing** (the Crown lets you camp on the plot as a leaseholder for rent, 12d, peasants)
+- Land and the Crown: every lot you hold has a title, freehold or leasehold. Every fifteen days is a quarter day: the tax collector takes land tax (rent for a leasehold), guild dues and a share of your business's takings from the purse, scaled by your class. A short purse means he takes your dearest furnishing instead, and your standing falls; debts he cannot cover carry over. Decrees proclaimed on quarter days change the next quarter (a jubilee halves the tax, a war levy raises it and bread costs more, fair prices cut food costs). A leasehold can be bought out. The panel under the purse shows your class, title, the next tax day and what it will ask
+- A business lot: join the Merchants' Guild at the notice board (25d; the household becomes burghers, pays less trade tax and may hold a business lot), then right-click an empty lot to lease or buy it. Build tavern tables, ale barrels and bread shelves there (the Business tab in build mode) and townspeople who are hungry or bored will pay to use them; the coin goes to your purse
+- Faith and the chapel: the town has a chapel with an altar and pews, and Faith is now a need (it never slows anyone, and the Pious trait makes it drain faster). People pray when it runs low, a service is held about every week (the chapel fills and Faith and Social are restored), and you can build pews and an altar of your own
+- Illness: each midnight someone may catch a fever (likelier in autumn and winter, when filthy and in a cold snap). The ill feel low, tire faster and stay off work; most recover in a few days, resting helps, and a fever that drags past nine days kills. The clinic's sickbeds (10d) cure it, and ill people with the coin go there on their own
+- Raids and war, off-screen: from day 10, word now and then arrives of bandits or a warband with a strength and a number of days. You never fight. The outcome is the town's defense (food in the town, able adults, your standing, the defense fund and any watch posts you build) against that strength plus a little luck. Give coin to the fund at the notice board and build watch posts to tip it. A victory raises your standing; a defeat costs a share of your purse, some townspeople's lives and perhaps a member of your household
+- When the head of the household dies the eldest adult takes over and the Crown takes a tenth of the purse as death duty
 - Hover a tile to see what it is and whether it is walkable
-- Save and load (F5 / F9) with an autosave every midnight (`user://autosave.json`). Saves are written to a temporary file first and moved into place, a damaged or cut-off file is refused without changing anything, older saves (formats 1 to 7) still load, and the camera position and zoom come back. New world (N)
+- Save and load (F5 / F9) with an autosave every midnight (`user://autosave.json`). Saves are written to a temporary file first and moved into place, a damaged or cut-off file is refused without changing anything, older saves (formats 1 to 8) still load, and the camera position and zoom come back. New world (N)
 - All content (tiles, seasons, needs, traits, buildings, the town's makeup) comes from JSON files in `data/`, and mods can add or replace it
 
 ## Run it
@@ -87,6 +94,10 @@ scripts/
     household.gd         A group of people: yours (selected, died) or the town's
     economy.gd           Currency, prices and building costs from data/economy.json
     relations.gd         Opinion labels, family starting opinions, daily drift
+    realm.gd             The Crown: land titles, lots for sale, guild, quarter-day tax, decrees, succession
+    starts.gd            The three ways of beginning (data/starts.json)
+    illness.gd           Catching and recovering from sickness (data/illness.json)
+    conflict.gd          Raids and war, worked out off-screen from the town's defense (data/conflicts.json)
     event_director.gd    Rolls and runs town events from data/events.json
     household_generator.gd  Seed -> starting family (names, looks, where they stand)
     path_finder.gd       A* over the tile map
@@ -159,9 +170,15 @@ To try it, set `"enabled": true` in `mods/example_mod/mod.json` and restart. Gra
 
 `worldgen.json` has one entry, `town`: `npc_count`, how many `buildings` of each kind (`tavern`, `shop`, `clinic`, `park`, `house`, `vacant`; a mod can add kinds), the clearing's `half_width`, `half_height_up` and `half_height_down`, the `home_lot_size` and the `vacant_lot_size`.
 
-`buildings.json` holds the templates, each a picture in characters, one per tile: `#` timber wall, `S` stone wall, `+` door, `.` floor, a space for nothing, and a letter for an object (b bed, p cooking pot, h hearth, w wash basin, c chamber pot, l lute, t table, k counter, s shelf, r barrel, n bench, W well). Draw the door in the bottom wall; the generator mirrors the template at random and turns it to face the road. `kind` says what it is (a `house` is filled with a family, one person per bed), `floor` is a floor id from `floors.json` laid inside, and `"public": true` lets anyone use what is in it.
+`buildings.json` holds the templates, each a picture in characters, one per tile: `#` timber wall, `S` stone wall, `+` door, `.` floor, a space for nothing, and a letter for an object (b bed, p cooking pot, h hearth, w wash basin, c chamber pot, l lute, t table, k counter, s shelf, r barrel, n bench, W well, m tavern table, a ale barrel, f bread shelf, B notice board, A altar, P pew, H sickbed). Draw the door in the bottom wall; the generator mirrors the template at random and turns it to face the road. `kind` says what it is (a `house` is filled with a family, one person per bed), `floor` is a floor id from `floors.json` laid inside, and `"public": true` lets anyone use what is in it.
 
 `floors.json` lists the floors the player can lay (`color`, `line`, and a `pattern` of `planks`, `flags` or `straw`).
+
+`illness.json` lists illnesses: `chance_per_day`, `season_multipliers`, `dirty_below` and `dirty_multiplier`, `recovery_per_day` (plus `rested_bonus` when well rested), `fatal_after_days` with a `death_cause`, and `need_drain_multipliers` while ill. An object that lists the illness in `cures` (with `cure_minutes`) heals whoever uses it; an event can set `illness_multiplier`. `conflicts.json` lists threats: `chance_per_day`, `cooldown_days`, `warning_days`, a `strength` range, the `announce`, `victory` and `defeat` texts with `{days}`, `{strength}` and `{defense}`, `plunder_percent`, `casualties` (a range), `household_death_chance` and the standing changes. How defense is counted is in `realm.json` under `defense`, and an object's own `defense` value is what a watch post adds. `distraint_exempt` in `realm.json` lists what the tax collector will not take.
+
+`starts.json` lists the ways of beginning: `title` (an id from `titles.json`), `class`, `coins`, `house` (a template from `buildings.json` already standing on the lot, or empty) and `camp` (the shared things set out, left out for all of them). `titles.json` has `tax_per_tile` per quarter, `price_per_tile` for buying and `entry_per_tile` for taking a lease. `classes.json` has a `rank` and a `tax_multiplier`; a job in `jobs.json` can list classes in `not_for`. `guilds.json` has the `join_fee`, `dues`, the class it `makes` its members, what it `grants` (`business_lot`) and its `business_tax_percent`. `realm.json` has `tax_every_days`, `business_tax_percent`, `death_duty_percent`, `max_business_lots`, `decree_chance` and the standing changes.
+
+A decree is an event with `"decree": true` and a `tax_multiplier`; it is never rolled with the others, only proclaimed on quarter day.
 
 `events.json` lists town events: `chance` per day (rolled from the world seed and the day number, so a seed always has the same events), `seasons` it can happen in, `cooldown_days`, `start_hour`, `duration_hours`, and effects: `need_drain_multipliers`, `price_multipliers` (by object id), `gather` (a kind of building where people gather) with `restore` (need points given while there) and a `thought` id.
 
@@ -183,7 +200,7 @@ If you export the game, add `*.json` under **Resources > Filters to export non-r
 godot --headless --path . res://tests/smoke_test.tscn
 ```
 
-This checks data loading, mods, the clock and calendar, world generation (same seed, same world), the town (lots keep apart, everything is reachable, houses are equipped, people live in families, private things stay private, a day in town, a death in town, saving it), pathfinding, pawn movement, the household, the right-click actions, needs and objects, coin and work (prices, build costs, shifts, wages, hiring, quitting), chatting and opinions, town events, building, death, thoughts and mood, and the save round trip. Run it as a scene as shown; it needs the autoloads, which `--script` mode does not provide.
+This checks data loading, mods, the clock and calendar, world generation (same seed, same world), the town (lots keep apart, everything is reachable, houses are equipped, people live in families, private things stay private, a day in town, a death in town, saving it), pathfinding, pawn movement, the household, the right-click actions, needs and objects, coin and work (prices, build costs, shifts, wages, hiring, quitting), chatting and opinions, town events, starts, land, the guild, tax and succession, the chapel and Faith, illness and cures, raids, building, death, thoughts and mood, and the save round trip. Run it as a scene as shown; it needs the autoloads, which `--script` mode does not provide.
 
 ```
 godot --headless --path . res://tests/balance_check.tscn
@@ -201,8 +218,8 @@ This is a procedural approximation of the RimWorld look. The real thing relies o
 
 ## Known limits
 
-The lot may include water or rocks you cannot build on. Pawns can walk through each other and are drawn over tree canopies. Social and Faith wait for things that can satisfy them. Townspeople's wages come from nowhere and pile up (nothing for them to buy but meals), and there is no business income or trade yet. Townspeople are not clickable, and only chat, work, live, wander and die. Nobody lives in the tavern, shop or clinic, and the shop sells only bread.
+The lot may include water or rocks you cannot build on. Pawns can walk through each other and are drawn over tree canopies. Townspeople's wages come from nowhere and pile up, and the only trade is what customers spend at the tables, barrels and shelves on your business lot (nobody staffs it, and there is no stock). Townspeople are not clickable, and only chat, work, live, wander and die. Nobody lives in the tavern, shop or clinic, and the shop sells only bread. Illness does not spread from person to person, and the Crown never evicts anyone who cannot pay (it takes what it can and the debt carries over). Children are never born, and the household cannot grow.
 
 ## Next
 
-Building is instant, with no builders, materials or roofs: a house is just walls, a door and a floor, paid for in coin. Your lot is given to you; milestone 11 replaces that with the three ways of getting land (buy, inherit, arrive with nothing), and the two empty lots are there for a business. Rooms, roofs, materials and builders come after the economy exists.
+The planned roadmap (milestones 1 to 11) is complete. What it leaves out, roughly in the order it would matter: building is instant, with no builders, materials, rooms or roofs (a house is walls, a door and a floor, paid for in coin); you can hold one business lot and nobody works it; the household cannot grow (no births, marriage or aging); townspeople cannot be clicked or controlled; and art is still drawn by code, to be swapped for sprites.

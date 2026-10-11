@@ -22,11 +22,15 @@
   { "id": "bored",      "text": "Bored",                    "mood": -4,  "group": "fun", "when": { "need": "fun", "below": 35 } },
   { "id": "amused",     "text": "Entertained",              "mood": 3,   "group": "fun", "when": { "need": "fun", "above": 85 } },
 
+  { "id": "ill",        "text": "Ill",                      "mood": -12, "when": { "ill": true } },
   { "id": "frustrated", "text": "Frustrated",               "mood": -3,  "when": { "need": "libido", "below": 15 }, "never_for": ["asexual"] },
 
   { "id": "lonely",     "text": "Lonely",                  "mood": -5,  "group": "social", "when": { "need": "social", "below": 35 } },
   { "id": "very_lonely","text": "Desperate for company",   "mood": -9,  "group": "social", "when": { "need": "social", "below": 10 } },
   { "id": "good_company","text": "Good company",           "mood": 2,   "group": "social", "when": { "need": "social", "above": 85 } },
+
+  { "id": "faithless",  "text": "Spiritually empty",       "mood": -4,  "group": "faith", "when": { "need": "faith", "below": 15 } },
+  { "id": "devout",     "text": "At peace with God",       "mood": 3,   "group": "faith", "when": { "need": "faith", "above": 85 } },
 
   { "id": "lazing",     "text": "Doing nothing at all",     "mood": 3,   "when": { "idle": true }, "only_for": ["lazy"] },
   { "id": "quiet",      "text": "Enjoying the quiet",       "mood": 3,   "when": { "alone": true }, "only_for": ["loner"] },
@@ -48,6 +52,12 @@
   { "id": "joke_flopped", "text": "A joke fell flat",       "mood": -2,  "hours": 4,  "on": "flop" },
   { "id": "at_festival",  "text": "Enjoying the festival",  "mood": 7,   "hours": 4,  "on": "event:festival" },
   { "id": "at_market",    "text": "Busy market day",        "mood": 3,   "hours": 4,  "on": "event:market_day" },
+  { "id": "prayed",       "text": "Said a prayer",          "mood": 4,   "hours": 12, "on": "used:pew" },
+  { "id": "prayed_altar", "text": "Prayed at the altar",    "mood": 5,   "hours": 12, "on": "used:altar" },
+  { "id": "at_service",   "text": "Attended the service",   "mood": 5,   "hours": 8,  "on": "event:service" },
+  { "id": "treated",      "text": "Seen to by the healer",  "mood": 4,   "hours": 24, "on": "treated" },
+  { "id": "defended",     "text": "The town held",          "mood": 6,   "hours": 72, "on": "conflict:won" },
+  { "id": "plundered",    "text": "The town was plundered", "mood": -8,  "hours": 72, "on": "conflict:lost" },
   { "id": "closeness",    "text": "Time with someone close", "mood": 10, "hours": 24, "on": "interaction:intimacy" },
   { "id": "grief",        "text": "Someone in the household died", "mood": -15, "hours": 72, "on": "death" }
 ]

@@ -1,0 +1,11 @@
+[
+  { "id": "bought", "name": "Bought land", "title": "freehold", "class": "burgher", "coins": 90,
+    "text": "You scraped together the price of a plot. The land is yours outright, with a tent camp on it.",
+    "house": "" },
+  { "id": "inherited", "name": "Inherited a house", "title": "freehold", "class": "gentry", "coins": 100,
+    "text": "A relative left you a cottage and the family name. Landed gentry pay more tax and keep clear of menial work.",
+    "house": "cottage", "camp": [] },
+  { "id": "arrived", "name": "Arrived with nothing", "title": "leasehold", "class": "peasant", "coins": 12,
+    "text": "You came to town with a few pennies. The Crown lets you camp on a plot for rent. Find work quickly.",
+    "house": "", "camp": ["cooking_pot", "hearth"] }
+]

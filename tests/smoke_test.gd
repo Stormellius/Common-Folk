@@ -28,6 +28,9 @@ func _ready() -> void:
 	_test_economy()
 	_test_social()
 	_test_events()
+	_test_realm()
+	_test_faith_and_illness()
+	_test_conflict()
 	_test_death()
 	_test_mood()
 	_test_save_and_load()
@@ -225,6 +228,18 @@ func _test_hud() -> void:
 	_check(hud._build_tabs["Floors"].visible and not hud._build_tabs["Structure"].visible, "tabs switch")
 	hud.set_build_mode(false)
 	_check(not hud._build_panel.visible and not hud._build_button.button_pressed, "turning it off hides the palette")
+	# The start screen.
+	var picked: Array[String] = []
+	hud.start_chosen.connect(func(id: String) -> void: picked.append(id))
+	_check(not hud.is_start_choice_open(), "the start screen is hidden until asked for")
+	hud.show_start_choice(DataRegistry.get_list("starts"))
+	_check(hud.is_start_choice_open() and hud._start_buttons.size() == 3, "it shows a button for each way of beginning")
+	hud._start_buttons["arrived"].pressed.emit()
+	_check(picked == ["arrived"], "picking one reports it")
+	hud.hide_start_choice()
+	_check(not hud.is_start_choice_open(), "and it can be put away")
+	hud.set_realm("Burgher, Freehold")
+	_check(hud._realm_label.visible and hud._realm_label.text == "Burgher, Freehold", "the realm lines show under the purse")
 	GameClock.reset()
 	GameClock.set_speed(1)
 	hud.queue_free()
@@ -442,7 +457,7 @@ func _test_needs() -> void:
 	print("Needs and objects")
 	var active := Needs.active_ids()
 	_check("hunger" in active and "rest" in active and "toilet" in active and "fun" in active, "needs with something to fix them are in play")
-	_check("social" in active and "faith" not in active, "social is in play because chatting fills it; faith, with nothing to fix it, stays dormant")
+	_check("social" in active and "faith" in active and not Needs.slows_when_empty("faith"), "social is in play because chatting fills it, and faith because pews and altars do (it never slows anyone)")
 	_check("libido" in active and not Needs.slows_when_empty("libido") and Needs.slows_when_empty("hunger"), "libido is in play because an interaction fills it, and never slows anyone")
 	var per_tick := Needs.drain_per_tick("hunger", [], {})
 	_check(absf(per_tick - 4.0 / 60.0) < 0.0001, "hunger drains at the rate in needs.json")
@@ -1429,6 +1444,513 @@ func _test_events() -> void:
 	GameClock.reset()
 
 
+func _land_setup(start_id: String = "arrived") -> Dictionary:
+	GameClock.set_time(0, 12)
+	var world := WorldState.new(48, 24, 5, "grass")
+	world.lot = Rect2i(2, 2, 16, 13)
+	world.lots = [
+		{ "id": "lot_1", "kind": "vacant", "name": "Empty lot", "template": "vacant", "facing": "south", "rect": Rect2i(24, 2, 12, 10), "public": false },
+		{ "id": "lot_2", "kind": "vacant", "name": "Empty lot", "template": "vacant", "facing": "south", "rect": Rect2i(24, 13, 12, 10), "public": false },
+	]
+	var begun := Starts.begin(world, start_id)
+	var household: Household = begun["household"]
+	var realm: Realm = begun["realm"]
+	return { "world": world, "household": household, "realm": realm, "sim": Simulation.new(world, household, null, realm) }
+
+
+func _objects_in(world: WorldState, rect: Rect2i) -> Dictionary:
+	var counts := {}
+	for placed in world.objects:
+		if rect.has_point(placed.tile):
+			counts[placed.def_id] = int(counts.get(placed.def_id, 0)) + 1
+	return counts
+
+
+func _test_realm() -> void:
+	print("Land, starts and the Crown")
+	# The three starts.
+	for start_id in ["bought", "inherited", "arrived"]:
+		var setup := _land_setup(start_id)
+		var def := DataRegistry.get_def("starts", start_id)
+		var world: WorldState = setup["world"]
+		var household: Household = setup["household"]
+		var realm: Realm = setup["realm"]
+		var classes_ok := true
+		for pawn in household.pawns:
+			classes_ok = classes_ok and pawn.class_id == str(def["class"])
+		_check(household.coins == int(def["coins"]) and classes_ok and world.titles[WorldState.HOME_LOT] == str(def["title"]) and realm.start_id == start_id,
+			"the %s start sets the purse, class and title from starts.json" % start_id)
+		_check(household.get_pawn(realm.head_id) != null, "and someone heads the household")
+	var inherited := _land_setup("inherited")
+	var held := _objects_in(inherited["world"], inherited["world"].lot)
+	_check(int(held.get("bed", 0)) == 3 and int(held.get("wall", 0)) > 10 and int(held.get("door", 0)) == 1 and int(held.get("cooking_pot", 0)) == 1, "an inherited start comes with a standing cottage and no camp (%s)" % str(held))
+	var inside := true
+	for pawn in inherited["household"].pawns:
+		inside = inside and inherited["world"].floor_at(pawn.tile) != ""
+	_check(inside, "and the family starts indoors")
+	var arrived := _land_setup("arrived")
+	var camp := _objects_in(arrived["world"], arrived["world"].lot)
+	_check(camp.keys().size() == 3 and int(camp.get("bed", 0)) == 3 and camp.has("cooking_pot") and camp.has("hearth"), "arriving with nothing leaves bedrolls, a pot and a fire (%s)" % str(camp))
+	_check(_objects_in(_land_setup("bought")["world"], Rect2i(2, 2, 16, 13)).has("lute"), "bought land comes with the full camp")
+
+	# Joining the guild and taking a business lot.
+	var setup := _land_setup("arrived")
+	var world: WorldState = setup["world"]
+	var household: Household = setup["household"]
+	var realm: Realm = setup["realm"]
+	var sim: Simulation = setup["sim"]
+	var pawn := household.pawns[0]
+	var lot_tile := Vector2i(30, 6)
+	_check("guild" in realm.lot_blocker(sim, "lot_1", "lease"), "a business lot is refused to someone outside the guild")
+	var menu := PawnActions.list_for(sim, pawn, lot_tile)
+	var lease_entry := {}
+	for entry in menu:
+		if str(entry["id"]) == PawnActions.LOT_PREFIX + "lease:lot_1":
+			lease_entry = entry
+	_check(not lease_entry.is_empty() and not lease_entry["enabled"] and "guild" in str(lease_entry["reason"]), "the empty lot's menu offers a lease, switched off with the reason")
+	household.coins = 1000
+	var board := world.add_object("notice_board", Vector2i(10, 20))
+	var board_menu := PawnActions.list_for(sim, pawn, board.tile)
+	var join_entry := {}
+	for entry in board_menu:
+		if str(entry["id"]).begins_with(PawnActions.GUILD_PREFIX):
+			join_entry = entry
+	_check(not join_entry.is_empty() and join_entry["enabled"] and "25d" in str(join_entry["label"]), "the notice board offers the guild (%s)" % str(join_entry.get("label", "")))
+	var joined := PawnActions.perform(sim, pawn, str(join_entry["id"]), board.tile)
+	var all_burghers := true
+	for member in household.pawns:
+		all_burghers = all_burghers and member.class_id == "burgher"
+	_check(joined["ok"] and realm.guild == "merchants" and household.coins == 975 and all_burghers, "joining costs the fee and makes the household burghers")
+	_check(realm.join_blocker(sim, "merchants") == "already a member", "and cannot be done twice")
+	_check(not world.can_build_at(lot_tile) and "outside" in sim.build_blocker("bed", lot_tile), "land you do not hold cannot be built on")
+	var lease_price := realm.lot_price(world, "lot_1", "lease")
+	var leased := PawnActions.perform(sim, pawn, PawnActions.LOT_PREFIX + "lease:lot_1", lot_tile)
+	_check(leased["ok"] and household.coins == 975 - lease_price and world.titles["lot_1"] == "leasehold", "leasing takes the entry fee (%s) and gives a leasehold" % Economy.format(lease_price))
+	var business: Dictionary = world.get_lot("lot_1")
+	_check(business["kind"] == "business" and bool(business["public"]) and world.can_build_at(lot_tile), "the lot becomes a public business you can build on")
+	_check("already hold" in realm.lot_blocker(sim, "lot_2", "buy"), "only one business lot is allowed")
+	var money := household.coins
+	var table_result := sim.build_place("meal_table", Vector2i(28, 6))
+	_check(table_result["ok"] and household.coins == money - Economy.object_cost("meal_table"), "a tavern table can be built on it")
+	_check(not sim.build_place("meal_table", Vector2i(40, 6))["ok"], "but not on the empty lot beside it")
+	var buyout_price := realm.lot_price(world, "lot_1", "buyout")
+	var bought_out := PawnActions.perform(sim, pawn, PawnActions.LOT_PREFIX + "buyout:lot_1", lot_tile)
+	_check(bought_out["ok"] and world.titles["lot_1"] == "freehold" and household.coins == money - Economy.object_cost("meal_table") - buyout_price, "a lease can be bought out for the freehold price")
+
+	# Customers pay the owner.
+	var guest := Pawn.new()
+	guest.display_name = "Guest Person"
+	guest.age = 30
+	guest.home_lot = "elsewhere"
+	guest.coins = 50
+	guest.tile = Vector2i(26, 9)
+	guest.step_to = guest.tile
+	for need_id in Needs.active_ids():
+		guest.needs[need_id] = 100.0
+	guest.needs["hunger"] = 15.0
+	sim.town.add_pawn(guest)
+	var before := household.coins
+	for minute in 150:
+		GameClock.advance_one_tick()
+		sim.step()
+	var price := Economy.price("meal_table")
+	_check(guest.coins == 50 - price and household.coins == before + price and realm.takings == price, "a hungry customer eats at your table and the price goes to your purse (%d, %d, %d)" % [guest.coins, household.coins - before, realm.takings])
+
+	# Quarter day.
+	GameClock.set_time(5, 6)
+	sim.town.remove_pawn(guest.id)
+	setup = _land_setup("bought")
+	world = setup["world"]
+	household = setup["household"]
+	realm = setup["realm"]
+	sim = setup["sim"]
+	var home_tax := roundi(world.lot_area(WorldState.HOME_LOT) * 0.05)
+	_check(realm.days_until_tax() == 15 and realm.total_due(sim) == home_tax, "a burgher on freehold owes just the land tax (%s)" % Economy.format(home_tax))
+	GameClock.set_time(14, 12)
+	_check(realm.new_day(sim).is_empty(), "no collector on an ordinary day")
+	GameClock.set_time(15, 0)
+	household.coins = 90
+	var notices := realm.new_day(sim)
+	_check(household.coins == 90 - home_tax and realm.arrears == 0 and realm.reputation == 4.0 and not notices.is_empty(), "on quarter day the tax is paid out of the purse and standing rises (%s)" % str(notices))
+	_check(realm.new_day(sim).is_empty(), "and the collector comes only once")
+	_check(realm.days_until_tax() == 15, "the next quarter day is fifteen days away")
+	sim.events.scheduled.clear()
+	var gentry_sim: Simulation = _land_setup("inherited")["sim"]
+	var gentry_tax := roundi(gentry_sim.world.lot_area(WorldState.HOME_LOT) * 0.05 * 1.25)
+	_check(gentry_sim.realm.total_due(gentry_sim) == gentry_tax, "gentry pay a larger share (%s)" % Economy.format(gentry_tax))
+	var peasant_sim: Simulation = _land_setup("arrived")["sim"]
+	var rent := roundi(peasant_sim.world.lot_area(WorldState.HOME_LOT) * 0.12 * 0.75)
+	_check(peasant_sim.realm.total_due(peasant_sim) == rent, "a leaseholder pays rent, not land tax (%s)" % Economy.format(rent))
+	realm.levy_multiplier = 1.0
+	realm.takings = 100
+	var with_trade := realm.total_due(sim)
+	realm.guild = "merchants"
+	_check(with_trade == home_tax + 20 and realm.total_due(sim) == home_tax + 8 + 4, "trade tax is a share of takings, lower for guild members who also pay dues")
+	realm.guild = ""
+	realm.takings = 0
+	realm.levy_multiplier = 0.5
+	_check(realm.total_due(sim) == roundi(world.lot_area(WorldState.HOME_LOT) * 0.05 * 0.5), "a decree can halve the land tax")
+	realm.levy_multiplier = 1.0
+
+	# Not paying: the collector takes furnishings and standing falls.
+	setup = _land_setup("bought")
+	world = setup["world"]
+	household = setup["household"]
+	realm = setup["realm"]
+	sim = setup["sim"]
+	var furnishings := _objects_in(world, world.lot)
+	_check(int(furnishings.get("lute", 0)) == 1, "the camp has a lute to be taken")
+	household.coins = 3
+	GameClock.set_time(15, 0)
+	notices = realm.new_day(sim)
+	var left := _objects_in(world, world.lot)
+	_check(int(left.get("lute", 0)) == 0 and int(left.get("bed", 0)) == 3 and realm.arrears == 0 and realm.reputation == -12.0, "when the purse is short the collector takes the dearest furnishing, and standing falls (%s)" % str(notices))
+	_check(household.coins == 3 - 3 + (Economy.object_cost("lute") - (home_tax - 3)), "and gives change")
+	setup = _land_setup("arrived")
+	world = setup["world"]
+	household = setup["household"]
+	realm = setup["realm"]
+	sim = setup["sim"]
+	for placed in world.objects.duplicate():
+		world.remove_object(placed.id)
+	household.coins = 0
+	GameClock.set_time(15, 0)
+	realm.new_day(sim)
+	_check(realm.arrears == rent and "owing" in realm.summary(sim).to_lower(), "with nothing to take the debt carries over (%s)" % Economy.format(realm.arrears))
+	GameClock.set_time(30, 0)
+	household.coins = 1000
+	realm.levy_multiplier = 1.0
+	realm.new_day(sim)
+	_check(realm.arrears == 0 and household.coins == 1000 - 2 * rent, "and is paid with the next quarter's tax")
+
+	# Decrees.
+	var proclaimed := 0
+	for quarter in range(1, 21):
+		sim.events.scheduled.clear()
+		GameClock.set_time(quarter * 15, 0)
+		realm.last_tax_day = 0
+		realm.new_day(sim)
+		if not sim.events.scheduled.is_empty():
+			proclaimed += 1
+			var decree := DataRegistry.get_def("events", str(sim.events.scheduled[0]["id"]))
+			_check(bool(decree.get("decree", false)) and is_equal_approx(realm.levy_multiplier, float(decree.get("tax_multiplier", 1.0))), "a proclaimed decree sets the coming levy")
+	_check(proclaimed > 3 and proclaimed < 20, "some quarter days bring a decree and some do not (%d of 20)" % proclaimed)
+	var normal_rolls := _collect_events(7, 60)
+	var no_decrees := true
+	for entry in normal_rolls:
+		no_decrees = no_decrees and not bool(DataRegistry.get_def("events", str(entry["id"])).get("decree", false))
+	_check(no_decrees, "decrees are never rolled as ordinary events")
+
+	# Succession.
+	setup = _land_setup("bought")
+	world = setup["world"]
+	household = setup["household"]
+	realm = setup["realm"]
+	sim = setup["sim"]
+	household.pawns[0].age = 50
+	household.pawns[1].age = 31
+	household.pawns[2].age = 20
+	realm.choose_head(household)
+	_check(realm.head_id == household.pawns[0].id, "the eldest adult heads the household")
+	household.coins = 100
+	var heard: Array[String] = []
+	sim.realm_notice.connect(func(text: String) -> void: heard.append(text))
+	var second_oldest := household.pawns[1].id
+	sim.die(household.pawns[0], "died of old age")
+	_check(realm.head_id == second_oldest and household.coins == 90, "when the head dies the next eldest takes over and the Crown takes 10%% (%s)" % str(heard))
+	_check(heard.size() == 2 and "death duty" in heard[0] and "heads the household" in heard[1], "and the player is told")
+	sim.die(household.pawns[1], "fell ill")
+	heard.clear()
+	var last_alive := household.pawns[0].id
+	_check(realm.head_id == last_alive, "and so on down the household")
+
+	# Class and work.
+	setup = _land_setup("inherited")
+	world = setup["world"]
+	world.lots.append({ "id": "lot_t", "kind": "tavern", "name": "Tavern", "template": "tavern", "facing": "south", "rect": Rect2i(24, 2, 8, 8), "public": true })
+	sim = setup["sim"]
+	var noble: Pawn = setup["household"].pawns[0]
+	_check("beneath" in sim.hire_blocker(noble, "lot_t", "tavern_hand"), "gentry will not wait tables")
+	noble.class_id = "burgher"
+	_check(sim.hire_blocker(noble, "lot_t", "tavern_hand") == "", "a burgher will")
+
+	# The town's own classes.
+	var town_world := MapGenerator.generate(7, 128, 96)
+	TownGenerator.generate(town_world)
+	var town := NpcGenerator.create(town_world)
+	var class_ok := true
+	var any_gentry := false
+	var any_burgher := false
+	for person in town.pawns:
+		class_ok = class_ok and DataRegistry.has_def("classes", person.class_id)
+		any_gentry = any_gentry or person.class_id == "gentry"
+		any_burgher = any_burgher or person.class_id == "burgher"
+		if person.work_job != "":
+			class_ok = class_ok and person.class_id not in DataRegistry.get_def("jobs", person.work_job).get("not_for", [])
+	_check(class_ok and any_burgher, "townspeople have classes, tradesmen's families are burghers and no gentry waits tables")
+
+	# Saving.
+	setup = _land_setup("arrived")
+	world = setup["world"]
+	household = setup["household"]
+	realm = setup["realm"]
+	realm.guild = "merchants"
+	realm.reputation = 17.0
+	realm.arrears = 9
+	realm.takings = 33
+	world.titles["lot_1"] = "leasehold"
+	_check(SaveGame.save(TEST_SAVE, world, household, {}, null, null, realm) == OK, "a save with a realm is written")
+	var loaded := SaveGame.load_from(TEST_SAVE)
+	_check(loaded["ok"] and loaded["realm"].to_dict() == realm.to_dict() and loaded["world"].titles == world.titles, "guild, standing, arrears, takings and land titles survive a round trip")
+	_check(loaded["household"].pawns[0].class_id == "peasant" and loaded["household"].to_dict() == household.to_dict(), "and so do the household's classes")
+	var old_world := world.to_dict()
+	old_world.erase("titles")
+	_write_file(TEST_SAVE, JSON.stringify({ "format": 7, "world": old_world, "clock": GameClock.to_dict() }))
+	var old := SaveGame.load_from(TEST_SAVE)
+	_check(old["ok"] and old["world"].titles.get(WorldState.HOME_LOT, "") == "freehold" and old["realm"].guild == "", "an older save gets a freehold home lot and a clean slate")
+	DirAccess.remove_absolute(TEST_SAVE)
+	GameClock.reset()
+
+
+func _illness_setup() -> Dictionary:
+	GameClock.set_time(0, 12)
+	var world := WorldState.new(40, 20, 3, "grass")
+	world.lot = Rect2i(2, 2, 12, 8)
+	world.lots = [{ "id": "lot_1", "kind": "clinic", "name": "Clinic", "template": "clinic", "facing": "south", "rect": Rect2i(20, 2, 10, 8), "public": true }]
+	var household := Household.new()
+	household.coins = 50
+	var person := Pawn.new()
+	person.display_name = "Patient One"
+	person.age = 30
+	person.tile = Vector2i(24, 7)
+	person.step_to = person.tile
+	for need_id in Needs.active_ids():
+		person.needs[need_id] = 100.0
+	household.add_pawn(person)
+	return { "world": world, "household": household, "pawn": person, "sim": Simulation.new(world, household) }
+
+
+func _test_faith_and_illness() -> void:
+	print("Faith and illness")
+	var town_world := MapGenerator.generate(7, 128, 96)
+	TownGenerator.generate(town_world)
+	var chapels := town_world.lots.filter(func(entry: Dictionary) -> bool: return str(entry["kind"]) == "chapel")
+	var inside := _objects_in(town_world, chapels[0]["rect"]) if chapels.size() == 1 else {}
+	_check(chapels.size() == 1 and bool(chapels[0]["public"]) and int(inside.get("altar", 0)) == 1 and int(inside.get("pew", 0)) == 8, "the town has a public chapel with an altar and eight pews (%s)" % str(inside))
+	var clinic_lot := town_world.lots.filter(func(entry: Dictionary) -> bool: return str(entry["kind"]) == "clinic")
+	_check(int(_objects_in(town_world, clinic_lot[0]["rect"]).get("sickbed", 0)) == 3, "and the clinic has three sickbeds")
+
+	# Praying.
+	var setup := _illness_setup()
+	var world: WorldState = setup["world"]
+	var sim: Simulation = setup["sim"]
+	var person: Pawn = setup["pawn"]
+	var pew := world.add_object("pew", Vector2i(23, 4))
+	person.needs["faith"] = 10.0
+	_check(sim.use_blocker(person, pew) == "" and sim.order_use(person, pew)["ok"], "someone with little faith can go and pray")
+	for minute in 80:
+		GameClock.advance_one_tick()
+		sim.step()
+	_check(person.needs["faith"] > 50.0 and person.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "prayed"), "praying restores faith and leaves a good feeling")
+	person.needs["faith"] = 10.0
+	person.think_cooldown = 0
+	for minute in 30:
+		sim.step()
+	_check(person.job_kind == "use" and person.job_object == pew.id, "a person low on faith goes to pray unprompted")
+
+	# The weekly service.
+	var services := _collect_events(7, 40).filter(func(entry: Dictionary) -> bool: return str(entry["id"]) == "service")
+	var spaced := services.size() >= 4
+	for i in range(1, services.size()):
+		spaced = spaced and int(services[i]["day"]) - int(services[i - 1]["day"]) >= 7
+	_check(spaced, "a service is held about every week (%d in 40 days)" % services.size())
+	setup = _illness_setup()
+	world = setup["world"]
+	world.lots.append({ "id": "lot_c", "kind": "chapel", "name": "Chapel", "template": "chapel", "facing": "south", "rect": Rect2i(2, 12, 8, 6), "public": true })
+	sim = setup["sim"]
+	person = setup["pawn"]
+	person.tile = Vector2i(4, 14)
+	person.step_to = person.tile
+	person.needs["faith"] = 20.0
+	sim.events.start("service")
+	for minute in 25:
+		GameClock.advance_one_tick()
+		sim.step()
+	_check(person.needs["faith"] > 40.0 and person.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "at_service"), "a person in the chapel during the service is lifted by it")
+
+	# Falling ill.
+	var fever := DataRegistry.get_def("illness", "fever")
+	var healthy := Pawn.new()
+	healthy.needs = { "hygiene": 80.0 }
+	var dirty := Pawn.new()
+	dirty.needs = { "hygiene": 5.0 }
+	var base := Illness.catch_chance(fever, healthy, "spring", 1.0)
+	_check(Illness.catch_chance(fever, healthy, "winter", 1.0) > base * 2.0 and Illness.catch_chance(fever, dirty, "spring", 1.0) > base * 1.9 and Illness.catch_chance(fever, healthy, "spring", 2.0) > base * 1.9, "fever is likelier in winter, when filthy and in a cold snap")
+	setup = _illness_setup()
+	sim = setup["sim"]
+	GameClock.set_time(46, 0)  # winter
+	var crowd: Array[Pawn] = []
+	for i in 300:
+		var villager := Pawn.new()
+		villager.age = 30
+		villager.needs = { "hygiene": 5.0, "rest": 50.0 }
+		sim.town.add_pawn(villager)
+		crowd.append(villager)
+	sim._roll_illness(crowd)
+	var sick := crowd.filter(func(p: Pawn) -> bool: return p.illness == "fever")
+	_check(sick.size() > 10 and sick.size() < 120, "some people catch it on a winter night (%d of 300)" % sick.size())
+
+	# Being ill.
+	setup = _illness_setup()
+	world = setup["world"]
+	sim = setup["sim"]
+	person = setup["pawn"]
+	var household: Household = setup["household"]
+	var heard: Array[String] = []
+	sim.health_notice.connect(func(text: String) -> void: heard.append(text))
+	person.illness = "fever"
+	person.ill_since = GameClock.tick
+	_check(Mood.evaluate(person, household, GameClock.tick)["parts"].any(func(part: Dictionary) -> bool: return part["id"] == "ill"), "being ill weighs on the mood")
+	_check("fever" in sim.describe_activity(person), "the panel says what they are ill with")
+	_check(Illness.drain_multipliers(person, {}).get("rest", 1.0) > 1.0 and Illness.drain_multipliers(person, { "warmth": 2.0 })["warmth"] == 2.0, "an illness can make needs drain faster")
+	person.work_lot = "lot_1"
+	person.work_job = "clinic_orderly"
+	world.add_object("counter", Vector2i(26, 4))
+	GameClock.set_time(0, 9)
+	for minute in 20:
+		GameClock.advance_one_tick()
+		sim.step()
+	_check(person.job_kind != "work", "an ill person stays off their shift")
+	person.work_lot = ""
+	person.work_job = ""
+
+	# Treatment: nothing cures it without coin, a sickbed does with it.
+	household.coins = 0
+	var bed := world.add_object("sickbed", Vector2i(23, 5))
+	person.think_cooldown = 0
+	for minute in 10:
+		sim.step()
+	_check(person.job_kind != "use" or person.job_object != bed.id, "without the price of a bed they cannot be treated")
+	household.coins = 50
+	person.think_cooldown = 0
+	person.needs["rest"] = 30.0
+	for minute in 12:
+		GameClock.advance_one_tick()
+		sim.step()
+	_check(person.job_kind == "use" and person.job_object == bed.id, "an ill person with coin heads for a sickbed on their own")
+	for minute in 130:
+		GameClock.advance_one_tick()
+		sim.step()
+	_check(person.illness == "" and household.coins == 40 and person.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "treated"), "treatment cures the fever for the price (%d left)" % household.coins)
+	_check(heard.size() == 1 and "well again" in heard[0], "and the player is told")
+
+	# Dying of it.
+	setup = _illness_setup()
+	sim = setup["sim"]
+	GameClock.set_time(30, 0)
+	var doomed: Array[Pawn] = []
+	for i in 40:
+		var villager := Pawn.new()
+		villager.age = 30
+		villager.needs = { "rest": 20.0 }
+		villager.illness = "fever"
+		villager.ill_since = GameClock.tick - 10 * GameClock.MINUTES_PER_DAY
+		sim.town.add_pawn(villager)
+		doomed.append(villager)
+	var buried := [0]
+	sim.town_death.connect(func(_name: String, cause: String) -> void: buried[0] += 1 if "fever" in cause else 0)
+	sim._roll_illness(doomed)
+	var still_ill := doomed.filter(func(p: Pawn) -> bool: return p.illness != "" and sim.town.get_pawn(p.id) != null)
+	_check(still_ill.is_empty() and buried[0] > 12 and buried[0] < 40, "a fever that has dragged on too long either breaks or kills (%d of 40 died)" % buried[0])
+	var carrier := Pawn.new()
+	carrier.illness = "fever"
+	carrier.ill_since = 777
+	_check(Pawn.from_dict(carrier.to_dict()).illness == "fever" and Pawn.from_dict(carrier.to_dict()).ill_since == 777, "illness survives saving")
+
+
+func _conflict_setup() -> Dictionary:
+	GameClock.set_time(12, 6)
+	var world := MapGenerator.generate(7, 128, 96)
+	TownGenerator.generate(world)
+	var begun := Starts.begin(world, "bought")
+	var sim := Simulation.new(world, begun["household"], NpcGenerator.create(world), begun["realm"])
+	return { "world": world, "household": begun["household"], "realm": begun["realm"], "sim": sim }
+
+
+func _test_conflict() -> void:
+	print("Raids and war")
+	var setup := _conflict_setup()
+	var world: WorldState = setup["world"]
+	var household: Household = setup["household"]
+	var realm: Realm = setup["realm"]
+	var sim: Simulation = setup["sim"]
+	var base := Conflict.defense(sim)
+	_check(base["parts"]["supplies"] > 0.0 and base["parts"]["readiness"] > 0.0 and base["parts"]["fund"] == 0.0 and base["parts"]["watch"] == 0.0, "the town's defense comes from its food and its able adults (%.1f)" % base["total"])
+	var board: PlacedObject = null
+	for placed in world.objects:
+		if placed.def_id == "notice_board":
+			board = placed
+	var fund_entries := PawnActions.list_for(sim, household.pawns[0], board.tile).filter(func(entry: Dictionary) -> bool: return str(entry["id"]).begins_with(PawnActions.FUND_PREFIX))
+	_check(fund_entries.size() == 2 and fund_entries[0]["enabled"] and "defense fund" in str(fund_entries[0]["label"]), "the notice board takes gifts to the defense fund")
+	household.coins = 90
+	var gave := PawnActions.perform(sim, household.pawns[0], PawnActions.FUND_PREFIX + "50", board.tile)
+	_check(gave["ok"] and household.coins == 40 and realm.fund == 50 and Conflict.defense(sim)["total"] > base["total"] + 3.5, "a gift of 50d goes into the fund and strengthens the defense")
+	_check(not PawnActions.perform(sim, household.pawns[0], PawnActions.FUND_PREFIX + "50", board.tile)["ok"], "but not more than you have")
+	household.coins = 200
+	var posts_before: float = Conflict.defense(sim)["total"]
+	var spot := world.lot.position + Vector2i(1, 1)
+	sim.build_remove(spot)
+	_check(sim.build_place("watch_post", spot)["ok"] and is_equal_approx(Conflict.defense(sim)["total"], posts_before + 3.0), "a watch post on your land adds to the defense")
+
+	# Word of a threat.
+	var warned := 0
+	var all_replaced := true
+	var due_ok := true
+	for day in range(10, 210):
+		realm.threat = {}
+		realm.last_conflict_days = {}
+		var news := Conflict.new_day(sim, day)
+		if not news.is_empty():
+			warned += 1
+			all_replaced = all_replaced and "{" not in news[0] and not realm.threat.is_empty()
+			due_ok = due_ok and int(realm.threat["due_day"]) > day
+	_check(warned > 3 and warned < 40, "threats are announced now and then (%d in 200 days)" % warned)
+	_check(all_replaced and due_ok, "each announcement names the days and strengths and sets a due day")
+	realm.threat = {}
+	_check(Conflict.new_day(sim, 5).is_empty() and realm.threat.is_empty(), "there is no trouble in the first days")
+	realm.threat = { "id": "bandits", "due_day": 20, "strength": 12 }
+	_check(Conflict.new_day(sim, 15).is_empty() and realm.threat["strength"] == 12, "while a threat is on its way no other comes, and it waits for its day")
+	_check("Bandit raid in 5 days" in realm.summary(sim) or "Bandit raid in" in realm.summary(sim), "the panel shows what is coming")
+
+	# A victory.
+	realm.threat = { "id": "bandits", "due_day": 20, "strength": 3 }
+	realm.fund = 80
+	realm.reputation = 0.0
+	var town_before := sim.town.pawns.size()
+	var coins_before := household.coins
+	var messages := Conflict.new_day(sim, 20)
+	_check(messages.size() == 1 and "driven off" in messages[0] and realm.reputation == 6.0 and realm.fund == 40 and realm.threat.is_empty(), "a well-defended town drives raiders off, standing rises and half the fund is used (%s)" % str(messages))
+	_check(household.coins == coins_before and sim.town.pawns.size() == town_before and household.pawns[0].thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "defended"), "and nobody loses anything and the town is proud")
+
+	# A defeat.
+	realm.threat = { "id": "bandits", "due_day": 21, "strength": 99 }
+	realm.fund = 0
+	coins_before = household.coins
+	var people_before := sim.household.pawns.size()
+	messages = Conflict.new_day(sim, 21)
+	_check("plundered" in messages[0] and realm.reputation == 0.0, "an undefended town is plundered and standing falls (%s)" % str(messages))
+	var killed_in_town := town_before - sim.town.pawns.size()
+	_check(killed_in_town >= 0 and killed_in_town <= 2, "up to two townspeople are killed (%d)" % killed_in_town)
+	_check(household.coins <= coins_before - coins_before * 25 / 100 or sim.household.pawns.size() < people_before, "and a quarter of the purse is lost (%d to %d)" % [coins_before, household.coins])
+
+	# Saving.
+	realm.threat = { "id": "warband", "due_day": 40, "strength": 20 }
+	realm.fund = 33
+	realm.last_conflict_days = { "bandits": 21 }
+	_check(Realm.from_dict(realm.to_dict()).to_dict() == realm.to_dict() and Realm.from_dict(realm.to_dict()).threat["strength"] == 20, "the fund, the threat and the history survive saving")
+	GameClock.reset()
+
+
 func _building_setup() -> Dictionary:
 	GameClock.set_time(0, 12)
 	var world := WorldState.new(24, 12, 1, "grass")
@@ -1455,7 +1977,7 @@ func _test_building() -> void:
 
 	# Where things may go.
 	_check(sim.build_place("bed", Vector2i(8, 8))["ok"] and world.object_at(Vector2i(8, 8)) != null, "a bed can be placed on the lot")
-	_check("lot" in sim.build_place("bed", Vector2i(18, 8))["message"], "building outside the lot is refused, and says why")
+	_check("your land" in sim.build_place("bed", Vector2i(18, 8))["message"], "building outside the lot is refused, and says why")
 	_check("in the way" in sim.build_place("wall", Vector2i(8, 8))["message"], "building on top of something is refused")
 	world.lot = Rect2i(2, 2, 22, 8)
 	_check("water" in sim.build_place("wall", Vector2i(20, 5))["message"], "building on water is refused")

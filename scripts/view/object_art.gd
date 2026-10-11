@@ -53,6 +53,14 @@ static func draw(ci: CanvasItem, def_id: String, u: float, t: float, occupied: b
 			_bench(ci, u)
 		"well":
 			_well(ci, u)
+		"pew":
+			_pew(ci, u)
+		"watch_post":
+			_watch_post(ci, u)
+		"altar":
+			_altar(ci, u)
+		"sickbed":
+			_sickbed(ci, u, occupied)
 		_:
 			_crate(ci, u)
 
@@ -260,6 +268,48 @@ static func _bench(ci: CanvasItem, u: float) -> void:
 	_rect(ci, u, -18, -6, 36, 8, Color(0.68, 0.52, 0.33), 0.0)
 	for x in [-14, 12]:
 		_rect(ci, u, x, 4, 4, 5, Color(0.33, 0.23, 0.14), 0.8)
+
+
+## A tall timber post with a lantern on a little platform.
+static func _watch_post(ci: CanvasItem, u: float) -> void:
+	_shadow(ci, u, 18.0)
+	_rect(ci, u, -16, -16, 32, 32, Color(0.40, 0.29, 0.18), 1.4)          # the platform seen from above
+	_rect(ci, u, -13, -13, 26, 26, Color(0.56, 0.42, 0.26), 0.0)
+	for plank in [-4, 4]:
+		ci.draw_line(Vector2(-13, plank) * u, Vector2(13, plank) * u, Color(0.42, 0.31, 0.19), maxf(1.0, u))
+	_rect(ci, u, -4, -4, 8, 8, Color(0.30, 0.21, 0.13), 1.0)               # the post
+	ci.draw_circle(Vector2(0, 0), 3.0 * u, Color(1.0, 0.82, 0.35))         # the lantern
+	for corner in [Vector2(-14, -14), Vector2(14, -14), Vector2(-14, 14), Vector2(14, 14)]:
+		_rect(ci, u, corner.x - 2, corner.y - 2, 4, 4, Color(0.30, 0.21, 0.13), 0.8)
+
+
+static func _pew(ci: CanvasItem, u: float) -> void:
+	_shadow(ci, u, 16.0)
+	_rect(ci, u, -20, -9, 40, 18, Color(0.42, 0.28, 0.17), 1.2)
+	_rect(ci, u, -18, -7, 36, 6, Color(0.55, 0.38, 0.23), 0.0)  # the back rail
+	_rect(ci, u, -18, 0, 36, 7, Color(0.62, 0.45, 0.28), 0.0)   # the seat
+	for x in [-17, 13]:
+		_rect(ci, u, x, -9, 4, 18, Color(0.33, 0.22, 0.13), 0.8)
+
+
+static func _altar(ci: CanvasItem, u: float) -> void:
+	_shadow(ci, u, 20.0)
+	_rect(ci, u, -19, -14, 38, 28, Color(0.58, 0.58, 0.56), 1.4)
+	_rect(ci, u, -19, -14, 38, 6, Color(0.92, 0.90, 0.84), 0.0)   # the cloth
+	_rect(ci, u, -2, -22, 4, 18, Color(0.88, 0.76, 0.35), 1.0)    # a cross, upright
+	_rect(ci, u, -7, -17, 14, 4, Color(0.88, 0.76, 0.35), 1.0)
+	for x in [-14, 10]:
+		_rect(ci, u, x, -8, 4, 8, Color(0.93, 0.89, 0.72), 0.8)  # candles
+
+
+static func _sickbed(ci: CanvasItem, u: float, occupied: bool) -> void:
+	_rect(ci, u, -18, -22, 36, 44, Color(0.45, 0.45, 0.47), 1.2)
+	_rect(ci, u, -14, -18, 28, 36, Color(0.88, 0.89, 0.86), 0.0)
+	_rect(ci, u, -9, -16, 18, 9, Color(0.97, 0.97, 0.95), 1.0)
+	if not occupied:
+		_rect(ci, u, -13, 6, 26, 11, Color(0.42, 0.55, 0.62), 1.0)
+	ci.draw_line(Vector2(-4, 12) * u, Vector2(4, 12) * u, Color(0.80, 0.30, 0.28), maxf(2.0, 2.0 * u))
+	ci.draw_line(Vector2(0, 8) * u, Vector2(0, 16) * u, Color(0.80, 0.30, 0.28), maxf(2.0, 2.0 * u))
 
 
 static func _well(ci: CanvasItem, u: float) -> void:

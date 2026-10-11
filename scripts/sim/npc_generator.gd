@@ -41,7 +41,18 @@ static func create(world: WorldState) -> Household:
 				_add(town, rng, world, home, rng.randi_range(3, 15))
 				remaining -= 1
 				progress = true
+	for pawn in town.pawns:  # the stone houses hold gentry, everyone else starts as a peasant
+		pawn.class_id = "gentry" if str(world.get_lot(pawn.home_lot).get("template", "")) == "stone_house" else "peasant"
 	_assign_jobs(world, town, rng)
+	for home in homes:  # a family with someone in trade ranks as burghers
+		var in_trade := false
+		for pawn in town.pawns:
+			if pawn.home_lot == str(home["lot"]["id"]) and pawn.work_job != "" and pawn.class_id == "peasant":
+				in_trade = true
+		if in_trade:
+			for pawn in town.pawns:
+				if pawn.home_lot == str(home["lot"]["id"]):
+					pawn.class_id = "burgher"
 	for home in homes:
 		var family_members: Array[Pawn] = []
 		for pawn in town.pawns:
@@ -61,7 +72,7 @@ static func _assign_jobs(world: WorldState, town: Household, rng: RandomNumberGe
 			var filled := 0
 			var unemployed: Array[Pawn] = []
 			for pawn in town.pawns:
-				if pawn.work_job == "" and pawn.age >= int(job.get("min_age", 16)):
+				if pawn.work_job == "" and pawn.age >= int(job.get("min_age", 16)) and pawn.class_id not in job.get("not_for", []):
 					unemployed.append(pawn)
 			while filled < int(job.get("positions", 1)) - 1 and not unemployed.is_empty():
 				var worker: Pawn = unemployed.pop_at(rng.randi() % unemployed.size())

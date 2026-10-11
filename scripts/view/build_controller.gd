@@ -115,14 +115,14 @@ func _refresh_preview() -> void:
 			_hover_reason = sim.build_blocker(id, _hover)
 			_show_ghost(kind, id, _hover_reason == "")
 		elif kind == "floor":
-			if not sim.world.in_lot(_hover):
-				_hover_reason = "outside your lot"
+			if not sim.world.can_build_at(_hover):
+				_hover_reason = "outside your land"
 			elif not sim.world.is_ground_walkable(_hover.x, _hover.y):
 				_hover_reason = "not solid ground"
 			_show_ghost(kind, id, _hover_reason == "")
 		elif kind == "remove" or kind == "move":
-			if not sim.world.in_lot(_hover):
-				_hover_reason = "outside your lot"
+			if not sim.world.can_build_at(_hover):
+				_hover_reason = "outside your land"
 	queue_redraw()
 
 
@@ -198,7 +198,7 @@ func _apply(tile: Vector2i) -> void:
 				return
 			if _carrying == 0:
 				var placed := sim.world.object_at(tile)
-				if placed == null or not sim.world.in_lot(tile) or not bool(placed.def().get("buildable", true)):
+				if placed == null or not sim.world.can_build_at(tile) or not bool(placed.def().get("buildable", true)):
 					result = { "ok": false, "message": "Nothing there to move" }
 				else:
 					_carrying = placed.id
@@ -217,17 +217,36 @@ func _draw() -> void:
 		return
 	var size := float(MapView.TILE_SIZE)
 	var world_rect := Rect2(Vector2.ZERO, Vector2(sim.world.width, sim.world.height) * size)
-	var lot := Rect2(Vector2(sim.world.lot.position) * size, Vector2(sim.world.lot.size) * size)
-	# shade everything outside the lot
-	draw_rect(Rect2(world_rect.position, Vector2(world_rect.size.x, lot.position.y)), SHADE)
-	draw_rect(Rect2(Vector2(0, lot.end.y), Vector2(world_rect.size.x, world_rect.end.y - lot.end.y)), SHADE)
-	draw_rect(Rect2(Vector2(0, lot.position.y), Vector2(lot.position.x, lot.size.y)), SHADE)
-	draw_rect(Rect2(Vector2(lot.end.x, lot.position.y), Vector2(world_rect.end.x - lot.end.x, lot.size.y)), SHADE)
-	for x in range(sim.world.lot.position.x, sim.world.lot.end.x + 1):
-		draw_line(Vector2(x * size, lot.position.y), Vector2(x * size, lot.end.y), Color(1, 1, 1, 0.10))
-	for y in range(sim.world.lot.position.y, sim.world.lot.end.y + 1):
-		draw_line(Vector2(lot.position.x, y * size), Vector2(lot.end.x, y * size), Color(1, 1, 1, 0.10))
-	draw_rect(lot, LOT_LINE, false, 3.0)
+	# shade everything outside the land you hold: the whole map, then the held lots are cut out
+	var held: Array[Rect2i] = sim.world.held_rects()
+	var strips: Array[Rect2] = [world_rect]
+	for rect in held:
+		var hole := Rect2(Vector2(rect.position) * size, Vector2(rect.size) * size)
+		var next: Array[Rect2] = []
+		for strip in strips:
+			if not strip.intersects(hole):
+				next.append(strip)
+				continue
+			if hole.position.y > strip.position.y:
+				next.append(Rect2(strip.position, Vector2(strip.size.x, hole.position.y - strip.position.y)))
+			if hole.end.y < strip.end.y:
+				next.append(Rect2(Vector2(strip.position.x, hole.end.y), Vector2(strip.size.x, strip.end.y - hole.end.y)))
+			var top := maxf(strip.position.y, hole.position.y)
+			var bottom := minf(strip.end.y, hole.end.y)
+			if hole.position.x > strip.position.x:
+				next.append(Rect2(Vector2(strip.position.x, top), Vector2(hole.position.x - strip.position.x, bottom - top)))
+			if hole.end.x < strip.end.x:
+				next.append(Rect2(Vector2(hole.end.x, top), Vector2(strip.end.x - hole.end.x, bottom - top)))
+		strips = next
+	for strip in strips:
+		draw_rect(strip, SHADE)
+	for rect in held:
+		var lot := Rect2(Vector2(rect.position) * size, Vector2(rect.size) * size)
+		for x in range(rect.position.x, rect.end.x + 1):
+			draw_line(Vector2(x * size, lot.position.y), Vector2(x * size, lot.end.y), Color(1, 1, 1, 0.10))
+		for y in range(rect.position.y, rect.end.y + 1):
+			draw_line(Vector2(lot.position.x, y * size), Vector2(lot.end.x, y * size), Color(1, 1, 1, 0.10))
+		draw_rect(lot, LOT_LINE, false, 3.0)
 
 	if not sim.world.in_bounds(_hover.x, _hover.y) or tool.is_empty():
 		return
@@ -235,7 +254,7 @@ func _draw() -> void:
 	var kind := str(tool.get("kind", ""))
 	if kind == "remove" or (kind == "move" and _carrying == 0):
 		var target := sim.world.object_at(_hover) != null or (kind == "remove" and sim.world.floor_at(_hover) != "")
-		var usable := target and sim.world.in_lot(_hover)
+		var usable := target and sim.world.can_build_at(_hover)
 		var color := Color(0.95, 0.35, 0.30) if kind == "remove" else Color(0.95, 0.85, 0.40)
 		draw_rect(cell, Color(color.r, color.g, color.b, 0.28 if usable else 0.08))
 		draw_rect(cell, Color(color.r, color.g, color.b, 0.95 if usable else 0.35), false, 2.0)

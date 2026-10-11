@@ -19,6 +19,8 @@ signal action_chosen(id: String)
 signal build_toggled(on: bool)
 ## A palette entry was picked: kind is "place", "floor", "move" or "remove", or "none" when it was put away.
 signal build_tool_chosen(kind: String, id: String)
+## A way of beginning was picked on the start screen (an id from data/starts.json).
+signal start_chosen(id: String)
 
 # Flat dark panels with thin light borders, in the spirit of RimWorld's interface.
 const PANEL_COLOR := Color(0.11, 0.11, 0.12, 0.92)
@@ -46,6 +48,9 @@ var _needs_traits: Label
 var _needs_activity: Label
 var _needs_job: Label
 var _purse_label: Label
+var _realm_label: Label
+var _start_panel: PanelContainer
+var _start_buttons: Dictionary = {}  # start id -> Button
 var _mood_bar: ProgressBar
 var _mood_fill: StyleBoxFlat
 var _mood_label: Label
@@ -76,6 +81,7 @@ func _ready() -> void:
 	_build_needs_panel()
 	_build_build_ui()
 	_build_game_over_panel()
+	_build_start_panel()
 	add_child(_action_menu)  # last, so it sits above the other panels
 	_action_menu.action_chosen.connect(func(id: String) -> void: action_chosen.emit(id))
 	GameClock.ticked.connect(func(_tick: int) -> void: refresh_clock())
@@ -91,6 +97,40 @@ func set_purse(coins: int) -> void:
 
 
 ## Names of the town events going on, shown under the clock.
+## Class, land title, next tax day, guild: the lines under the purse.
+func set_realm(text: String) -> void:
+	_realm_label.text = text
+	_realm_label.visible = text != ""
+
+
+## Shows the start screen: one button per way of beginning. `starts` is the list from data/starts.json.
+func show_start_choice(starts: Array) -> void:
+	for id in _start_buttons:
+		_start_buttons[id].queue_free()
+	_start_buttons.clear()
+	var box := _start_panel.get_meta("box") as VBoxContainer
+	for def in starts:
+		var button := Button.new()
+		button.text = "%s\n%s" % [str(def.get("name", def["id"])), str(def.get("text", ""))]
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		button.custom_minimum_size = Vector2(520, 70)
+		button.focus_mode = Control.FOCUS_NONE
+		_style_button(button)
+		button.pressed.connect(func() -> void: start_chosen.emit(str(def["id"])))
+		box.add_child(button)
+		_start_buttons[str(def["id"])] = button
+	_start_panel.visible = true
+
+
+func hide_start_choice() -> void:
+	_start_panel.visible = false
+
+
+func is_start_choice_open() -> bool:
+	return _start_panel.visible
+
+
 func set_events(names: Array[String]) -> void:
 	_events_label.text = ", ".join(names)
 	_events_label.visible = not names.is_empty()
@@ -274,6 +314,13 @@ func _build_clock_panel() -> void:
 	_purse_label.add_theme_font_size_override("font_size", 14)
 	_purse_label.add_theme_color_override("font_color", Color(0.90, 0.80, 0.45))
 	box.add_child(_purse_label)
+	_realm_label = Label.new()
+	_realm_label.add_theme_font_size_override("font_size", 12)
+	_realm_label.add_theme_color_override("font_color", TEXT_DIM)
+	_realm_label.visible = false
+	_realm_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_realm_label.custom_minimum_size = Vector2(198, 0)
+	box.add_child(_realm_label)
 
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 3)
@@ -497,6 +544,30 @@ func _build_game_over_panel() -> void:
 	_game_over_label.add_theme_color_override("font_color", TEXT_COLOR)
 	margin.add_child(_game_over_label)
 	_game_over_panel.visible = false
+
+
+func _build_start_panel() -> void:
+	_start_panel = PanelContainer.new()
+	add_child(_start_panel)
+	_start_panel.add_theme_stylebox_override("panel", _flat_box(Color(0.05, 0.04, 0.04, 0.94), PANEL_BORDER, 1, 0))
+	_start_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE)
+	_start_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_start_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	var margin := MarginContainer.new()
+	for side in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
+		margin.add_theme_constant_override(side, 24)
+	_start_panel.add_child(margin)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	margin.add_child(box)
+	var title := Label.new()
+	title.text = "How do you begin?"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_color_override("font_color", TEXT_COLOR)
+	box.add_child(title)
+	_start_panel.set_meta("box", box)
+	_start_panel.visible = false
 
 
 # --- build mode -------------------------------------------------------------------

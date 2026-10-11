@@ -29,6 +29,9 @@ var lot := Rect2i()
 ## live there (Pawn.home_lot); public ones (tavern, shop, clinic, green) by anyone. Land outside
 ## every lot is free to all.
 var lots: Array[Dictionary] = []
+## Land the player holds, by lot id, with the kind of title (an id from data/titles.json). The home
+## lot ("home") always counts as theirs; a business lot is added when they take it on.
+var titles: Dictionary = {}
 ## Floors laid on the ground (Vector2i -> floor id from data/floors.json). They sit under
 ## objects, so a bed can stand on planks.
 var floors: Dictionary = {}
@@ -159,6 +162,31 @@ func in_lot(tile: Vector2i) -> bool:
 	return lot.has_point(tile)
 
 
+## Whether the player may build on this tile: the home lot or any other lot they hold.
+func can_build_at(tile: Vector2i) -> bool:
+	if lot.has_point(tile):
+		return true
+	var here := lot_at(tile)
+	return not here.is_empty() and titles.has(str(here["id"]))
+
+
+## The rectangles of every lot the player holds (the home lot first).
+func held_rects() -> Array[Rect2i]:
+	var rects: Array[Rect2i] = []
+	if lot.size != Vector2i.ZERO:
+		rects.append(lot)
+	for entry in lots:
+		if titles.has(str(entry["id"])):
+			rects.append(entry["rect"])
+	return rects
+
+
+## Tiles in a lot.
+func lot_area(lot_id: String) -> int:
+	var rect: Rect2i = get_lot(lot_id).get("rect", Rect2i())
+	return rect.size.x * rect.size.y
+
+
 ## The lot a tile belongs to: { "id", "public", ... }, or empty if it is open land. The player's
 ## own lot is { "id": "home", "public": false }.
 func lot_at(tile: Vector2i) -> Dictionary:
@@ -233,6 +261,7 @@ func to_dict() -> Dictionary:
 		"tiles": Array(tiles),
 		"objects": objects.map(func(placed: PlacedObject) -> Dictionary: return placed.to_dict()),
 		"lot": [lot.position.x, lot.position.y, lot.size.x, lot.size.y],
+		"titles": titles.duplicate(),
 		"lots": lots.map(func(entry: Dictionary) -> Dictionary:
 			var rect: Rect2i = entry["rect"]
 			var saved: Dictionary = entry.duplicate()
@@ -263,6 +292,12 @@ static func from_dict(data: Dictionary) -> WorldState:
 		world.lot = Rect2i(int(saved_lot[0]), int(saved_lot[1]), int(saved_lot[2]), int(saved_lot[3]))
 	else:  # a save from before there were lots
 		world.lot = centered_lot(world.width, world.height)
+	var saved_titles: Variant = data.get("titles")
+	if saved_titles is Dictionary:
+		for lot_id in saved_titles:
+			world.titles[str(lot_id)] = str(saved_titles[lot_id])
+	else:  # a save from before land titles: the home lot was simply yours
+		world.titles[HOME_LOT] = "freehold"
 	for saved in data.get("lots", []):
 		if saved is Dictionary and saved.get("rect") is Array and saved["rect"].size() >= 4:
 			var rect: Array = saved["rect"]

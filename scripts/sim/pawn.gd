@@ -19,6 +19,11 @@ var adult := true
 var age := 25
 ## The lot this person lives on (WorldState lot id). Only they may use what stands on a private lot.
 var home_lot := WorldState.HOME_LOT
+## Social standing, an id from data/classes.json.
+var class_id := "peasant"
+## What this person is ill with, an id from data/illness.json ("" when well), and since which tick.
+var illness := ""
+var ill_since := 0
 ## Colors as hex strings plus a hair style number; see PawnArt.
 var look: Dictionary = {}
 
@@ -163,6 +168,9 @@ func to_dict() -> Dictionary:
 		"adult": adult,
 		"age": age,
 		"home_lot": home_lot,
+		"class": class_id,
+		"illness": illness,
+		"ill_since": ill_since,
 		"coins": coins,
 		"pay_carry": snappedf(pay_carry, 0.001),
 		"work_lot": work_lot,
@@ -201,6 +209,9 @@ static func from_dict(data: Dictionary) -> Pawn:
 	pawn.adult = bool(data.get("adult", true))
 	pawn.age = int(data.get("age", 25 if pawn.adult else 10))
 	pawn.home_lot = str(data.get("home_lot", WorldState.HOME_LOT))
+	pawn.class_id = str(data.get("class", "peasant"))
+	pawn.illness = str(data.get("illness", ""))
+	pawn.ill_since = int(data.get("ill_since", 0))
 	pawn.coins = int(data.get("coins", 0))
 	pawn.pay_carry = float(data.get("pay_carry", 0.0))
 	pawn.work_lot = str(data.get("work_lot", ""))

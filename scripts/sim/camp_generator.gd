@@ -15,15 +15,18 @@ const BED_ROW_START := Vector2i(-6, -3)
 const SEARCH_RADIUS := 8
 
 
-static func place(world: WorldState, household: Household) -> void:
+## `items` limits the shared things to those ids (null puts out all of them); `beds` puts out a bed for each person.
+static func place(world: WorldState, household: Household, items: Variant = null, beds: bool = true) -> void:
 	var center := Vector2i(world.width / 2, world.height / 2)
 	var inside := Rect2i()
 	if world.lot.size != Vector2i.ZERO:
 		center = world.lot.get_center()  # set out on the home lot, when there is one
 		inside = world.lot
-	for i in household.pawns.size():
+	for i in (household.pawns.size() if beds else 0):
 		_put(world, "bed", center, BED_ROW_START + Vector2i(2 * i, 0), inside)
 	for entry in SHARED:
+		if items is Array and str(entry[0]) not in items:
+			continue
 		_put(world, str(entry[0]), center, entry[1], inside)
 
 

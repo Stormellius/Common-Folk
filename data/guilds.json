@@ -1,0 +1,5 @@
+[
+  { "id": "merchants", "name": "Merchants' Guild", "join_fee": 25, "dues": 4, "makes": "burgher",
+    "grants": ["business_lot"], "business_tax_percent": 8,
+    "text": "Members rank as burghers, may hold a business lot and pay a lower trade tax." }
+]

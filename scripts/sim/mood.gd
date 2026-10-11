@@ -112,6 +112,8 @@ static func _holds(condition: Dictionary, pawn: Pawn, people: Array) -> bool:
 			return false
 		if condition.has("above") and not value > float(condition["above"]):
 			return false
+	if condition.has("ill") and bool(condition["ill"]) != (pawn.illness != ""):
+		return false
 	if condition.has("idle") and bool(condition["idle"]) != not pawn.is_busy():
 		return false
 	if condition.has("alone"):

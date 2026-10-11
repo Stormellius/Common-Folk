@@ -17,8 +17,9 @@ const LEGEND := {
 	"b": "bed", "p": "cooking_pot", "h": "hearth", "w": "wash_basin", "c": "chamber_pot",
 	"l": "lute", "t": "table", "k": "counter", "s": "shelf", "r": "barrel", "n": "bench", "W": "well",
 	"m": "meal_table", "a": "ale_barrel", "f": "food_shelf", "B": "notice_board",
+	"A": "altar", "P": "pew", "H": "sickbed",
 }
-const PRIORITY := ["tavern", "shop", "clinic", "park", "house", "vacant"]
+const PRIORITY := ["tavern", "shop", "clinic", "chapel", "park", "house", "vacant"]
 const YARD := 1       # tiles of open ground around a building, inside its lot
 const JITTER := 6.0   # how much chance shuffles the order of lots along the roads
 const DOOR_FACING := [Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1), Vector2i(1, 0)]  # per rotation
@@ -194,6 +195,16 @@ static func _oriented(template: Dictionary, mirror: bool, rot: int) -> Array[Str
 		rows = turned
 		width = old_height
 	return rows
+
+
+## For code outside the generator (a start that comes with a house): the template turned `rot` quarter turns.
+static func oriented(template: Dictionary, mirror: bool, rot: int) -> Array[String]:
+	return _oriented(template, mirror, rot)
+
+
+## Puts a template's walls, floor and objects down with its top-left corner at `origin`.
+static func stamp(world: WorldState, template: Dictionary, grid: Array[String], origin: Vector2i, lot: Rect2i, rot: int) -> void:
+	_build(world, template, grid, origin, lot, rot)
 
 
 static func _footprint(template: Dictionary, grid: Array[String]) -> Vector2i:

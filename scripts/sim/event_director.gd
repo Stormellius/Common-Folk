@@ -56,6 +56,15 @@ func _roll(world_seed: int, day: int, now: int) -> void:
 		return  # one new event a day is plenty
 
 
+## Proclaims an event right now (a decree), lasting as long as its definition says. It begins on the next tick.
+func start(id: String) -> void:
+	var def := DataRegistry.get_def("events", id)
+	if def.is_empty() or is_going(id):
+		return
+	var now := GameClock.tick
+	scheduled.append({ "id": id, "start": now, "until": now + int(def.get("duration_hours", 8)) * 60 })
+
+
 func _days_since(id: String, day: int) -> int:
 	var latest := -1000000
 	for entry in history:
@@ -96,6 +105,14 @@ func drain_multipliers() -> Dictionary:
 		for need_id in multipliers:
 			combined[need_id] = float(combined.get(need_id, 1.0)) * float(multipliers[need_id])
 	return combined
+
+
+## How much the events going on raise the chance of falling ill.
+func illness_multiplier() -> float:
+	var factor := 1.0
+	for def in active_defs():
+		factor *= float(def.get("illness_multiplier", 1.0))
+	return factor
 
 
 func price_multiplier(object_def_id: String) -> float:

@@ -1,0 +1,9 @@
+[
+  { "id": "fever", "name": "Fever", "caught": "has come down with a fever",
+    "chance_per_day": 0.015,
+    "season_multipliers": { "autumn": 1.5, "winter": 2.5 },
+    "dirty_below": 20, "dirty_multiplier": 2.0,
+    "recovery_per_day": 0.30, "rested_bonus": 0.20,
+    "fatal_after_days": 9, "death_cause": "died of a fever",
+    "need_drain_multipliers": { "rest": 1.5 } }
+]

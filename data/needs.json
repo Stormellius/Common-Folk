@@ -6,6 +6,6 @@
   { "id": "social",  "name": "Social",  "drain_per_hour": 2.0, "optional": false },
   { "id": "fun",     "name": "Fun",     "drain_per_hour": 2.0, "optional": false },
   { "id": "toilet",  "name": "Toilet",  "drain_per_hour": 2.0, "optional": false },
-  { "id": "faith",   "name": "Faith",   "drain_per_hour": 1.0, "optional": true },
+  { "id": "faith",   "name": "Faith",   "drain_per_hour": 1.0, "optional": false, "slows_when_empty": false },
   { "id": "libido",  "name": "Libido",  "drain_per_hour": 1.0, "optional": false, "slows_when_empty": false }
 ]

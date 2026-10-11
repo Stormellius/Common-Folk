@@ -63,10 +63,21 @@
   { "id": "clinic", "name": "Clinic", "kind": "clinic", "floor": "flagstone", "public": true,
     "grid": [
       "SSSSSSSSS",
-      "Sb.b.b.sS",
+      "SH.H.H.sS",
       "S.......S",
       "S.......S",
       "Sw.....kS",
+      "S.......S",
+      "SSSS+SSSS"
+    ] },
+  { "id": "chapel", "name": "Chapel", "kind": "chapel", "floor": "flagstone", "public": true,
+    "grid": [
+      "SSSSSSSSS",
+      "S...A...S",
+      "S.......S",
+      "S.PP.PP.S",
+      "S.......S",
+      "S.PP.PP.S",
       "S.......S",
       "SSSS+SSSS"
     ] },

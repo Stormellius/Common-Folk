@@ -1,0 +1,16 @@
+[
+  { "id": "bandits", "name": "Bandit raid", "chance_per_day": 0.05, "cooldown_days": 12, "warning_days": 2,
+    "strength": [8, 15],
+    "announce": "Word comes that bandits are gathering on the roads. They will strike in {days} days. (They look to be about {strength} strong; the town's defenses stand at {defense}.)",
+    "victory": "The raiders were driven off. The town holds its head high.",
+    "defeat": "The raiders broke through and plundered the town.",
+    "plunder_percent": 25, "casualties": [0, 2], "household_death_chance": 0.06,
+    "reputation_win": 6, "reputation_loss": -6 },
+  { "id": "warband", "name": "Warband", "chance_per_day": 0.015, "cooldown_days": 25, "warning_days": 3,
+    "strength": [16, 26],
+    "announce": "A warband from across the border marches on the town. It will arrive in {days} days. (It looks to be about {strength} strong; the town's defenses stand at {defense}.)",
+    "victory": "The warband broke on the town's defenses and fled.",
+    "defeat": "The warband sacked the town before moving on.",
+    "plunder_percent": 40, "casualties": [1, 3], "household_death_chance": 0.10,
+    "reputation_win": 12, "reputation_loss": -10 }
+]

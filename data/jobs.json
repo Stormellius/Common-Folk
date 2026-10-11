@@ -1,6 +1,6 @@
 [
-  { "id": "tavern_hand",    "name": "Tavern hand",    "workplace": "tavern", "positions": 3, "wage": 4, "from": 12, "to": 20, "station": "counter", "min_age": 16 },
+  { "id": "tavern_hand",    "name": "Tavern hand",    "workplace": "tavern", "positions": 3, "wage": 4, "from": 12, "to": 20, "station": "counter", "min_age": 16, "not_for": ["gentry"] },
   { "id": "shop_clerk",     "name": "Shop clerk",     "workplace": "shop",   "positions": 2, "wage": 5, "from": 8,  "to": 16, "station": "counter", "min_age": 16 },
   { "id": "clinic_orderly", "name": "Clinic orderly", "workplace": "clinic", "positions": 2, "wage": 4, "from": 7,  "to": 15, "station": "counter", "min_age": 16 },
-  { "id": "groundskeeper",  "name": "Groundskeeper",  "workplace": "park",   "positions": 1, "wage": 3, "from": 8,  "to": 16, "station": "well",    "min_age": 16 }
+  { "id": "groundskeeper",  "name": "Groundskeeper",  "workplace": "park",   "positions": 1, "wage": 3, "from": 8,  "to": 16, "station": "well",    "min_age": 16, "not_for": ["gentry"] }
 ]

@@ -31,13 +31,16 @@ func _ready() -> void:
 	hud.pawn_chosen.connect(_on_pawn_chosen)
 	hud.build_toggled.connect(build.set_active)
 	hud.build_tool_chosen.connect(build.set_tool)
+	hud.start_chosen.connect(_on_start_chosen)
 	build.mode_changed.connect(hud.set_build_mode)
 	build.tool_cleared.connect(hud.clear_build_selection)
 	build.message.connect(func(text: String) -> void: hud.show_message(text))
 	GameClock.ticked.connect(_on_tick)
 	GameClock.day_changed.connect(_on_day_changed)
-	_start_new_world(_pick_seed())
+	_start_new_world(_pick_seed(), _launch_option("start"))
 	_apply_launch_options()
+	if _launch_option("start") == "" and _launch_option("seed") == "" and _launch_option("load") == "":
+		_ask_how_to_begin()  # an ordinary launch: choose a start first
 	if not DataRegistry.load_errors.is_empty():
 		hud.show_message("Data problem: %s" % DataRegistry.load_errors[0], 6.0)
 
@@ -68,7 +71,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			camera.center_on_world()
 		KEY_N:
 			_start_new_world(randi())
-			hud.show_message("New world (seed %d)" % world.world_seed)
+			_ask_how_to_begin()
 		KEY_F5:
 			_save()
 		KEY_F9:
@@ -88,6 +91,7 @@ func _unhandled_input(event: InputEvent) -> void:
 ## build = start in build mode with a tool, such as place:wall, floor:planks, remove or move,
 ## load = load the newest save right away (as F9 does),
 ## dying = the selected person is minutes from starving (to see the death and the hand-over),
+## start = how to begin (bought, inherited or arrived; without it, and without seed or load, a start screen asks),
 ## shot = save a screenshot to this path a moment after starting, then quit,
 ## demohouse = build a small walled room with a door and a floor on the lot, using the real build commands.
 ## Handy for screenshots and testing.
@@ -181,20 +185,34 @@ func _build_demo_house() -> void:
 	sim.build_place("hearth", origin + Vector2i(7, 2))
 
 
-func _start_new_world(world_seed: int) -> void:
+## Pauses on a fresh world and shows the three ways of beginning.
+func _ask_how_to_begin() -> void:
+	GameClock.set_speed(0)
+	hud.show_start_choice(DataRegistry.get_list("starts"))
+
+
+func _on_start_chosen(start_id: String) -> void:
+	hud.hide_start_choice()
+	_start_new_world(world.world_seed, start_id)
+	GameClock.set_speed(1)
+	hud.show_message("New world (seed %d)" % world.world_seed)
+
+
+func _start_new_world(world_seed: int, start_id: String = "") -> void:
 	GameClock.reset()
 	var new_world := MapGenerator.generate(world_seed, MAP_WIDTH, MAP_HEIGHT)
 	TownGenerator.generate(new_world)  # roads, the player's lot and the buildings
 	if new_world.lot.size == Vector2i.ZERO:  # no town described in the data
 		new_world.lot = WorldState.centered_lot(new_world.width, new_world.height)
-	var household := HouseholdGenerator.create(new_world)
-	CampGenerator.place(new_world, household)
-	_show_world(new_world, household, NpcGenerator.create(new_world))
+	var begun := Starts.begin(new_world, start_id)  # the household, its land and its camp
+	_show_world(new_world, begun["household"], NpcGenerator.create(new_world), begun["realm"])
 
 
-func _show_world(new_world: WorldState, household: Household, town: Household = null) -> void:
+func _show_world(new_world: WorldState, household: Household, town: Household = null, realm: Realm = null) -> void:
 	world = new_world
-	sim = Simulation.new(world, household, town)
+	sim = Simulation.new(world, household, town, realm)
+	sim.realm_notice.connect(_on_realm_notice)
+	sim.health_notice.connect(_on_realm_notice)
 	sim.pawn_died.connect(_on_pawn_died)
 	sim.town_death.connect(_on_town_death)
 	sim.event_started.connect(_on_event_started)
@@ -220,6 +238,7 @@ func _process(_delta: float) -> void:
 		hud.show_pawn(chosen, sim.describe_activity(chosen) if chosen != null else "", sim.job_text(chosen) if chosen != null else "", sim.relationship_lines(chosen) if chosen != null else [])
 		hud.set_events(sim.events.names())
 		hud.set_purse(sim.household.coins)
+		hud.set_realm(sim.realm.summary(sim))
 
 
 func _on_pawn_died(person: String, cause: String, successor: String) -> void:
@@ -239,6 +258,10 @@ func _on_town_death(person: String, cause: String) -> void:
 
 func _on_event_started(_event_name: String, text: String) -> void:
 	hud.show_message(text, 5.0)
+
+
+func _on_realm_notice(text: String) -> void:
+	hud.show_message(text, 6.0)
 
 
 func _on_event_ended(event_name: String) -> void:
@@ -306,7 +329,7 @@ func _on_day_changed(_day: int) -> void:
 
 func _write_save(path: String) -> Error:
 	var view := { "camera": [camera.position.x, camera.position.y], "zoom": camera.zoom.x }
-	return SaveGame.save(path, world, sim.household, view, sim.town, sim.events)
+	return SaveGame.save(path, world, sim.household, view, sim.town, sim.events, sim.realm)
 
 
 ## F9: loads whichever of the quick save and the autosave is newer.
@@ -324,7 +347,7 @@ func _load() -> void:
 		if loaded_world.objects.is_empty():  # a save from before there were things
 			CampGenerator.place(loaded_world, household)
 		_loading = true
-		_show_world(loaded_world, household, result["town"])
+		_show_world(loaded_world, household, result["town"], result["realm"])
 		sim.events.load_dict(result["events"])
 		_loading = false
 		var view: Dictionary = result["view"]

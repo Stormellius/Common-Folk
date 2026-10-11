@@ -18,6 +18,7 @@ const MOOD_EVERY := 5             # minutes between mood checks for townspeople
 const ROAM_CHANCE := 0.012        # per minute, for an idle townsperson in the daytime
 const ROAM_FROM_MINUTE := 7 * 60
 const ROAM_UNTIL_MINUTE := 20 * 60
+const RICH_COINS := 100           # someone with this much does not mind paying for a meal out
 const ROAM_RADIUS := 14           # how far from the crossroads they wander along the roads
 
 var world: WorldState
@@ -27,6 +28,8 @@ var town: Household
 var pathfinder: PathFinder
 ## What happens to the whole town: festivals, market days, cold snaps (data/events.json).
 var events := EventDirector.new()
+## The Crown, land titles, guild and taxes (see Realm).
+var realm := Realm.new()
 ## Someone died: their name, what killed them and the name of whoever you now control ("" if
 ## nobody is left, which ends the playthrough).
 signal pawn_died(person: String, cause: String, successor: String)
@@ -35,6 +38,10 @@ signal town_death(person: String, cause: String)
 ## A town event (see EventDirector) began or ended. `text` is the announcement.
 signal event_started(event_name: String, text: String)
 signal event_ended(event_name: String)
+## Something the player should be told about the realm: the tax collector came, an heir took over.
+signal realm_notice(text: String)
+## Someone in the household fell ill, or got better.
+signal health_notice(text: String)
 ## Ids of the needs in play; see Needs.
 var active_needs: Array[String] = []
 
@@ -42,9 +49,11 @@ var active_needs: Array[String] = []
 var _rng := RandomNumberGenerator.new()  # for townspeople's wandering (not part of the world seed's output)
 
 
-func _init(p_world: WorldState, p_household: Household, p_town: Household = null) -> void:
+func _init(p_world: WorldState, p_household: Household, p_town: Household = null, p_realm: Realm = null) -> void:
 	world = p_world
 	household = p_household
+	if p_realm != null:
+		realm = p_realm
 	town = p_town if p_town != null else Household.new(NpcGenerator.FIRST_ID)
 	_rng.seed = world.world_seed + 4242
 	pathfinder = PathFinder.new(world)
@@ -66,10 +75,13 @@ func step() -> void:
 	var everyone := people()
 	if minute == 0:
 		Relations.drift(everyone)
+		for notice in realm.new_day(self):
+			realm_notice.emit(notice)
+		_roll_illness(everyone)
 	if minute % EVENT_EVERY == 0:
 		_apply_events(everyone)
 	for pawn in everyone:
-		var cause := _drain_needs(pawn, season_multipliers)
+		var cause := _drain_needs(pawn, Illness.drain_multipliers(pawn, season_multipliers))
 		if cause != "":
 			die(pawn, cause)
 			continue
@@ -291,6 +303,8 @@ func hire_blocker(pawn: Pawn, lot_id: String, job_id: String) -> String:
 		return "already works there"
 	if pawn.age < int(job.get("min_age", 16)):
 		return "must be %d or older" % int(job.get("min_age", 16))
+	if pawn.class_id in job.get("not_for", []):
+		return "beneath a %s" % Realm.class_name_of(pawn.class_id).to_lower()
 	if staff_count(lot_id, job_id) >= int(job.get("positions", 1)):
 		return "no vacancy"
 	return ""
@@ -337,6 +351,8 @@ func _on_shift(job: Dictionary, minute: int) -> bool:
 
 ## True when some need is bad enough that work can wait.
 func _needs_break(pawn: Pawn) -> bool:
+	if pawn.illness != "":
+		return true
 	for need_id in active_needs:
 		if Needs.slows_when_empty(need_id) and float(pawn.needs.get(need_id, Needs.FULL)) < WORK_BREAK_BELOW:
 			return true
@@ -426,8 +442,8 @@ func build_blocker(def_id: String, tile: Vector2i, ignoring: int = 0) -> String:
 	var def := DataRegistry.get_def("objects", def_id)
 	if def.is_empty() or not bool(def.get("buildable", true)):
 		return "that can't be built"
-	if not world.in_lot(tile):
-		return "outside your lot"
+	if not world.can_build_at(tile):
+		return "outside your land"
 	var there := world.object_at(tile)
 	if there != null and there.id != ignoring:
 		return "the %s is in the way" % there.display_name().to_lower()
@@ -470,8 +486,8 @@ func build_move(object_id: int, to_tile: Vector2i) -> Dictionary:
 
 ## Takes down whatever is on the tile: the object if there is one, otherwise the floor.
 func build_remove(tile: Vector2i) -> Dictionary:
-	if not world.in_lot(tile):
-		return { "ok": false, "message": "Outside your lot" }
+	if not world.can_build_at(tile):
+		return { "ok": false, "message": "Outside your land" }
 	var placed := world.object_at(tile)
 	if placed != null and not bool(placed.def().get("buildable", true)):
 		return { "ok": false, "message": "The %s can't be taken down" % placed.display_name().to_lower() }
@@ -491,8 +507,8 @@ func build_remove(tile: Vector2i) -> Dictionary:
 func build_floor(floor_id: String, tile: Vector2i) -> Dictionary:
 	if not DataRegistry.has_def("floors", floor_id):
 		return { "ok": false, "message": "That floor doesn't exist" }
-	if not world.in_lot(tile):
-		return { "ok": false, "message": "Can't build here: outside your lot" }
+	if not world.can_build_at(tile):
+		return { "ok": false, "message": "Can't build here: outside your land" }
 	if not world.is_ground_walkable(tile.x, tile.y):
 		return { "ok": false, "message": "Can't build here: not solid ground" }
 	var cost := Economy.floor_cost(floor_id)
@@ -558,6 +574,8 @@ func describe_activity(pawn: Pawn) -> String:
 		text = "Walking"
 	if pawn.slowed:
 		text += " (exhausted)"
+	if pawn.illness != "":
+		text = "%s (%s)" % [text, str(Illness.def(pawn.illness).get("name", "ill")).to_lower()]
 	return text
 
 
@@ -662,10 +680,30 @@ func die(pawn: Pawn, cause: String) -> void:
 	_place_grave(spot)
 	var successor := household.selected()
 	pawn_died.emit(pawn.display_name, cause, successor.display_name if successor != null else "")
+	for notice in realm.on_death(self, pawn):
+		realm_notice.emit(notice)
 
 
 func is_game_over() -> bool:
 	return household.pawns.is_empty()
+
+
+## What a customer pays for using something on the player's business lot goes into the household
+## purse, and counts toward the trade tax.
+func _credit_owner(payer: Pawn, placed: PlacedObject, price: int) -> void:
+	if price <= 0 or household.get_pawn(payer.id) != null:
+		return
+	var lot_id := str(world.lot_at(placed.tile).get("id", ""))
+	if lot_id != WorldState.HOME_LOT and world.titles.has(lot_id):
+		household.coins += price
+		realm.takings += price
+
+
+## The tax collector takes something away: whoever was using it stops.
+func seize(placed: PlacedObject) -> void:
+	_release_user(placed)
+	world.remove_object(placed.id)
+	_reroute_blocked_walks()
 
 
 func _place_grave(spot: Vector2i) -> void:
@@ -701,6 +739,7 @@ func _step_job(pawn: Pawn) -> void:
 		if price > 0 and not spend(pawn, price):
 			_end_job(pawn)  # somebody spent the money on the way
 			return
+		_credit_owner(pawn, placed, price)
 		pawn.job_stage = "using"
 		pawn.job_minutes = 0
 		pawn.pose = str(placed.def().get("pose", ""))
@@ -719,6 +758,9 @@ func _step_job(pawn: Pawn) -> void:
 		if value < Needs.FULL:
 			all_full = false
 	pawn.job_minutes += 1
+	if pawn.illness != "" and pawn.illness in object_def.get("cures", []) and pawn.job_minutes >= int(object_def.get("cure_minutes", 60)):
+		_recover(pawn)
+		Mood.add_event(pawn, "treated", GameClock.tick)
 	if all_full or pawn.job_minutes >= int(object_def.get("max_use_minutes", 60)):
 		Mood.add_event(pawn, "used:%s" % placed.def_id, GameClock.tick)
 		_end_job(pawn)
@@ -852,6 +894,8 @@ func _first_name(pawn: Pawn) -> String:
 
 ## An idle person with a low need goes to the nearest free thing that fills it.
 func _think(pawn: Pawn, minute: int) -> bool:
+	if pawn.illness != "" and _seek_treatment(pawn):
+		return true
 	var wants: Array = []
 	for need_id in active_needs:
 		var value := float(pawn.needs.get(need_id, Needs.FULL))
@@ -877,6 +921,50 @@ func _think(pawn: Pawn, minute: int) -> bool:
 				return true
 	pawn.think_cooldown = THINK_COOLDOWN_TICKS  # nothing within reach; try again later
 	return false
+
+
+## Someone ill with the means goes to the nearest free thing that cures them (a sickbed).
+func _seek_treatment(pawn: Pawn) -> bool:
+	var options: Array[PlacedObject] = []
+	for placed in world.objects:
+		if placed.user_id == 0 and pawn.illness in placed.def().get("cures", []) and _may_use(pawn, placed) \
+				and price_of(placed.def_id) <= coins_of(pawn):
+			options.append(placed)
+	options.sort_custom(func(a: PlacedObject, b: PlacedObject) -> bool:
+		return _effort(pawn, a) < _effort(pawn, b))
+	for placed in options.slice(0, OPTIONS_PER_NEED):
+		if order_use(pawn, placed)["ok"]:
+			return true
+	return false
+
+
+## Midnight: the healthy may fall ill, the ill may recover, and an illness that has gone on too
+## long kills.
+func _roll_illness(everyone: Array[Pawn]) -> void:
+	var season_id := str(GameClock.get_date().get("season_id", ""))
+	var event_factor := events.illness_multiplier()
+	for pawn in everyone:
+		if pawn.illness != "":
+			var current := Illness.def(pawn.illness)
+			var days_ill := (GameClock.tick - pawn.ill_since) / GameClock.MINUTES_PER_DAY
+			if current.is_empty() or _rng.randf() < Illness.recovery_chance(current, pawn):
+				_recover(pawn)
+			elif days_ill >= int(current.get("fatal_after_days", 9999)):
+				die(pawn, str(current.get("death_cause", "died")))
+			continue
+		for illness in DataRegistry.get_list("illness"):
+			if _rng.randf() < Illness.catch_chance(illness, pawn, season_id, event_factor):
+				pawn.illness = str(illness["id"])
+				pawn.ill_since = GameClock.tick
+				if household.get_pawn(pawn.id) != null:
+					health_notice.emit("%s %s." % [pawn.display_name, str(illness.get("caught", "is ill"))])
+				break
+
+
+func _recover(pawn: Pawn) -> void:
+	pawn.illness = ""
+	if household.get_pawn(pawn.id) != null:
+		health_notice.emit("%s is well again." % pawn.display_name)
 
 
 ## A lonely person walks up to someone nearby for a chat (any interaction marked "autonomous" in
@@ -943,7 +1031,7 @@ func _roam(pawn: Pawn, minute: int) -> void:
 ## How much trouble an object is to use: how far away, and a little more if it costs money, so
 ## that free things at home win over a paid meal when both are near.
 func _effort(pawn: Pawn, placed: PlacedObject) -> int:
-	return _distance(pawn.tile, placed.tile) + (12 if price_of(placed.def_id) > 0 else 0)
+	return _distance(pawn.tile, placed.tile) + (12 if price_of(placed.def_id) > 0 and coins_of(pawn) < RICH_COINS else 0)
 
 
 func _distance(a: Vector2i, b: Vector2i) -> int:
@@ -952,6 +1040,8 @@ func _distance(a: Vector2i, b: Vector2i) -> int:
 
 ## A loaded save may predate needs or objects, or name things that are gone: make it consistent.
 func _repair_after_load() -> void:
+	if household.get_pawn(realm.head_id) == null:
+		realm.choose_head(household)
 	var anyone_knows_anyone := false
 	for pawn in people():
 		anyone_knows_anyone = anyone_knows_anyone or not pawn.relations.is_empty()

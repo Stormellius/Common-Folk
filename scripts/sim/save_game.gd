@@ -11,15 +11,16 @@ extends RefCounted
 ## formats 1 to 3 had no lot or floors (the world gives a centered lot and no floors), and formats
 ## 1 to 4 had no town (no other lots and nobody living in them), and formats 1 to 5 had no coin or
 ## jobs (the household gets a starting purse, and nobody has work), and formats 1 to 6 had no
-## opinions or events (families start out fond of each other, and no event has happened yet).
+## opinions or events (families start out fond of each other, and no event has happened yet), and formats
+## 1 to 7 had no land titles, realm or classes (the home lot is freehold, nothing is owed, everyone is a peasant).
 
-const FORMAT_VERSION := 7
+const FORMAT_VERSION := 8
 
 
 ## Writes the save file. Returns OK or a Godot error code. `view` is anything the screen wants
 ## remembered (the camera), handed back by load_from. The file is written next to the real one
 ## and moved into place, so a crash in the middle never leaves a half-written save.
-static func save(path: String, world: WorldState, household: Household = null, view: Dictionary = {}, town: Household = null, events: EventDirector = null) -> Error:
+static func save(path: String, world: WorldState, household: Household = null, view: Dictionary = {}, town: Household = null, events: EventDirector = null, realm: Realm = null) -> Error:
 	var data := {
 		"format": FORMAT_VERSION,
 		"world": world.to_dict(),
@@ -32,6 +33,8 @@ static func save(path: String, world: WorldState, household: Household = null, v
 		data["town"] = town.to_dict()
 	if events != null:
 		data["events"] = events.to_dict()
+	if realm != null:
+		data["realm"] = realm.to_dict()
 	var temp_path := path + ".tmp"
 	var file := FileAccess.open(temp_path, FileAccess.WRITE)
 	if file == null:
@@ -79,4 +82,4 @@ static func load_from(path: String) -> Dictionary:
 	if parsed.get("town") is Dictionary:
 		town = Household.from_dict(parsed["town"], NpcGenerator.FIRST_ID)
 	var view: Variant = parsed.get("view", {})
-	return { "ok": true, "world": world, "household": household, "town": town, "events": parsed["events"] if parsed.get("events") is Dictionary else {}, "view": view if view is Dictionary else {} }
+	return { "ok": true, "world": world, "household": household, "town": town, "events": parsed["events"] if parsed.get("events") is Dictionary else {}, "realm": Realm.from_dict(parsed["realm"] if parsed.get("realm") is Dictionary else {}), "view": view if view is Dictionary else {} }
