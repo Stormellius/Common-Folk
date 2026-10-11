@@ -159,6 +159,108 @@ func order_interact(pawn: Pawn, other: Pawn, interaction_id: String) -> Dictiona
 	return { "ok": true, "message": "" }
 
 
+# --- building ----------------------------------------------------------------------
+# The player builds on the home lot only. Each command returns { "ok", "message" }; the
+# message says why not. Nothing costs anything yet: materials come with the economy.
+
+## Why `def_id` cannot go on `tile` right now, or "" if it can. `ignoring` is an object that is
+## being moved and so does not count as being in the way.
+func build_blocker(def_id: String, tile: Vector2i, ignoring: int = 0) -> String:
+	var def := DataRegistry.get_def("objects", def_id)
+	if def.is_empty() or not bool(def.get("buildable", true)):
+		return "that can't be built"
+	if not world.in_lot(tile):
+		return "outside your lot"
+	var there := world.object_at(tile)
+	if there != null and there.id != ignoring:
+		return "the %s is in the way" % there.display_name().to_lower()
+	if not world.is_ground_walkable(tile.x, tile.y):
+		var tile_id := world.get_tile_id(tile.x, tile.y)
+		return "can't build on %s" % str(DataRegistry.get_def("tiles", tile_id).get("name", tile_id)).to_lower()
+	if bool(def.get("blocks_walking", true)):
+		for pawn in household.pawns:
+			if tile == pawn.tile or tile == pawn.committed_tile():
+				return "%s is standing there" % _first_name(pawn)
+	return ""
+
+
+func build_place(def_id: String, tile: Vector2i) -> Dictionary:
+	var blocker := build_blocker(def_id, tile)
+	if blocker != "":
+		return { "ok": false, "message": "Can't build here: %s" % blocker }
+	world.add_object(def_id, tile)
+	_reroute_blocked_walks()
+	return { "ok": true, "message": "" }
+
+
+## Picks up the object at `from_tile` and sets it down on `to_tile`. Whoever was using it stops.
+func build_move(object_id: int, to_tile: Vector2i) -> Dictionary:
+	var placed := world.get_object(object_id)
+	if placed == null:
+		return { "ok": false, "message": "That is gone" }
+	var blocker := build_blocker(placed.def_id, to_tile, placed.id)
+	if blocker != "":
+		return { "ok": false, "message": "Can't move it here: %s" % blocker }
+	_release_user(placed)
+	world.move_object(object_id, to_tile)
+	_reroute_blocked_walks()
+	return { "ok": true, "message": "" }
+
+
+## Takes down whatever is on the tile: the object if there is one, otherwise the floor.
+func build_remove(tile: Vector2i) -> Dictionary:
+	if not world.in_lot(tile):
+		return { "ok": false, "message": "Outside your lot" }
+	var placed := world.object_at(tile)
+	if placed != null:
+		_release_user(placed)
+		world.remove_object(placed.id)
+		_reroute_blocked_walks()
+		return { "ok": true, "message": "" }
+	if world.set_floor(tile, ""):
+		return { "ok": true, "message": "" }
+	return { "ok": false, "message": "" }  # nothing there; not worth a message
+
+
+func build_floor(floor_id: String, tile: Vector2i) -> Dictionary:
+	if not DataRegistry.has_def("floors", floor_id):
+		return { "ok": false, "message": "That floor doesn't exist" }
+	if not world.in_lot(tile):
+		return { "ok": false, "message": "Can't build here: outside your lot" }
+	if not world.is_ground_walkable(tile.x, tile.y):
+		return { "ok": false, "message": "Can't build here: not solid ground" }
+	return { "ok": world.set_floor(tile, floor_id), "message": "" }
+
+
+## Whoever is using or heading for an object stops before it goes away or moves.
+func _release_user(placed: PlacedObject) -> void:
+	var user := household.get_pawn(placed.user_id) if placed.user_id != 0 else null
+	if user != null:
+		if user.job_stage == "walking":
+			user.path.clear()  # they were on their way there; no point finishing the walk
+		_end_job(user)
+	placed.user_id = 0
+
+
+## After a wall goes up, anyone whose planned route now runs into it finds another way
+## to the same goal (or gives up if there is none).
+func _reroute_blocked_walks() -> void:
+	for pawn in household.pawns:
+		var blocked := false
+		for cell in pawn.path:
+			blocked = blocked or not world.is_walkable(cell.x, cell.y)
+		if not blocked:
+			continue
+		var goal := pawn.goal_tile()
+		var route := pathfinder.find_path(pawn.committed_tile(), goal)
+		if route.is_empty():
+			pawn.path.clear()
+			if pawn.job_kind != "":
+				_end_job(pawn)
+		else:
+			pawn.path = route
+
+
 ## A short description of what a person is doing, for the interface.
 func describe_activity(pawn: Pawn) -> String:
 	var text := "Idle"

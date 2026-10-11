@@ -12,7 +12,9 @@ var _menu_pawn_id := -1     # who the open right-click menu is for
 var _menu_tile := Vector2i.ZERO  # and which tile it was opened on
 
 @onready var map_view: MapView = $MapView
+@onready var floor_layer: FloorLayer = $FloorLayer
 @onready var object_layer: ObjectLayer = $ObjectLayer
+@onready var build: BuildController = $BuildController
 @onready var pawn_layer: PawnLayer = $PawnLayer
 @onready var tile_cursor: TileCursor = $TileCursor
 @onready var camera: CameraController = $Camera
@@ -25,6 +27,11 @@ func _ready() -> void:
 	pawn_layer.context_menu_requested.connect(_on_context_menu_requested)
 	hud.action_chosen.connect(_on_action_chosen)
 	hud.pawn_chosen.connect(_on_pawn_chosen)
+	hud.build_toggled.connect(build.set_active)
+	hud.build_tool_chosen.connect(build.set_tool)
+	build.mode_changed.connect(hud.set_build_mode)
+	build.tool_cleared.connect(hud.clear_build_selection)
+	build.message.connect(func(text: String) -> void: hud.show_message(text))
 	GameClock.ticked.connect(_on_tick)
 	_start_new_world(_pick_seed())
 	_apply_launch_options()
@@ -44,6 +51,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			GameClock.set_speed(2)
 		KEY_3, KEY_KP_3:
 			GameClock.set_speed(3)
+		KEY_B:
+			build.toggle()
 		KEY_G:
 			tile_cursor.toggle_grid()
 		KEY_TAB:
@@ -72,7 +81,9 @@ func _unhandled_input(event: InputEvent) -> void:
 ## zoom = camera zoom, look = tile to center the camera on (x,y), speed = 0 (paused) to 3,
 ## walk = tile (x,y) to send the selected person to at the start,
 ## menu = tile (x,y) to open the right-click menu on at the start,
-## needs = need values for the selected person, such as rest:10,hunger:30.
+## needs = need values for the selected person, such as rest:10,hunger:30,
+## build = start in build mode with a tool, such as place:wall, floor:planks, remove or move,
+## demohouse = build a small walled room with a door and a floor on the lot, using the real build commands.
 ## Handy for screenshots and testing.
 func _launch_option(name: String) -> String:
 	var prefix := "--%s=" % name
@@ -113,6 +124,12 @@ func _apply_launch_options() -> void:
 		for person in sim.household.pawns:
 			person.needs["libido"] = 10.0
 		sim.order_interact(sim.household.pawns[0], sim.household.pawns[1], "intimacy")
+	if _launch_option("demohouse") != "" and sim != null:
+		_build_demo_house()
+	if _launch_option("build") != "" and sim != null:
+		build.set_active(true)
+		var spec := _launch_option("build").split(":")
+		build.set_tool(spec[0], spec[1] if spec.size() > 1 else "")
 	if _launch_option("menu") != "" and sim != null:
 		var spot := _launch_option("menu").split(",")
 		if spot.size() == 2:
@@ -122,9 +139,28 @@ func _apply_launch_options() -> void:
 		camera.zoom = Vector2(zoom_level, zoom_level)
 
 
+func _build_demo_house() -> void:
+	var origin := world.lot.position + Vector2i(21, 2)
+	for dy in 7:
+		for dx in 9:
+			sim.build_floor("planks" if dx < 5 else "flagstone", origin + Vector2i(dx, dy))
+	for dx in 9:
+		for dy in [0, 6]:
+			sim.build_place("wall" if dx < 5 else "stone_wall", origin + Vector2i(dx, dy))
+	for dy in range(1, 6):
+		for dx in [0, 8]:
+			sim.build_place("wall" if dx == 0 else "stone_wall", origin + Vector2i(dx, dy))
+	sim.build_remove(origin + Vector2i(4, 6))
+	sim.build_place("door", origin + Vector2i(4, 6))
+	sim.build_place("wall", origin + Vector2i(5, 3))
+	sim.build_place("bed", origin + Vector2i(2, 2))
+	sim.build_place("hearth", origin + Vector2i(7, 2))
+
+
 func _start_new_world(world_seed: int) -> void:
 	GameClock.reset()
 	var new_world := MapGenerator.generate(world_seed, MAP_WIDTH, MAP_HEIGHT)
+	new_world.lot = WorldState.centered_lot(new_world.width, new_world.height)
 	var household := HouseholdGenerator.create(new_world)
 	CampGenerator.place(new_world, household)
 	_show_world(new_world, household)
@@ -135,8 +171,10 @@ func _show_world(new_world: WorldState, household: Household) -> void:
 	sim = Simulation.new(world, household)
 	map_view.set_world(world)
 	tile_cursor.set_world(world)
+	floor_layer.bind(world)
 	object_layer.bind(sim)
 	pawn_layer.bind(sim)
+	build.bind(sim)
 	hud.close_action_menu()
 	hud.set_household(household)
 	camera.set_world_size(Vector2(world.width, world.height) * MapView.TILE_SIZE)

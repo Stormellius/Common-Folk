@@ -9,12 +9,21 @@ extends RefCounted
 var world_seed: int = 0
 var width: int = 0
 var height: int = 0
+## Something on a tile was built, moved or removed (an object or a floor). The views redraw
+## and the path finder updates that one cell; see Simulation.
+signal tile_changed(tile: Vector2i)
+
 ## Tile ids used by this world. Index 0 is the default tile every cell starts as.
 var palette: PackedStringArray = PackedStringArray()
 ## One palette index per cell, row by row.
 var tiles: PackedInt32Array = PackedInt32Array()
 ## Things standing on the map (beds, pots...). Each takes one tile.
 var objects: Array[PlacedObject] = []
+## The player's home lot: the only place they may build. An empty rect means no lot.
+var lot := Rect2i()
+## Floors laid on the ground (Vector2i -> floor id from data/floors.json). They sit under
+## objects, so a bed can stand on planks.
+var floors: Dictionary = {}
 
 var _next_object_id := 1
 var _object_at_tile := {}  # Vector2i -> PlacedObject
@@ -95,7 +104,78 @@ func add_object(def_id: String, tile: Vector2i) -> PlacedObject:
 	placed.tile = tile
 	objects.append(placed)
 	_object_at_tile[tile] = placed
+	tile_changed.emit(tile)
 	return placed
+
+
+## Takes an object off the map. Returns false if there is no such object. Whoever was using
+## it must be told (Simulation does that).
+func remove_object(id: int) -> bool:
+	var placed := get_object(id)
+	if placed == null:
+		return false
+	objects.erase(placed)
+	_object_at_tile.erase(placed.tile)
+	tile_changed.emit(placed.tile)
+	return true
+
+
+## Picks an object up and sets it down on another tile (same id). False if the new tile
+## cannot take it.
+func move_object(id: int, to_tile: Vector2i) -> bool:
+	var placed := get_object(id)
+	if placed == null or not can_place_object(to_tile):
+		return false
+	var from_tile := placed.tile
+	_object_at_tile.erase(from_tile)
+	placed.tile = to_tile
+	_object_at_tile[to_tile] = placed
+	tile_changed.emit(from_tile)
+	tile_changed.emit(to_tile)
+	return true
+
+
+## Which of the four neighbors hold an object of the same `connects` group, as a bitmask:
+## 1 north, 2 east, 4 south, 8 west. Walls and doors use it to join up.
+func connection_mask(tile: Vector2i, group: String) -> int:
+	var mask := 0
+	var steps := [Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)]
+	for i in steps.size():
+		var neighbor: PlacedObject = _object_at_tile.get(tile + steps[i])
+		if neighbor != null and str(neighbor.def().get("connects", "")) == group:
+			mask |= 1 << i
+	return mask
+
+
+func in_lot(tile: Vector2i) -> bool:
+	return lot.has_point(tile)
+
+
+# --- floors ----------------------------------------------------------------------
+
+func floor_at(tile: Vector2i) -> String:
+	return str(floors.get(tile, ""))
+
+
+## Lays (or with "" clears) a floor. Only on ground people can stand on.
+func set_floor(tile: Vector2i, floor_id: String) -> bool:
+	if floor_id == "":
+		if not floors.has(tile):
+			return false
+		floors.erase(tile)
+		tile_changed.emit(tile)
+		return true
+	if not DataRegistry.has_def("floors", floor_id) or not is_ground_walkable(tile.x, tile.y) or floors.get(tile, "") == floor_id:
+		return false
+	floors[tile] = floor_id
+	tile_changed.emit(tile)
+	return true
+
+
+## A lot of the given size centered on the map, kept inside it.
+static func centered_lot(map_width: int, map_height: int, lot_width: int = 30, lot_height: int = 20) -> Rect2i:
+	var size := Vector2i(mini(lot_width, map_width), mini(lot_height, map_height))
+	return Rect2i(Vector2i((map_width - size.x) / 2, (map_height - size.y) / 2), size)
 
 
 ## How slow a tile is to walk across (1.0 is normal). Blocked and unknown tiles give 0.
@@ -124,6 +204,8 @@ func to_dict() -> Dictionary:
 		"palette": Array(palette),
 		"tiles": Array(tiles),
 		"objects": objects.map(func(placed: PlacedObject) -> Dictionary: return placed.to_dict()),
+		"lot": [lot.position.x, lot.position.y, lot.size.x, lot.size.y],
+		"floors": floors.keys().map(func(cell: Vector2i) -> Array: return [cell.x, cell.y, floors[cell]]),
 	}
 
 
@@ -143,4 +225,12 @@ static func from_dict(data: Dictionary) -> WorldState:
 				world.objects.append(placed)
 				world._object_at_tile[placed.tile] = placed
 				world._next_object_id = maxi(world._next_object_id, placed.id + 1)
+	var saved_lot: Variant = data.get("lot")
+	if saved_lot is Array and saved_lot.size() >= 4:
+		world.lot = Rect2i(int(saved_lot[0]), int(saved_lot[1]), int(saved_lot[2]), int(saved_lot[3]))
+	else:  # a save from before there were lots
+		world.lot = centered_lot(world.width, world.height)
+	for saved in data.get("floors", []):
+		if saved is Array and saved.size() >= 3 and DataRegistry.has_def("floors", str(saved[2])):
+			world.floors[Vector2i(int(saved[0]), int(saved[1]))] = str(saved[2])
 	return world

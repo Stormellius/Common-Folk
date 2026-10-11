@@ -7,9 +7,10 @@ extends RefCounted
 ## systems are added (needs, relationships) each one adds its own section.
 ##
 ## Older saves still load: format 1 had no household (the caller makes one), and formats 1 and 2
-## had no objects or needs (the caller places a camp, and the simulation fills in the needs).
+## had no objects or needs (the caller places a camp, and the simulation fills in the needs), and
+## formats 1 to 3 had no lot or floors (the world gives a centered lot and no floors).
 
-const FORMAT_VERSION := 3
+const FORMAT_VERSION := 4
 
 
 ## Writes the save file. Returns OK or a Godot error code.

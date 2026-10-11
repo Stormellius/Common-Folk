@@ -1,6 +1,6 @@
 # Common Folk
 
-**Common Folk** is a medieval life sim sandbox with RimWorld-style looks: you live one person's life at a time in a randomly generated town that keeps running without you. The full plan is in the design document; this project is at **milestone 3 (Needs)**.
+**Common Folk** is a medieval life sim sandbox with RimWorld-style looks: you live one person's life at a time in a randomly generated town that keeps running without you. The full plan is in the design document; this project is at **milestone 4 (Building)**.
 
 ## What works now
 
@@ -13,6 +13,7 @@
 - Pathfinding around water and rock with A* (forest is slower to cross, diagonals never cut corners), walking at one step per clock tick so pause and speed control apply
 - Needs: hunger, rest, warmth, hygiene, toilet and fun fall over time (faster or slower with traits, and warmth faster in winter). A starter camp near the crossroads has a bed for everyone plus a cooking pot, hearth, wash basin, chamber pot and lute. When nobody is giving orders, a person with a low need walks to the nearest free thing that fixes it and uses it until the need is full; people head to bed earlier after dark. Your orders always win, and an empty need slows a person down
 - A panel on the left shows the selected person's needs and what they are doing; right-click an object for its action (Sleep, Eat a meal, Wash...)
+- Build mode (B): on your home lot, place furniture, timber and stone walls (drag to run a wall; they join up at corners), doors and three kinds of floor; move things; take them down. Routes update as you build, anyone heading for something you move or remove stops, and a walk that gets cut off finds another way. A shaded edge and a gold outline show where the lot ends
 - Hover a tile to see what it is and whether it is walkable
 - Save and load (F5 / F9), new world (N)
 - All content (tiles, seasons, needs, traits) comes from JSON files in `data/`, and mods can add or replace it
@@ -29,7 +30,7 @@ Options go after `--` on the command line, which is handy for testing and screen
 godot --path . -- --seed=1234 --day=50 --hour=12 --zoom=0.5 --look=70,30 --speed=0
 ```
 
-`seed` is the world, `day` and `hour` set the date (day 0 is the first day, 15 days per season), `zoom` the camera zoom, `look` the tile to center on, and `speed` 0 to 3, `walk` a tile (such as `--walk=70,50`) to send the selected person to, and `menu` a tile to open the right-click menu on, and `needs` values for the selected person (such as `--needs=rest:10,hunger:30`).
+`seed` is the world, `day` and `hour` set the date (day 0 is the first day, 15 days per season), `zoom` the camera zoom, `look` the tile to center on, and `speed` 0 to 3, `walk` a tile (such as `--walk=70,50`) to send the selected person to, and `menu` a tile to open the right-click menu on, `needs` values for the selected person (such as `--needs=rest:10,hunger:30`), `build` to start in build mode with a tool (`--build=place:wall`, `floor:planks`, `remove`, `move`), `demohouse=1` to build a small room with the real build commands, and `together=1` to start the two-person interaction.
 
 ## Controls
 
@@ -38,7 +39,8 @@ godot --path . -- --seed=1234 --day=50 --hour=12 --zoom=0.5 --look=70,30 --speed
 | WASD / arrow keys | Move the camera (hold Shift for faster) |
 | Left-click a person | Select that person |
 | Right-click | Menu of actions for the selected person at that spot (Walk here, Stop, object actions, and interactions when you click another person). Left-click a person to switch to them |
-| Escape | Close the menu |
+| B | Build mode: pick a tool in the palette, left-click or drag to build, right-click or Esc to put it away |
+| Escape | Close the menu; in build mode, put the tool away, then leave build mode |
 | Tab / Shift+Tab | Next / previous person (camera jumps to them) |
 | C | Center the camera on the selected person |
 | Mouse wheel | Zoom |
@@ -70,19 +72,23 @@ scripts/
     pawn.gd              One person: position, walking path, one step per tick
     pawn_actions.gd      What a person can do at a spot (the right-click menu's entries)
     needs.gd             Which needs are in play, drain rates, when to look for a fix
-    placed_object.gd     One bed, pot... standing on the map
+    placed_object.gd     One bed, pot, wall... standing on the map
     camp_generator.gd    Sets out the starting camp
     household.gd         The people you control and who is selected
     household_generator.gd  Seed -> starting family (names, looks, where they stand)
     path_finder.gd       A* over the tile map
-    simulation.gd        Ticks the world; the commands views may give (order_move, order_stop)
+    simulation.gd        Ticks the world; the commands views may give (order_move, order_use, build_place...)
     save_game.gd         Writes and reads the save file
   view/                Drawing and input for the map
     map_view.gd          Feeds the world and season look to the terrain shader
     day_night.gd         Tints the map by time of day
     tile_cursor.gd       Hover highlight and grid
     pawn_art.gd          Draws a person with code (swap for sprites later)
-    object_art.gd        Draws beds, pots, the hearth... with code
+    object_art.gd        Draws beds, pots, walls, doors... with code
+    floor_art.gd         Draws planks, flagstone and straw
+    floor_layer.gd       The floors, between the ground and the objects
+    build_controller.gd  Build mode: lot shading, preview and mouse tools
+    build_ghost.gd       The green/red preview under the mouse
     object_view.gd       One object on screen
     object_layer.gd      All objects, drawn under the people
     pawn_view.gd         One pawn on screen, gliding between tiles
@@ -90,6 +96,7 @@ scripts/
     camera_controller.gd Pan and zoom
   ui/hud.gd            Flat dark panels: clock and speed buttons, household bar, tile info, help, messages
   ui/pawn_portrait.gd  Small person picture for the household bar
+  ui/build_icon.gd     Palette pictures for the build mode buttons
   ui/action_menu.gd    The right-click pop-up list
   main.gd              Wires it together and handles shortcuts
 tests/                 Headless checks
@@ -129,7 +136,9 @@ To try it, set `"enabled": true` in `mods/example_mod/mod.json` and restart. Gra
   "satisfies": { "rest": 14.0 }, "max_use_minutes": 600 }
 ```
 
-`satisfies` is points restored per hour of use; a person stops when every need it fills is full or after `max_use_minutes`. `use_position` is `on` (stand on the tile) or `beside`. `action` is the right-click menu entry and `doing` the activity shown in the panel. A need is only in play while some object satisfies it, so adding an object with `"satisfies": { "faith": 20 }` switches Faith on (it also needs `optional` to be false). Objects with no drawing in `object_art.gd` appear as a crate.
+`category` (default `furniture`) picks the build palette tab, `buildable: false` keeps something out of it, `connects` makes walls and doors join their neighbors, and `drag: true` lets the tool run a row. `satisfies` is points restored per hour of use; a person stops when every need it fills is full or after `max_use_minutes`. `use_position` is `on` (stand on the tile) or `beside`. `action` is the right-click menu entry and `doing` the activity shown in the panel. A need is only in play while some object satisfies it, so adding an object with `"satisfies": { "faith": 20 }` switches Faith on (it also needs `optional` to be false). Objects with no drawing in `object_art.gd` appear as a crate.
+
+`floors.json` lists the floors the player can lay (`color`, `line`, and a `pattern` of `planks`, `flags` or `straw`).
 
 `interactions.json` describes things two people do together. Libido is filled this way: right-click another adult and pick the entry.
 
@@ -159,8 +168,8 @@ This is a procedural approximation of the RimWorld look. The real thing relies o
 
 ## Known limits
 
-Pawns can walk through each other and are drawn over tree canopies. Needs have no mood or death consequences yet beyond slowing people down. Social, Faith and Libido wait for things that can satisfy them.
+The lot may include water or rocks you cannot build on. Pawns can walk through each other and are drawn over tree canopies. Needs have no mood or death consequences yet beyond slowing people down. Social, Faith and Libido wait for things that can satisfy them.
 
-## Next: milestone 4, building
+## Next
 
-Let the player place, move and remove things and walls on their lot, with the routes and the camp updating as they go.
+Building has no costs or roofs yet: everything is free and instant, and a house is just walls, a door and a floor. The lot is a fixed 30 by 20 rectangle in the middle of the map, which a later milestone replaces with the three ways of getting land (buy, inherit, arrive with nothing). Rooms, roofs, materials and builders come after the economy exists.

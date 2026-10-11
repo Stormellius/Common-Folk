@@ -26,7 +26,7 @@ static func list_for(sim: Simulation, pawn: Pawn, tile: Vector2i) -> Array[Dicti
 	if not sim.world.in_bounds(tile.x, tile.y):
 		return actions
 	var placed := sim.world.object_at(tile)
-	if placed != null:
+	if placed != null and placed.def().has("action"):  # walls and doors offer nothing to use
 		var blocker := sim.use_blocker(pawn, placed)
 		actions.append(_entry(USE_PREFIX + str(placed.id), str(placed.def().get("action", "Use")), blocker == "", blocker))
 	actions.append(_walk_entry(sim, pawn, tile))

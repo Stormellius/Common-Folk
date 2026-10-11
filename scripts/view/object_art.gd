@@ -15,8 +15,16 @@ static func is_animated(def_id: String) -> bool:
 	return def_id in ANIMATED
 
 
-static func draw(ci: CanvasItem, def_id: String, u: float, t: float, occupied: bool = false) -> void:
+## `connections` is a bitmask of neighbors that a wall or door should join up with
+## (1 north, 2 east, 4 south, 8 west; see WorldState.connection_mask).
+static func draw(ci: CanvasItem, def_id: String, u: float, t: float, occupied: bool = false, connections: int = 0) -> void:
 	match def_id:
+		"wall":
+			_wall(ci, u, connections, Color(0.47, 0.34, 0.22), Color(0.33, 0.23, 0.14))
+		"stone_wall":
+			_wall(ci, u, connections, Color(0.56, 0.57, 0.58), Color(0.39, 0.40, 0.41))
+		"door":
+			_door(ci, u, connections)
 		"bed":
 			_bed(ci, u, occupied)
 		"cooking_pot":
@@ -113,6 +121,74 @@ static func _lute(ci: CanvasItem, u: float) -> void:
 	_rect(ci, u, 13, -14, 5, 5, Color(0.28, 0.19, 0.11), 0.8)
 	_ellipse(ci, u, Vector2(-4, 3), Vector2(9.0, 10.0), Color(0.72, 0.46, 0.25), 1.2)
 	ci.draw_circle(Vector2(-3, 2) * u, 2.8 * u, Color(0.18, 0.11, 0.07))
+
+
+## A wall seen from above: a post with a beam running to each connected neighbor, so a row of
+## them reads as one wall and corners and crossings join up.
+static func _wall_pieces(connections: int) -> Array[Rect2]:
+	var half := 16.0
+	var pieces: Array[Rect2] = [Rect2(-half, -half, half * 2.0, half * 2.0)]
+	if connections & 1:
+		pieces.append(Rect2(-half, -24.0, half * 2.0, 24.0 - half))
+	if connections & 2:
+		pieces.append(Rect2(half, -half, 24.0 - half, half * 2.0))
+	if connections & 4:
+		pieces.append(Rect2(-half, half, half * 2.0, 24.0 - half))
+	if connections & 8:
+		pieces.append(Rect2(-24.0, -half, 24.0 - half, half * 2.0))
+	return pieces
+
+
+## Outlines first, grown only sideways at the ends that meet a neighbor, so there is no seam.
+static func _wall_outline(ci: CanvasItem, u: float, pieces: Array[Rect2], connections: int) -> void:
+	for piece in pieces:
+		var grown := piece.grow(1.5)
+		if connections & 1 and piece.position.y <= -24.0:
+			grown = Rect2(grown.position.x, -24.0, grown.size.x, grown.end.y + 24.0)
+		if connections & 2 and piece.end.x >= 24.0:
+			grown = Rect2(grown.position.x, grown.position.y, 24.0 - grown.position.x, grown.size.y)
+		if connections & 4 and piece.end.y >= 24.0:
+			grown = Rect2(grown.position.x, grown.position.y, grown.size.x, 24.0 - grown.position.y)
+		if connections & 8 and piece.position.x <= -24.0:
+			grown = Rect2(-24.0, grown.position.y, grown.end.x + 24.0, grown.size.y)
+		ci.draw_rect(Rect2(grown.position * u, grown.size * u), OUTLINE)
+
+
+static func _wall(ci: CanvasItem, u: float, connections: int, fill: Color, line: Color) -> void:
+	var pieces := _wall_pieces(connections)
+	_wall_outline(ci, u, pieces, connections)
+	for piece in pieces:
+		ci.draw_rect(Rect2(piece.position * u, piece.size * u), fill)
+	# a lighter cap on the post and a dark line along each beam
+	ci.draw_rect(Rect2(Vector2(-10, -10) * u, Vector2(20, 20) * u), fill.lightened(0.14))
+	ci.draw_rect(Rect2(Vector2(-10, -10) * u, Vector2(20, 20) * u), line, false, maxf(1.0, u))
+	for piece in pieces.slice(1):
+		var middle: Vector2 = piece.get_center()
+		if piece.size.x > piece.size.y:
+			ci.draw_line(Vector2(piece.position.x, middle.y) * u, Vector2(piece.end.x, middle.y) * u, line, maxf(1.0, u))
+		else:
+			ci.draw_line(Vector2(middle.x, piece.position.y) * u, Vector2(middle.x, piece.end.y) * u, line, maxf(1.0, u))
+
+
+## A door is a gap in the wall with a plank slab; people walk straight through it.
+static func _door(ci: CanvasItem, u: float, connections: int) -> void:
+	var timber := Color(0.47, 0.34, 0.22)
+	var line := Color(0.33, 0.23, 0.14)
+	var vertical := (connections & 5) != 0 and (connections & 10) == 0
+	var along_wall := connections & ~(5 if not vertical else 10)
+	var pieces := _wall_pieces(along_wall)
+	_wall_outline(ci, u, pieces, along_wall)
+	for piece in pieces:
+		ci.draw_rect(Rect2(piece.position * u, piece.size * u), timber)
+	var slab := Rect2(-6, -19, 12, 38) if vertical else Rect2(-19, -6, 38, 12)
+	ci.draw_rect(Rect2(slab.grow(1.5).position * u, slab.grow(1.5).size * u), OUTLINE)
+	ci.draw_rect(Rect2(slab.position * u, slab.size * u), Color(0.64, 0.47, 0.29))
+	if vertical:
+		ci.draw_line(Vector2(0, -19) * u, Vector2(0, 19) * u, line, maxf(1.0, u))
+		ci.draw_circle(Vector2(2.5, 11) * u, 1.6 * u, Color(0.16, 0.12, 0.08))
+	else:
+		ci.draw_line(Vector2(-19, 0) * u, Vector2(19, 0) * u, line, maxf(1.0, u))
+		ci.draw_circle(Vector2(11, 2.5) * u, 1.6 * u, Color(0.16, 0.12, 0.08))
 
 
 static func _crate(ci: CanvasItem, u: float) -> void:

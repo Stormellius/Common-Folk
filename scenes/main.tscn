@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/view/map_view.gd" id="2_map"]
@@ -8,6 +8,8 @@
 [ext_resource type="Script" path="res://scripts/view/day_night.gd" id="6_daynight"]
 [ext_resource type="Script" path="res://scripts/view/pawn_layer.gd" id="7_pawns"]
 [ext_resource type="Script" path="res://scripts/view/object_layer.gd" id="8_objects"]
+[ext_resource type="Script" path="res://scripts/view/floor_layer.gd" id="9_floors"]
+[ext_resource type="Script" path="res://scripts/view/build_controller.gd" id="10_build"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
@@ -18,11 +20,17 @@ script = ExtResource("6_daynight")
 [node name="MapView" type="Node2D" parent="."]
 script = ExtResource("2_map")
 
+[node name="FloorLayer" type="Node2D" parent="."]
+script = ExtResource("9_floors")
+
 [node name="ObjectLayer" type="Node2D" parent="."]
 script = ExtResource("8_objects")
 
 [node name="PawnLayer" type="Node2D" parent="."]
 script = ExtResource("7_pawns")
+
+[node name="BuildController" type="Node2D" parent="."]
+script = ExtResource("10_build")
 
 [node name="TileCursor" type="Node2D" parent="."]
 script = ExtResource("3_cursor")

@@ -7,10 +7,19 @@ extends RefCounted
 ## Call rebuild() whenever walkability changes (for example when something is built).
 
 var _grid := AStarGrid2D.new()
+var _world_ref: WeakRef  # weak, so that the world's signal and this finder do not keep each other alive
 
 
 func _init(world: WorldState) -> void:
+	_world_ref = weakref(world)
 	rebuild(world)
+	world.tile_changed.connect(_on_tile_changed)  # keeps itself up to date as things are built
+
+
+func _on_tile_changed(cell: Vector2i) -> void:
+	var world := _world_ref.get_ref() as WorldState
+	if world != null:
+		update_cell(world, cell)
 
 
 func rebuild(world: WorldState) -> void:
@@ -28,6 +37,17 @@ func rebuild(world: WorldState) -> void:
 				_grid.set_point_weight_scale(cell, maxf(world.get_move_cost(x, y), 1.0))
 			else:
 				_grid.set_point_solid(cell, true)
+
+
+## Updates one cell after something was built or removed there (much cheaper than rebuild()).
+func update_cell(world: WorldState, cell: Vector2i) -> void:
+	if not _grid.is_in_boundsv(cell):
+		return
+	if world.is_walkable(cell.x, cell.y):
+		_grid.set_point_solid(cell, false)
+		_grid.set_point_weight_scale(cell, maxf(world.get_move_cost(cell.x, cell.y), 1.0))
+	else:
+		_grid.set_point_solid(cell, true)
 
 
 ## Tiles to walk to get from `from` to `to`, not including `from`. Empty if either end

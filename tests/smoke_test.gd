@@ -23,6 +23,7 @@ func _ready() -> void:
 	_test_household()
 	_test_actions()
 	_test_needs()
+	_test_building()
 	_test_save_and_load()
 	print("")
 	if _failures == 0:
@@ -194,6 +195,30 @@ func _test_hud() -> void:
 		if hud._chips[id].button_pressed:
 			chip_count += 1
 	_check(hud._chips[first].button_pressed and chip_count == 1, "switching person highlights only that person")
+	# The build palette.
+	var chosen_tools: Array[String] = []
+	hud.build_tool_chosen.connect(func(kind: String, id: String) -> void: chosen_tools.append("%s:%s" % [kind, id]))
+	var toggles: Array[bool] = []
+	hud.build_toggled.connect(func(on: bool) -> void: toggles.append(on))
+	_check(not hud._build_panel.visible, "the build palette starts hidden")
+	hud.set_build_mode(true)
+	_check(hud._build_panel.visible and hud._build_button.button_pressed and toggles.is_empty(), "turning build mode on shows the palette without a feedback loop")
+	_check(hud._build_tabs.has("Furniture") and hud._build_tabs.has("Structure") and hud._build_tabs.has("Floors") and hud._build_tabs.has("Tools"), "the palette has tabs for furniture, structure, floors and tools")
+	var wall_button: Button = null
+	for button in hud._build_items:
+		if button.tooltip_text == "Timber wall":
+			wall_button = button
+	wall_button.button_pressed = true
+	_check(chosen_tools == ["place:wall"], "picking a palette entry reports the tool")
+	wall_button.button_pressed = false
+	_check(chosen_tools.back() == "none:", "clicking it again puts the tool away")
+	wall_button.set_pressed_no_signal(true)
+	hud.clear_build_selection()
+	_check(not wall_button.button_pressed and chosen_tools.size() == 2, "clearing the selection from outside sends nothing")
+	hud._show_build_tab("Floors")
+	_check(hud._build_tabs["Floors"].visible and not hud._build_tabs["Structure"].visible, "tabs switch")
+	hud.set_build_mode(false)
+	_check(not hud._build_panel.visible and not hud._build_button.button_pressed, "turning it off hides the palette")
 	GameClock.reset()
 	GameClock.set_speed(1)
 	hud.queue_free()
@@ -624,6 +649,182 @@ func _test_needs() -> void:
 	_check(again.to_dict()["objects"] == big_world.to_dict()["objects"], "the same seed gives the same camp")
 	GameClock.reset()
 	GameClock.set_speed(1)
+
+
+func _building_setup() -> Dictionary:
+	GameClock.set_time(0, 12)
+	var world := WorldState.new(24, 12, 1, "grass")
+	world.set_tile(20, 5, "water")
+	world.lot = Rect2i(2, 2, 12, 8)
+	var household := Household.new()
+	var person := Pawn.new()
+	person.display_name = "Builder One"
+	person.tile = Vector2i(3, 5)
+	person.step_to = person.tile
+	for need_id in Needs.active_ids():
+		person.needs[need_id] = 100.0
+	household.add_pawn(person)
+	return { "world": world, "household": household, "pawn": person, "sim": Simulation.new(world, household) }
+
+
+func _test_building() -> void:
+	print("Building")
+	var setup := _building_setup()
+	var world: WorldState = setup["world"]
+	var sim: Simulation = setup["sim"]
+	var pawn: Pawn = setup["pawn"]
+
+	# Where things may go.
+	_check(sim.build_place("bed", Vector2i(8, 8))["ok"] and world.object_at(Vector2i(8, 8)) != null, "a bed can be placed on the lot")
+	_check("lot" in sim.build_place("bed", Vector2i(18, 8))["message"], "building outside the lot is refused, and says why")
+	_check("in the way" in sim.build_place("wall", Vector2i(8, 8))["message"], "building on top of something is refused")
+	world.lot = Rect2i(2, 2, 22, 8)
+	_check("water" in sim.build_place("wall", Vector2i(20, 5))["message"], "building on water is refused")
+	world.lot = Rect2i(2, 2, 12, 8)
+	_check("standing" in sim.build_place("wall", pawn.tile)["message"], "a wall cannot go up on top of a person")
+	_check(sim.build_place("bed", pawn.tile)["ok"], "but a bed can go where someone stands")
+	_check(not sim.build_place("flying_castle", Vector2i(9, 3))["ok"], "unknown things cannot be built")
+
+	# Walls change the routes.
+	var open_route := sim.pathfinder.find_path(Vector2i(3, 6), Vector2i(10, 6))
+	for y in range(2, 10):
+		sim.build_place("wall", Vector2i(6, y))
+	_check(not world.is_walkable(6, 5), "a wall blocks its tile")
+	var detour := sim.pathfinder.find_path(Vector2i(3, 6), Vector2i(10, 6))
+	_check(not detour.is_empty() and detour.size() > open_route.size(), "the route now goes around the wall (%d tiles instead of %d)" % [detour.size(), open_route.size()])
+	_check(sim.build_place("door", Vector2i(6, 6))["message"].contains("in the way"), "a door cannot replace a wall without taking it down first")
+	sim.build_remove(Vector2i(6, 6))
+	sim.build_place("door", Vector2i(6, 6))
+	var through := sim.pathfinder.find_path(Vector2i(3, 6), Vector2i(10, 6))
+	_check(world.is_walkable(6, 6) and through.size() == open_route.size(), "a door lets people through again")
+	_check(world.connection_mask(Vector2i(6, 5), "wall") == (1 | 4) and world.connection_mask(Vector2i(6, 2), "wall") == 4, "walls and doors join up with their neighbors")
+	_check(world.connection_mask(Vector2i(8, 8), "wall") == 0, "a bed joins up with nothing")
+	_check(PawnActions.list_for(sim, pawn, Vector2i(6, 4)).size() == 1, "a wall offers nothing to use, only walking (which is off)")
+
+	# Someone walking when a wall goes up finds another way.
+	setup = _building_setup()
+	world = setup["world"]
+	sim = setup["sim"]
+	pawn = setup["pawn"]
+	sim.order_move(pawn, Vector2i(10, 5))
+	for i in 3:
+		sim.step()
+	for y in range(3, 8):
+		sim.build_place("wall", Vector2i(6, y))
+	_check(pawn.has_orders(), "someone whose route is cut still has somewhere to go")
+	for i in 400:
+		sim.step()
+		if not pawn.has_orders():
+			break
+	_check(pawn.tile == Vector2i(10, 5), "and gets there the long way round")
+
+	# Taking things down and moving them.
+	setup = _building_setup()
+	world = setup["world"]
+	sim = setup["sim"]
+	pawn = setup["pawn"]
+	pawn.needs["rest"] = 10.0
+	var bed := world.add_object("bed", Vector2i(8, 8))
+	sim.step()
+	_check(pawn.job_kind == "use" and bed.user_id == pawn.id, "a tired person heads for the new bed")
+	var moved := sim.build_move(bed.id, Vector2i(9, 3))
+	_check(moved["ok"] and bed.tile == Vector2i(9, 3) and world.object_at(Vector2i(8, 8)) == null and world.get_object(bed.id) == bed, "a bed can be picked up and put down elsewhere (same bed)")
+	_check(pawn.job_kind == "" and bed.user_id == 0, "moving it sends away whoever was heading for it")
+	_check(not sim.build_move(bed.id, Vector2i(30, 3))["ok"], "it cannot be moved off the lot")
+	sim.step()
+	_check(pawn.job_kind == "use" and pawn.job_object == bed.id, "the person finds the bed again in its new place")
+	sim.build_remove(Vector2i(9, 3))
+	_check(world.get_object(bed.id) == null and pawn.job_kind == "" and not pawn.is_busy(), "taking the bed down stops whoever was using it")
+	var removal := sim.build_remove(Vector2i(9, 3))
+	_check(not removal["ok"] and removal["message"] == "", "removing nothing is quietly refused")
+
+	# Floors.
+	_check(sim.build_floor("planks", Vector2i(4, 4))["ok"] and world.floor_at(Vector2i(4, 4)) == "planks", "a floor can be laid")
+	sim.build_floor("flagstone", Vector2i(4, 4))
+	_check(world.floor_at(Vector2i(4, 4)) == "flagstone", "a different floor replaces it")
+	_check(sim.build_place("bed", Vector2i(4, 4))["ok"], "furniture stands on a floor")
+	_check(sim.build_remove(Vector2i(4, 4))["ok"] and world.floor_at(Vector2i(4, 4)) == "flagstone", "removing takes the furniture first, and leaves the floor")
+	_check(sim.build_remove(Vector2i(4, 4))["ok"] and world.floor_at(Vector2i(4, 4)) == "", "then the floor")
+	_check(not sim.build_floor("planks", Vector2i(18, 4))["ok"], "floors stay on the lot too")
+	world.lot = Rect2i(2, 2, 22, 8)
+	_check(not sim.build_floor("planks", Vector2i(20, 5))["ok"], "and off the water")
+	world.lot = Rect2i(2, 2, 12, 8)
+
+	# What was built survives saving; an old save gets a centered lot.
+	sim.build_floor("planks", Vector2i(5, 5))
+	sim.build_place("stone_wall", Vector2i(7, 7))
+	var copy := WorldState.from_dict(JSON.parse_string(JSON.stringify(world.to_dict())))
+	_check(copy.lot == world.lot and copy.floor_at(Vector2i(5, 5)) == "planks" and copy.object_at(Vector2i(7, 7)) != null, "the lot, floors and walls survive a round trip")
+	var old_data := world.to_dict()
+	old_data.erase("lot")
+	old_data.erase("floors")
+	var old_copy := WorldState.from_dict(old_data)
+	_check(old_copy.lot.size != Vector2i.ZERO and old_copy.lot.has_point(Vector2i(old_copy.width / 2, old_copy.height / 2)) and old_copy.floors.is_empty(), "a save from before lots gets a lot around the middle")
+
+	# The mouse: place, drag a wall, remove, move, and put the tool away.
+	setup = _building_setup()
+	world = setup["world"]
+	sim = setup["sim"]
+	var controller := BuildController.new()
+	add_child(controller)
+	controller.bind(sim)
+	controller.set_active(true)
+	var warnings: Array[String] = []
+	controller.message.connect(func(text: String) -> void: warnings.append(text))
+	var click := func(tile: Vector2i, pressed: bool, button: int = MOUSE_BUTTON_LEFT) -> void:
+		var event := InputEventMouseButton.new()
+		event.button_index = button
+		event.pressed = pressed
+		event.position = (Vector2(tile) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE
+		controller._unhandled_input(event)
+	var drag := func(tile: Vector2i) -> void:
+		var event := InputEventMouseMotion.new()
+		event.position = (Vector2(tile) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE
+		controller._unhandled_input(event)
+	controller.set_tool("place", "wall")
+	click.call(Vector2i(5, 8), true)
+	drag.call(Vector2i(9, 8))
+	click.call(Vector2i(9, 8), false)
+	var run_length := 0
+	for x in range(5, 10):
+		run_length += 1 if world.object_at(Vector2i(x, 8)) != null else 0
+	_check(run_length == 5, "dragging with the wall tool lays a whole row")
+	controller.set_tool("place", "bed")
+	click.call(Vector2i(4, 4), true)
+	drag.call(Vector2i(6, 4))
+	click.call(Vector2i(6, 4), false)
+	_check(world.object_at(Vector2i(4, 4)) != null and world.object_at(Vector2i(5, 4)) == null, "furniture goes down one per click, even when dragging")
+	click.call(Vector2i(4, 4), true)
+	click.call(Vector2i(4, 4), false)
+	click.call(Vector2i(4, 4), true)
+	click.call(Vector2i(4, 4), false)
+	_check(warnings.size() == 2 and "in the way" in warnings[0], "a refused click says why")
+	controller.set_tool("move")
+	click.call(Vector2i(4, 4), true)
+	click.call(Vector2i(4, 4), false)
+	click.call(Vector2i(10, 3), true)
+	click.call(Vector2i(10, 3), false)
+	_check(world.object_at(Vector2i(4, 4)) == null and world.object_at(Vector2i(10, 3)) != null, "the move tool picks a thing up and sets it down")
+	controller.set_tool("remove")
+	click.call(Vector2i(10, 3), true)
+	drag.call(Vector2i(10, 9))
+	click.call(Vector2i(10, 9), false)
+	_check(world.object_at(Vector2i(10, 3)) == null, "the remove tool takes things down")
+	controller.set_tool("floor", "planks")
+	click.call(Vector2i(3, 3), true)
+	drag.call(Vector2i(5, 3))
+	click.call(Vector2i(5, 3), false)
+	_check(world.floor_at(Vector2i(3, 3)) == "planks" and world.floor_at(Vector2i(5, 3)) == "planks", "the floor tool covers an area")
+	var cleared := [false]
+	controller.tool_cleared.connect(func() -> void: cleared[0] = true)
+	click.call(Vector2i(3, 3), true, MOUSE_BUTTON_RIGHT)
+	_check(controller.tool.is_empty() and cleared[0], "right-click puts the tool away")
+	var escape := InputEventKey.new()
+	escape.keycode = KEY_ESCAPE
+	escape.pressed = true
+	controller._unhandled_input(escape)
+	_check(not controller.active, "Esc with no tool leaves build mode")
+	controller.queue_free()
 
 
 func _test_save_and_load() -> void:

@@ -8,12 +8,17 @@ extends CanvasLayer
 ## live in main.gd.
 
 const SPEED_LABELS: Array[String] = ["II", "1x", "2x", "3x"]
-const HELP_TEXT := "Click: pick person   Right-click: actions   Tab: next person   C: center   WASD: camera   Wheel: zoom   Space: pause   1-3: speed   G: grid   F5/F9: save/load   N: new world"
+const HELP_TEXT := "Click: pick person   Right-click: actions   B: build   Tab: next person   C: center   WASD: camera   Wheel: zoom   Space: pause   1-3: speed   G: grid   F5/F9: save/load   N: new world"
+const BUILD_HELP := "Left-click: build (drag for walls and floors)   Right-click or Esc: put the tool away   Esc again or B: leave build mode"
 
 ## The player picked a household member in the bar at the bottom.
 signal pawn_chosen(id: int)
 ## An entry of the right-click menu was picked (its id comes from PawnActions).
 signal action_chosen(id: String)
+## The Build button was pressed (or toggled from the keyboard via set_build_mode).
+signal build_toggled(on: bool)
+## A palette entry was picked: kind is "place", "floor", "move" or "remove", or "none" when it was put away.
+signal build_tool_chosen(kind: String, id: String)
 
 # Flat dark panels with thin light borders, in the spirit of RimWorld's interface.
 const PANEL_COLOR := Color(0.11, 0.11, 0.12, 0.92)
@@ -44,6 +49,12 @@ var _household_row: HBoxContainer
 var _action_menu := ActionMenu.new()
 var _chips: Dictionary = {}  # pawn id -> Button
 var _toast_serial := 0
+var _build_button: Button
+var _build_panel: PanelContainer
+var _build_tabs: Dictionary = {}    # tab name -> HBoxContainer of item buttons
+var _build_tab_buttons: Dictionary = {}  # tab name -> Button
+var _build_items: Array[Button] = []
+var _help_label: Label
 
 
 func _ready() -> void:
@@ -52,6 +63,7 @@ func _ready() -> void:
 	_build_corner_labels()
 	_build_household_bar()
 	_build_needs_panel()
+	_build_build_ui()
 	add_child(_action_menu)  # last, so it sits above the other panels
 	_action_menu.action_chosen.connect(func(id: String) -> void: action_chosen.emit(id))
 	GameClock.ticked.connect(func(_tick: int) -> void: refresh_clock())
@@ -201,6 +213,7 @@ func _build_clock_panel() -> void:
 
 func _build_corner_labels() -> void:
 	var help_panel := _make_panel_label(HELP_TEXT, TEXT_DIM, 13)
+	_help_label = help_panel.get_child(0).get_child(0) as Label
 	add_child(help_panel)
 	help_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT, Control.PRESET_MODE_MINSIZE, 10)
 
@@ -331,6 +344,134 @@ func _build_household_bar() -> void:
 	_household_row = HBoxContainer.new()
 	_household_row.add_theme_constant_override("separation", 4)
 	margin.add_child(_household_row)
+
+
+# --- build mode -------------------------------------------------------------------
+
+## Shows or hides the build palette, and keeps the Build button in step (no signal).
+func set_build_mode(on: bool) -> void:
+	_build_button.set_pressed_no_signal(on)
+	_build_panel.visible = on
+	_help_label.text = BUILD_HELP if on else HELP_TEXT
+	if not on:
+		clear_build_selection()
+
+
+## Un-presses every palette entry without sending a signal.
+func clear_build_selection() -> void:
+	for button in _build_items:
+		button.set_pressed_no_signal(false)
+
+
+func _build_build_ui() -> void:
+	_build_button = Button.new()
+	_build_button.text = "Build  (B)"
+	_build_button.toggle_mode = true
+	_build_button.focus_mode = Control.FOCUS_NONE
+	_build_button.custom_minimum_size = Vector2(110, 32)
+	_style_button(_build_button)
+	add_child(_build_button)
+	_build_button.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 10)
+	_build_button.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_build_button.toggled.connect(func(on: bool) -> void: build_toggled.emit(on))
+
+	_build_panel = PanelContainer.new()
+	add_child(_build_panel)
+	_build_panel.add_theme_stylebox_override("panel", _flat_box(PANEL_COLOR, PANEL_BORDER, 1, 0))
+	_build_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM, Control.PRESET_MODE_MINSIZE, 10)
+	_build_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_build_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_build_panel.offset_top -= 84.0   # sits above the household bar
+	_build_panel.offset_bottom -= 84.0
+	var margin := MarginContainer.new()
+	for side in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
+		margin.add_theme_constant_override(side, 6)
+	_build_panel.add_child(margin)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 4)
+	margin.add_child(box)
+	var tab_row := HBoxContainer.new()
+	tab_row.add_theme_constant_override("separation", 3)
+	box.add_child(tab_row)
+	var items_holder := VBoxContainer.new()
+	box.add_child(items_holder)
+
+	# One tab per object category (furniture, structure...), one for floors, one for tools.
+	var tabs: Dictionary = {}  # tab name -> array of { kind, id, name }
+	for object_def in DataRegistry.get_list("objects"):
+		if not bool(object_def.get("buildable", true)):
+			continue
+		var category := str(object_def.get("category", "furniture")).capitalize()
+		if not tabs.has(category):
+			tabs[category] = []
+		tabs[category].append({ "kind": "place", "id": str(object_def["id"]), "name": str(object_def.get("name", object_def["id"])) })
+	if DataRegistry.count("floors") > 0:
+		tabs["Floors"] = []
+		for floor_def in DataRegistry.get_list("floors"):
+			tabs["Floors"].append({ "kind": "floor", "id": str(floor_def["id"]), "name": str(floor_def.get("name", floor_def["id"])) })
+	tabs["Tools"] = [
+		{ "kind": "move", "id": "", "name": "Move" },
+		{ "kind": "remove", "id": "", "name": "Remove" },
+	]
+	var group := ButtonGroup.new()
+	group.allow_unpress = true
+	var tab_group := ButtonGroup.new()
+	for tab_name in tabs:
+		var tab_button := Button.new()
+		tab_button.text = tab_name
+		tab_button.toggle_mode = true
+		tab_button.button_group = tab_group
+		tab_button.focus_mode = Control.FOCUS_NONE
+		tab_button.custom_minimum_size = Vector2(84, 26)
+		_style_button(tab_button)
+		tab_row.add_child(tab_button)
+		_build_tab_buttons[tab_name] = tab_button
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 4)
+		row.visible = false
+		items_holder.add_child(row)
+		_build_tabs[tab_name] = row
+		for entry in tabs[tab_name]:
+			var item := Button.new()
+			item.toggle_mode = true
+			item.button_group = group
+			item.focus_mode = Control.FOCUS_NONE
+			item.custom_minimum_size = Vector2(88, 68)
+			item.tooltip_text = str(entry["name"])
+			_style_button(item)
+			var icon := BuildIcon.new()
+			icon.kind = str(entry["kind"])
+			icon.id = str(entry["id"])
+			icon.position = Vector2(22, 2)
+			item.add_child(icon)
+			var label := Label.new()
+			label.text = str(entry["name"])
+			label.position = Vector2(0, 48)
+			label.size = Vector2(88, 18)
+			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			label.add_theme_font_size_override("font_size", 12)
+			label.add_theme_color_override("font_color", TEXT_COLOR)
+			item.add_child(label)
+			var kind := str(entry["kind"])
+			var id := str(entry["id"])
+			item.toggled.connect(func(on: bool) -> void: build_tool_chosen.emit(kind if on else "none", id if on else ""))
+			row.add_child(item)
+			_build_items.append(item)
+		tab_button.toggled.connect(func(on: bool) -> void:
+			if on:
+				_show_build_tab(tab_name))
+	if not tabs.is_empty():
+		_build_tab_buttons[tabs.keys()[0]].set_pressed_no_signal(true)
+		_show_build_tab(tabs.keys()[0])
+	_build_panel.visible = false
+
+
+func _show_build_tab(tab_name: String) -> void:
+	for name in _build_tabs:
+		_build_tabs[name].visible = (name == tab_name)
+	for name in _build_tab_buttons:
+		_build_tab_buttons[name].set_pressed_no_signal(name == tab_name)
 
 
 func _make_label(text: String) -> Label:
