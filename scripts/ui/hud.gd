@@ -50,6 +50,8 @@ var _mood_bar: ProgressBar
 var _mood_fill: StyleBoxFlat
 var _mood_label: Label
 var _thoughts_text: RichTextLabel
+var _relations_text: RichTextLabel
+var _events_label: Label
 var _need_rows: Dictionary = {}  # need id -> { "bar": ProgressBar, "fill": StyleBoxFlat }
 var _household_row: HBoxContainer
 var _action_menu := ActionMenu.new()
@@ -86,6 +88,12 @@ func _ready() -> void:
 ## The household's purse, shown under the clock.
 func set_purse(coins: int) -> void:
 	_purse_label.text = "Purse: %s" % Economy.format(coins)
+
+
+## Names of the town events going on, shown under the clock.
+func set_events(names: Array[String]) -> void:
+	_events_label.text = ", ".join(names)
+	_events_label.visible = not names.is_empty()
 
 
 func refresh_clock() -> void:
@@ -162,7 +170,7 @@ func show_game_over(text: String) -> void:
 
 
 ## Shows the selected person's name, what they are doing and their need bars (hidden if null).
-func show_pawn(pawn: Pawn, activity: String, job: String = "") -> void:
+func show_pawn(pawn: Pawn, activity: String, job: String = "", relations: Array[Dictionary] = []) -> void:
 	_needs_panel.visible = pawn != null
 	if pawn == null:
 		return
@@ -182,6 +190,11 @@ func show_pawn(pawn: Pawn, activity: String, job: String = "") -> void:
 		var color := "#9cc27a" if value > 0.0 else "#d97a6c"
 		lines.append("[color=%s]%s%d[/color]  %s" % [color, "+" if value > 0.0 else "-", roundi(absf(value)), str(part["text"])])
 	_thoughts_text.text = "\n".join(lines) if not lines.is_empty() else "[color=#9e9c94]Nothing on their mind[/color]"
+	var known: Array[String] = []
+	for line in relations:
+		var opinion := float(line["opinion"])
+		known.append("[color=%s]%s[/color]  %s" % ["#9cc27a" if opinion > 0.0 else "#d97a6c", str(line["label"]), str(line["name"])])
+	_relations_text.text = "\n".join(known) if not known.is_empty() else "[color=#9e9c94]Knows nobody well yet[/color]"
 	for need_id in _need_rows:
 		var value := float(pawn.needs.get(need_id, Needs.FULL))
 		var row: Dictionary = _need_rows[need_id]
@@ -252,6 +265,11 @@ func _build_clock_panel() -> void:
 	_date_label.add_theme_color_override("font_color", TEXT_DIM)
 	top.add_child(_date_label)
 
+	_events_label = Label.new()
+	_events_label.add_theme_font_size_override("font_size", 13)
+	_events_label.add_theme_color_override("font_color", Color(0.62, 0.80, 0.55))
+	_events_label.visible = false
+	box.add_child(_events_label)
 	_purse_label = Label.new()
 	_purse_label.add_theme_font_size_override("font_size", 14)
 	_purse_label.add_theme_color_override("font_color", Color(0.90, 0.80, 0.45))
@@ -423,6 +441,18 @@ func _build_needs_panel() -> void:
 	_thoughts_text.add_theme_font_size_override("normal_font_size", 12)
 	_thoughts_text.add_theme_color_override("default_color", TEXT_COLOR)
 	box.add_child(_thoughts_text)
+	var relations_separator := HSeparator.new()
+	relations_separator.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(relations_separator)
+	_relations_text = RichTextLabel.new()
+	_relations_text.bbcode_enabled = true
+	_relations_text.fit_content = true
+	_relations_text.scroll_active = false
+	_relations_text.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_relations_text.custom_minimum_size = Vector2(190, 0)
+	_relations_text.add_theme_font_size_override("normal_font_size", 12)
+	_relations_text.add_theme_color_override("default_color", TEXT_COLOR)
+	box.add_child(_relations_text)
 	_needs_panel.visible = false
 
 

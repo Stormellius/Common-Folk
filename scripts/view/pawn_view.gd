@@ -61,8 +61,8 @@ func _process(delta: float) -> void:
 	elif _phase != 0.0:
 		_phase = 0.0
 		queue_redraw()
-	if pawn.pose == "lie" or pawn.pose == "close":
-		queue_redraw()  # the floating Zzz or hearts drift
+	if pawn.pose == "lie" or pawn.pose == "close" or pawn.pose == "talk":
+		queue_redraw()  # the floating Zzz, the hearts and the speech bubble move
 	if pawn.facing != _drawn_facing or pawn.pose != _drawn_pose:
 		queue_redraw()
 
@@ -85,6 +85,8 @@ func _draw() -> void:
 		_draw_blanket_and_zzz(u)
 	elif pawn.pose == "close":
 		_draw_hearts(u)
+	elif pawn.pose == "talk":
+		_draw_speech(u)
 	if show_name:
 		var font := ThemeDB.fallback_font
 		draw_set_transform(Vector2(0.0, 27.0 * u), 0.0, Vector2(label_scale, label_scale))
@@ -102,6 +104,17 @@ func _draw_blanket_and_zzz(u: float) -> void:
 	var font := ThemeDB.fallback_font
 	draw_string_outline(font, Vector2(11.0, -17.0 + drift) * u, "Zzz", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, 4, Color(0, 0, 0, 0.8))
 	draw_string(font, Vector2(11.0, -17.0 + drift) * u, "Zzz", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.92, 0.94, 1.0))
+
+
+## A small speech bubble over the head with three dots that take turns lighting up.
+func _draw_speech(u: float) -> void:
+	var bubble := Rect2(Vector2(-11.0, -37.0) * u, Vector2(22.0, 13.0) * u)
+	draw_rect(bubble.grow(1.2 * u), PawnArt.OUTLINE)
+	draw_rect(bubble, Color(0.96, 0.95, 0.90))
+	draw_colored_polygon(PackedVector2Array([Vector2(-3.0, -24.5) * u, Vector2(3.0, -24.5) * u, Vector2(-1.0, -20.5) * u]), Color(0.96, 0.95, 0.90))
+	var lit := int(Time.get_ticks_msec() / 350.0) % 3
+	for i in 3:
+		draw_circle(Vector2(-6.0 + 6.0 * i, -30.5) * u, 1.6 * u, Color(0.20, 0.19, 0.17) if i == lit else Color(0.60, 0.58, 0.54))
 
 
 ## Two little hearts drifting up from a pair who are spending time together. Nothing more is shown.

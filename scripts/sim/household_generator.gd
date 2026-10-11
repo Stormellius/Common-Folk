@@ -21,6 +21,7 @@ static func create(world: WorldState, size: int = SIZE) -> Household:
 		pawn.tile = spot
 		pawn.step_to = spot
 		household.add_pawn(pawn)
+	Relations.make_family(household.pawns)
 	return household
 
 

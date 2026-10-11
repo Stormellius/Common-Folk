@@ -1,14 +1,51 @@
 [
   {
+    "id": "chat",
+    "name": "Chat",
+    "action": "Chat with {name}",
+    "doing": "Chatting",
+    "pose": "talk",
+    "satisfies": { "social": 150 },
+    "max_use_minutes": 20,
+    "willing_below": { "social": 90 },
+    "unwilling": "doesn't feel like talking",
+    "opinion": { "gain": 4 },
+    "autonomous": true
+  },
+  {
+    "id": "joke",
+    "name": "Joke",
+    "action": "Tell {name} a joke",
+    "doing": "Swapping jokes",
+    "pose": "talk",
+    "satisfies": { "social": 90 },
+    "max_use_minutes": 10,
+    "willing_below": { "social": 95 },
+    "unwilling": "isn't in the mood for jokes",
+    "opinion": { "gain": 3, "backfire": 0.25, "loss": 4 }
+  },
+  {
+    "id": "argue",
+    "name": "Argue",
+    "action": "Argue with {name}",
+    "doing": "Having a row",
+    "pose": "talk",
+    "max_use_minutes": 5,
+    "opinion": { "gain": -10 }
+  },
+  {
     "id": "intimacy",
     "name": "Intimacy",
     "action": "Be intimate with {name}",
     "doing": "Spending private time together",
+    "pose": "close",
     "satisfies": { "libido": 200 },
     "max_use_minutes": 30,
     "adults_only": true,
     "requires_attraction": true,
+    "min_opinion": 25,
     "willing_below": { "libido": 85 },
-    "unwilling": "isn't in the mood"
+    "unwilling": "isn't in the mood",
+    "opinion": { "gain": 3 }
   }
 ]

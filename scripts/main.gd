@@ -197,6 +197,8 @@ func _show_world(new_world: WorldState, household: Household, town: Household = 
 	sim = Simulation.new(world, household, town)
 	sim.pawn_died.connect(_on_pawn_died)
 	sim.town_death.connect(_on_town_death)
+	sim.event_started.connect(_on_event_started)
+	sim.event_ended.connect(_on_event_ended)
 	hud.show_game_over("")
 	map_view.set_world(world)
 	tile_cursor.set_world(world)
@@ -215,7 +217,8 @@ func _process(_delta: float) -> void:
 	if sim != null:
 		hud.update_household_status(sim.household)
 		var chosen := sim.household.selected()
-		hud.show_pawn(chosen, sim.describe_activity(chosen) if chosen != null else "", sim.job_text(chosen) if chosen != null else "")
+		hud.show_pawn(chosen, sim.describe_activity(chosen) if chosen != null else "", sim.job_text(chosen) if chosen != null else "", sim.relationship_lines(chosen) if chosen != null else [])
+		hud.set_events(sim.events.names())
 		hud.set_purse(sim.household.coins)
 
 
@@ -232,6 +235,14 @@ func _on_pawn_died(person: String, cause: String, successor: String) -> void:
 
 func _on_town_death(person: String, cause: String) -> void:
 	hud.show_message("%s of the town %s." % [person, cause], 5.0)
+
+
+func _on_event_started(_event_name: String, text: String) -> void:
+	hud.show_message(text, 5.0)
+
+
+func _on_event_ended(event_name: String) -> void:
+	hud.show_message("%s is over." % event_name, 3.0)
 
 
 func _on_tick(_tick: int) -> void:
@@ -295,7 +306,7 @@ func _on_day_changed(_day: int) -> void:
 
 func _write_save(path: String) -> Error:
 	var view := { "camera": [camera.position.x, camera.position.y], "zoom": camera.zoom.x }
-	return SaveGame.save(path, world, sim.household, view, sim.town)
+	return SaveGame.save(path, world, sim.household, view, sim.town, sim.events)
 
 
 ## F9: loads whichever of the quick save and the autosave is newer.
@@ -314,6 +325,7 @@ func _load() -> void:
 			CampGenerator.place(loaded_world, household)
 		_loading = true
 		_show_world(loaded_world, household, result["town"])
+		sim.events.load_dict(result["events"])
 		_loading = false
 		var view: Dictionary = result["view"]
 		if view.has("camera") and view["camera"] is Array and view["camera"].size() == 2:

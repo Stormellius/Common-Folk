@@ -24,6 +24,10 @@
 
   { "id": "frustrated", "text": "Frustrated",               "mood": -3,  "when": { "need": "libido", "below": 15 }, "never_for": ["asexual"] },
 
+  { "id": "lonely",     "text": "Lonely",                  "mood": -5,  "group": "social", "when": { "need": "social", "below": 35 } },
+  { "id": "very_lonely","text": "Desperate for company",   "mood": -9,  "group": "social", "when": { "need": "social", "below": 10 } },
+  { "id": "good_company","text": "Good company",           "mood": 2,   "group": "social", "when": { "need": "social", "above": 85 } },
+
   { "id": "lazing",     "text": "Doing nothing at all",     "mood": 3,   "when": { "idle": true }, "only_for": ["lazy"] },
   { "id": "quiet",      "text": "Enjoying the quiet",       "mood": 3,   "when": { "alone": true }, "only_for": ["loner"] },
 
@@ -38,6 +42,12 @@
   { "id": "worked",       "text": "Put in an honest day's work", "mood": 4, "hours": 10, "on": "worked", "never_for": ["lazy"] },
   { "id": "worked_lazy",  "text": "Worn out by work",       "mood": -3,  "hours": 10, "on": "worked", "only_for": ["lazy"] },
   { "id": "paid",         "text": "Earned good coin",       "mood": 3,   "hours": 12, "on": "paid", "only_for": ["greedy"] },
+  { "id": "nice_chat",    "text": "Had a nice chat",       "mood": 3,   "hours": 6,  "on": "interaction:chat" },
+  { "id": "shared_laugh", "text": "Shared a laugh",         "mood": 4,   "hours": 6,  "on": "interaction:joke" },
+  { "id": "had_a_row",    "text": "Had a row",              "mood": -6,  "hours": 12, "on": "interaction:argue" },
+  { "id": "joke_flopped", "text": "A joke fell flat",       "mood": -2,  "hours": 4,  "on": "flop" },
+  { "id": "at_festival",  "text": "Enjoying the festival",  "mood": 7,   "hours": 4,  "on": "event:festival" },
+  { "id": "at_market",    "text": "Busy market day",        "mood": 3,   "hours": 4,  "on": "event:market_day" },
   { "id": "closeness",    "text": "Time with someone close", "mood": 10, "hours": 24, "on": "interaction:intimacy" },
   { "id": "grief",        "text": "Someone in the household died", "mood": -15, "hours": 72, "on": "death" }
 ]

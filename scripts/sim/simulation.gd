@@ -10,6 +10,9 @@ extends RefCounted
 
 const THINK_COOLDOWN_TICKS := 30  # wait this long after finding nothing to fix a need with
 const OPTIONS_PER_NEED := 3       # how many nearest objects to try
+const SOCIAL_RADIUS := 30         # how far someone lonely will go to find a person to talk to
+const GATHER_CHANCE := 0.04       # per minute, for an idle townsperson while an event draws a crowd
+const EVENT_EVERY := 10           # minutes between giving event thoughts and company
 const WORK_BREAK_BELOW := 15.0    # a need this low sends a worker off their shift to see to it
 const MOOD_EVERY := 5             # minutes between mood checks for townspeople
 const ROAM_CHANCE := 0.012        # per minute, for an idle townsperson in the daytime
@@ -22,11 +25,16 @@ var household: Household
 ## The people of the town (not the player's): see NpcGenerator. They live by the same rules.
 var town: Household
 var pathfinder: PathFinder
+## What happens to the whole town: festivals, market days, cold snaps (data/events.json).
+var events := EventDirector.new()
 ## Someone died: their name, what killed them and the name of whoever you now control ("" if
 ## nobody is left, which ends the playthrough).
 signal pawn_died(person: String, cause: String, successor: String)
 ## Someone in the town died (the player's own deaths come through pawn_died).
 signal town_death(person: String, cause: String)
+## A town event (see EventDirector) began or ended. `text` is the announcement.
+signal event_started(event_name: String, text: String)
+signal event_ended(event_name: String)
 ## Ids of the needs in play; see Needs.
 var active_needs: Array[String] = []
 
@@ -46,9 +54,20 @@ func _init(p_world: WorldState, p_household: Household, p_town: Household = null
 
 ## One game minute passes. Called from the clock's `ticked` signal.
 func step() -> void:
+	for change in events.update(world.world_seed):
+		var event_def := DataRegistry.get_def("events", str(change["id"]))
+		var event_name := str(event_def.get("name", change["id"]))
+		if change["kind"] == "started":
+			event_started.emit(event_name, str(event_def.get("announce", event_name)))
+		else:
+			event_ended.emit(event_name)
 	var season_multipliers := _season_multipliers()
 	var minute := GameClock.get_minute_of_day()
 	var everyone := people()
+	if minute == 0:
+		Relations.drift(everyone)
+	if minute % EVENT_EVERY == 0:
+		_apply_events(everyone)
 	for pawn in everyone:
 		var cause := _drain_needs(pawn, season_multipliers)
 		if cause != "":
@@ -110,7 +129,7 @@ func use_blocker(pawn: Pawn, placed: PlacedObject) -> String:
 	var lot := world.lot_at(placed.tile)
 	if not lot.is_empty() and not bool(lot["public"]) and str(lot["id"]) != pawn.home_lot:
 		return "it belongs to someone else"
-	var price := Economy.price(placed.def_id)
+	var price := price_of(placed.def_id)
 	if price > coins_of(pawn):
 		return "can't afford it (%s)" % Economy.format(price)
 	if _plan_use(pawn, placed).is_empty():
@@ -152,6 +171,11 @@ func interaction_blocker(pawn: Pawn, other: Pawn, interaction_id: String) -> Str
 			return "%s isn't interested" % other_name
 		if not _attracted_to(pawn, other):
 			return "%s isn't interested" % _first_name(pawn)
+	var min_opinion := float(interaction.get("min_opinion", -1000.0))
+	if other.opinion_of(pawn.id) < min_opinion:
+		return "%s isn't close enough to you yet" % other_name
+	if pawn.opinion_of(other.id) < min_opinion:
+		return "%s isn't close enough to %s yet" % [_first_name(pawn), other_name]
 	var limits: Dictionary = interaction.get("willing_below", {})
 	var unwilling := str(interaction.get("unwilling", "isn't willing"))
 	for need_id in limits:
@@ -539,9 +563,50 @@ func describe_activity(pawn: Pawn) -> String:
 
 # --- needs and jobs --------------------------------------------------------------
 
+## The season's multipliers on need drain, with those of any event going on multiplied in.
 func _season_multipliers() -> Dictionary:
 	var season_id := str(GameClock.get_date().get("season_id", ""))
-	return DataRegistry.get_def("seasons", season_id).get("need_drain_multipliers", {})
+	var multipliers: Dictionary = DataRegistry.get_def("seasons", season_id).get("need_drain_multipliers", {}).duplicate()
+	var from_events := events.drain_multipliers()
+	for need_id in from_events:
+		multipliers[need_id] = float(multipliers.get(need_id, 1.0)) * float(from_events[need_id])
+	return multipliers
+
+
+## What the events going on do to people who are in the place that draws them: fill needs, give
+## a thought. Called every EVENT_EVERY minutes.
+func _apply_events(everyone: Array[Pawn]) -> void:
+	for def in events.active_defs():
+		var rect := _gather_rect(def)
+		if rect.size == Vector2i.ZERO:
+			continue
+		for pawn in everyone:
+			if not rect.has_point(pawn.tile):
+				continue
+			var restore: Dictionary = def.get("restore", {})
+			for need_id in restore:
+				if pawn.needs.has(need_id):
+					pawn.needs[need_id] = minf(Needs.FULL, float(pawn.needs[need_id]) + float(restore[need_id]) * EVENT_EVERY / 60.0)
+			if def.has("thought"):
+				Mood.add_event(pawn, str(def["thought"]), GameClock.tick)
+
+
+## The lot an event draws people to ("gather": a kind of building), or an empty rect.
+func _gather_rect(def: Dictionary) -> Rect2i:
+	var kind := str(def.get("gather", ""))
+	if kind != "":
+		for entry in world.lots:
+			if str(entry["kind"]) == kind:
+				return entry["rect"]
+	return Rect2i()
+
+
+## What using this object costs right now: its price, changed by any event (market day).
+func price_of(def_id: String) -> int:
+	var base := Economy.price(def_id)
+	if base <= 0:
+		return 0
+	return maxi(1, roundi(base * events.price_multiplier(def_id)))
 
 
 ## Fades old thoughts and works out mood. A miserable person drags their feet, like one with an
@@ -632,7 +697,7 @@ func _step_job(pawn: Pawn) -> void:
 		if pawn.tile != pawn.job_tile:
 			_end_job(pawn)  # the route was blocked or cancelled
 			return
-		var price := Economy.price(placed.def_id)
+		var price := price_of(placed.def_id)
 		if price > 0 and not spend(pawn, price):
 			_end_job(pawn)  # somebody spent the money on the way
 			return
@@ -676,8 +741,8 @@ func _step_interaction(pawn: Pawn) -> void:
 			return
 		pawn.job_stage = "using"
 		pawn.job_minutes = 0
-		pawn.pose = "close"
-		partner.pose = "close"
+		pawn.pose = str(interaction.get("pose", "close"))
+		partner.pose = pawn.pose
 		pawn.facing = partner.tile - pawn.tile
 		partner.facing = pawn.tile - partner.tile
 		return
@@ -693,9 +758,35 @@ func _step_interaction(pawn: Pawn) -> void:
 				all_full = false
 	pawn.job_minutes += 1
 	if all_full or pawn.job_minutes >= int(interaction.get("max_use_minutes", 30)):
+		_finish_interaction(pawn, partner, interaction)
+		_end_job(pawn)
+
+
+## An interaction ran its course: both people think about it, and their opinions of each other
+## change (a joke can fall flat, which only the one who told it minds).
+func _finish_interaction(pawn: Pawn, partner: Pawn, interaction: Dictionary) -> void:
+	var rule: Dictionary = interaction.get("opinion", {})
+	var delta := float(rule.get("gain", 0.0))
+	var flopped := rule.has("backfire") and _rng.randf() < float(rule["backfire"])
+	if flopped:
+		delta = -float(rule.get("loss", 0.0))
+		Mood.add_event(pawn, "flop", GameClock.tick)
+	else:
 		Mood.add_event(pawn, "interaction:%s" % pawn.job_interaction, GameClock.tick)
 		Mood.add_event(partner, "interaction:%s" % pawn.job_interaction, GameClock.tick)
-		_end_job(pawn)
+	pawn.add_opinion(partner.id, delta)
+	partner.add_opinion(pawn.id, delta)
+
+
+## Lines for the panel: who `pawn` knows best (or least well), as { "name", "label", "opinion" }.
+func relationship_lines(pawn: Pawn, limit: int = 5) -> Array[Dictionary]:
+	var lines: Array[Dictionary] = []
+	for other_id in pawn.relations:
+		var other := person(int(other_id))
+		if other != null and absf(float(pawn.relations[other_id])) >= 5.0:
+			lines.append({ "name": other.display_name, "label": Relations.label(float(pawn.relations[other_id])), "opinion": float(pawn.relations[other_id]) })
+	lines.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return absf(a["opinion"]) > absf(b["opinion"]))
+	return lines.slice(0, limit)
 
 
 func _end_job(pawn: Pawn) -> void:
@@ -770,10 +861,14 @@ func _think(pawn: Pawn, minute: int) -> bool:
 		return false
 	wants.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
 	for want in wants:
+		if str(want[1]) == "social":
+			if _seek_company(pawn):
+				return true
+			continue
 		var options: Array[PlacedObject] = []
 		for placed in world.objects:
 			if placed.user_id == 0 and placed.def().get("satisfies", {}).has(want[1]) and _may_use(pawn, placed) \
-					and Economy.price(placed.def_id) <= coins_of(pawn):
+					and price_of(placed.def_id) <= coins_of(pawn):
 				options.append(placed)
 		options.sort_custom(func(a: PlacedObject, b: PlacedObject) -> bool:
 			return _effort(pawn, a) < _effort(pawn, b))
@@ -781,6 +876,26 @@ func _think(pawn: Pawn, minute: int) -> bool:
 			if order_use(pawn, placed)["ok"]:
 				return true
 	pawn.think_cooldown = THINK_COOLDOWN_TICKS  # nothing within reach; try again later
+	return false
+
+
+## A lonely person walks up to someone nearby for a chat (any interaction marked "autonomous" in
+## data/interactions.json that fills Social). People from the town only talk to each other; the
+## household's people will talk to anyone, so they meet the neighbors. Prefers the closest, and
+## the better liked.
+func _seek_company(pawn: Pawn) -> bool:
+	var candidates: Array[Pawn] = []
+	for other in (town.pawns if town.get_pawn(pawn.id) != null else people()):
+		if other.id != pawn.id and _distance(pawn.tile, other.tile) <= SOCIAL_RADIUS and not other.is_busy():
+			candidates.append(other)
+	candidates.sort_custom(func(a: Pawn, b: Pawn) -> bool:
+		return _distance(pawn.tile, a.tile) - 0.3 * pawn.opinion_of(a.id) < _distance(pawn.tile, b.tile) - 0.3 * pawn.opinion_of(b.id))
+	for interaction in DataRegistry.get_list("interactions"):
+		if not bool(interaction.get("autonomous", false)) or not interaction.get("satisfies", {}).has("social"):
+			continue
+		for other in candidates.slice(0, 4):
+			if interaction_blocker(pawn, other, str(interaction["id"])) == "" and order_interact(pawn, other, str(interaction["id"]))["ok"]:
+				return true
 	return false
 
 
@@ -793,6 +908,13 @@ func _may_use(pawn: Pawn, placed: PlacedObject) -> bool:
 ## A townsperson with nothing to do sometimes takes a walk by day: to a public place, along the
 ## road, or round their own lot.
 func _roam(pawn: Pawn, minute: int) -> void:
+	for def in events.active_defs():  # a festival or a market draws a crowd, whatever the hour
+		var crowd := _gather_rect(def)
+		if crowd.size != Vector2i.ZERO and not crowd.has_point(pawn.tile) and _rng.randf() < GATHER_CHANCE:
+			var spot := crowd.position + Vector2i(_rng.randi() % crowd.size.x, _rng.randi() % crowd.size.y)
+			if world.is_walkable(spot.x, spot.y) and world.object_at(spot) == null:
+				order_move(pawn, spot)
+				return
 	if minute < ROAM_FROM_MINUTE or minute >= ROAM_UNTIL_MINUTE or _rng.randf() > ROAM_CHANCE:
 		return
 	var rect := Rect2i()
@@ -821,7 +943,7 @@ func _roam(pawn: Pawn, minute: int) -> void:
 ## How much trouble an object is to use: how far away, and a little more if it costs money, so
 ## that free things at home win over a paid meal when both are near.
 func _effort(pawn: Pawn, placed: PlacedObject) -> int:
-	return _distance(pawn.tile, placed.tile) + (12 if Economy.price(placed.def_id) > 0 else 0)
+	return _distance(pawn.tile, placed.tile) + (12 if price_of(placed.def_id) > 0 else 0)
 
 
 func _distance(a: Vector2i, b: Vector2i) -> int:
@@ -830,6 +952,17 @@ func _distance(a: Vector2i, b: Vector2i) -> int:
 
 ## A loaded save may predate needs or objects, or name things that are gone: make it consistent.
 func _repair_after_load() -> void:
+	var anyone_knows_anyone := false
+	for pawn in people():
+		anyone_knows_anyone = anyone_knows_anyone or not pawn.relations.is_empty()
+	if not anyone_knows_anyone:  # a save from before opinions: families start out fond of each other
+		var homes := {}
+		for pawn in people():
+			if not homes.has(pawn.home_lot):
+				homes[pawn.home_lot] = [] as Array[Pawn]
+			homes[pawn.home_lot].append(pawn)
+		for members in homes.values():
+			Relations.make_family(members)
 	for pawn in people():
 		for need_id in active_needs:
 			if not pawn.needs.has(need_id):

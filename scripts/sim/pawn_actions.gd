@@ -33,7 +33,7 @@ static func list_for(sim: Simulation, pawn: Pawn, tile: Vector2i) -> Array[Dicti
 	if placed != null and placed.def().has("action"):  # walls and doors offer nothing to use
 		var blocker := sim.use_blocker(pawn, placed)
 		var label := str(placed.def().get("action", "Use"))
-		var price := Economy.price(placed.def_id)
+		var price := sim.price_of(placed.def_id)
 		if price > 0:
 			label += " (%s)" % Economy.format(price)
 		actions.append(_entry(USE_PREFIX + str(placed.id), label, blocker == "", blocker))
@@ -42,7 +42,7 @@ static func list_for(sim: Simulation, pawn: Pawn, tile: Vector2i) -> Array[Dicti
 	actions.append(_walk_entry(sim, pawn, tile))
 	if pawn.is_busy():
 		actions.append(_entry(STOP, "Stop"))
-	for other in sim.household.pawns:
+	for other in sim.people():
 		if other.id == pawn.id or other.tile != tile:
 			continue
 		for interaction in DataRegistry.get_list("interactions"):
@@ -98,7 +98,7 @@ static func _perform(sim: Simulation, pawn: Pawn, action_id: String, tile: Vecto
 		return sim.order_use(pawn, placed)
 	if action_id.begins_with(INTERACT_PREFIX):
 		var parts := action_id.trim_prefix(INTERACT_PREFIX).split(":")
-		var other := sim.household.get_pawn(int(parts[1])) if parts.size() == 2 else null
+		var other := sim.person(int(parts[1])) if parts.size() == 2 else null
 		if other == null:
 			return { "ok": false, "message": "That person is not here" }
 		return sim.order_interact(pawn, other, parts[0])

@@ -1,6 +1,6 @@
 # Common Folk
 
-**Common Folk** is a medieval life sim sandbox with RimWorld-style looks: you live one person's life at a time in a randomly generated town that keeps running without you. The full plan is in the design document; this project is at **milestone 9 (Jobs and economy)**.
+**Common Folk** is a medieval life sim sandbox with RimWorld-style looks: you live one person's life at a time in a randomly generated town that keeps running without you. The full plan is in the design document; this project is at **milestone 10 (Social and events)**.
 
 ## What works now
 
@@ -18,8 +18,10 @@
 - People can die: a need with `fatal_after_hours` in `needs.json` (hunger 72 hours, warmth 48) kills after being empty that long, and any meal or fire starts the clock over. A grave is left where they fell, control passes to the next person, and when the last one dies the playthrough ends with a message (N for a new world, F9 to load). The household bar shows a green, amber or red strip for each person's worst need, so you can see who is in trouble while you control someone else
 - Thoughts and mood: each person has timed thoughts ("Slept in a bed +5", "Hungry -6", "Someone in the household died -15") and a mood from 0 to 100 that the panel shows with the reasons. Traits change how strongly things land (a lazy person enjoys a bed more, a neat one hates being dirty, a greedy one cares less for comfort) and a few thoughts belong to one trait only. A miserable person (mood under 20) drags their feet
 - Coin and work: your household shares a purse (shown under the clock, 120d to start). Right-click the notice board on the village green, or a counter in the shop, tavern or clinic, to take a job from the open vacancies; right-click again to quit. Each job has a shift and a wage: an idle worker walks to a free spot beside the business's counter when the shift starts, is paid by the hour on leaving, and goes home early if a need gets critical. Giving a worker any other order takes them off their shift for the day. The tavern sells meals and ale, the shop sells bread (the price shows in the menu); building now costs coin and taking something down gives half back. Some of the townspeople work too (each business keeps a vacancy for you), and they earn and spend by the same rules
+- Talking and opinions: everyone has an opinion (-100 to 100) of the people they know, shown with a label (Friend, Rival...) in the panel. Family starts fond of each other, strangers at zero, and opinions drift back toward neutral over the days. Right-click another person to chat, joke or argue (adults can also be intimate once they like each other enough). Chatting fills Social and warms the opinion, a joke can fall flat, an argument sours it. People also chat on their own when lonely: villagers talk to villagers, your household talks to anyone nearby. Speech bubbles show who is talking
+- Town events: a seeded roll each morning can bring a festival (people gather on the green and feel less lonely), a market day (food is half price) or a cold snap (winter only; warmth drains faster for three days). A message appears when one starts and ends
 - Hover a tile to see what it is and whether it is walkable
-- Save and load (F5 / F9) with an autosave every midnight (`user://autosave.json`). Saves are written to a temporary file first and moved into place, a damaged or cut-off file is refused without changing anything, older saves (formats 1 to 6) still load, and the camera position and zoom come back. New world (N)
+- Save and load (F5 / F9) with an autosave every midnight (`user://autosave.json`). Saves are written to a temporary file first and moved into place, a damaged or cut-off file is refused without changing anything, older saves (formats 1 to 7) still load, and the camera position and zoom come back. New world (N)
 - All content (tiles, seasons, needs, traits, buildings, the town's makeup) comes from JSON files in `data/`, and mods can add or replace it
 
 ## Run it
@@ -84,6 +86,8 @@ scripts/
     camp_generator.gd    Sets out the starting camp
     household.gd         A group of people: yours (selected, died) or the town's
     economy.gd           Currency, prices and building costs from data/economy.json
+    relations.gd         Opinion labels, family starting opinions, daily drift
+    event_director.gd    Rolls and runs town events from data/events.json
     household_generator.gd  Seed -> starting family (names, looks, where they stand)
     path_finder.gd       A* over the tile map
     simulation.gd        Ticks the world; the commands views may give (order_move, order_use, build_place...)
@@ -159,7 +163,9 @@ To try it, set `"enabled": true` in `mods/example_mod/mod.json` and restart. Gra
 
 `floors.json` lists the floors the player can lay (`color`, `line`, and a `pattern` of `planks`, `flags` or `straw`).
 
-`interactions.json` describes things two people do together. Libido is filled this way: right-click another adult and pick the entry.
+`events.json` lists town events: `chance` per day (rolled from the world seed and the day number, so a seed always has the same events), `seasons` it can happen in, `cooldown_days`, `start_hour`, `duration_hours`, and effects: `need_drain_multipliers`, `price_multipliers` (by object id), `gather` (a kind of building where people gather) with `restore` (need points given while there) and a `thought` id.
+
+`interactions.json` describes things two people do together. Each can set `satisfies`, `max_use_minutes`, `pose` (`talk` or `close`), `opinion` (`gain`, plus `backfire` chance and `loss` for jokes that flop), `min_opinion` (needed to offer it) and `autonomous` (people do it on their own when a need is low). Chat, joke and argue are in the file as examples. Libido is filled this way too: right-click another adult and pick the entry.
 
 ```json
 { "id": "intimacy", "action": "Be intimate with {name}", "doing": "Spending private time together",
@@ -167,7 +173,7 @@ To try it, set `"enabled": true` in `mods/example_mod/mod.json` and restart. Gra
   "requires_attraction": true, "willing_below": { "libido": 85 }, "unwilling": "isn't in the mood" }
 ```
 
-Both people must be adults, attracted to each other (`requires_attraction` reads the orientation traits in `traits.json`: `attracted_to` is `opposite`, `same`, `both` or `none`; someone with none of them is open to anyone) and willing (`willing_below`: each need listed must be under that number, otherwise the entry is greyed out with the `unwilling` reason), and the other person must not be busy. The asker walks over, both stand still side by side with hearts over their heads, both needs fill, and the panel says only what `doing` says. Nothing explicit is shown, and the people never do this on their own: only the player starts it. Ordering either person elsewhere ends it for both.
+Both people must be adults, attracted to each other (`requires_attraction` reads the orientation traits in `traits.json`: `attracted_to` is `opposite`, `same`, `both` or `none`; someone with none of them is open to anyone) and willing (`willing_below`: each need listed must be under that number, otherwise the entry is greyed out with the `unwilling` reason), and the other person must not be busy. The asker walks over, both stand still side by side with hearts over their heads, both needs fill, and the panel says only what `doing` says. Nothing explicit is shown, and the people never do this on their own: only the player starts it (it needs a liking of at least 25). Ordering either person elsewhere ends it for both.
 
 If you export the game, add `*.json` under **Resources > Filters to export non-resource files** so the data files are included.
 
@@ -177,7 +183,7 @@ If you export the game, add `*.json` under **Resources > Filters to export non-r
 godot --headless --path . res://tests/smoke_test.tscn
 ```
 
-This checks data loading, mods, the clock and calendar, world generation (same seed, same world), the town (lots keep apart, everything is reachable, houses are equipped, people live in families, private things stay private, a day in town, a death in town, saving it), pathfinding, pawn movement, the household, the right-click actions, needs and objects, coin and work (prices, build costs, shifts, wages, hiring, quitting), building, coin and work (prices, build costs, hiring, shifts, wages, quitting), death, thoughts and mood, and the save round trip. Run it as a scene as shown; it needs the autoloads, which `--script` mode does not provide.
+This checks data loading, mods, the clock and calendar, world generation (same seed, same world), the town (lots keep apart, everything is reachable, houses are equipped, people live in families, private things stay private, a day in town, a death in town, saving it), pathfinding, pawn movement, the household, the right-click actions, needs and objects, coin and work (prices, build costs, shifts, wages, hiring, quitting), chatting and opinions, town events, building, death, thoughts and mood, and the save round trip. Run it as a scene as shown; it needs the autoloads, which `--script` mode does not provide.
 
 ```
 godot --headless --path . res://tests/balance_check.tscn
@@ -195,8 +201,8 @@ This is a procedural approximation of the RimWorld look. The real thing relies o
 
 ## Known limits
 
-The lot may include water or rocks you cannot build on. Pawns can walk through each other and are drawn over tree canopies. Social and Faith wait for things that can satisfy them. Townspeople's wages come from nowhere and pile up (nothing for them to buy but meals), and there is no business income or trade yet. Townspeople do not talk to each other or to you yet, and are not clickable; they only work, live, wander and die. Nobody lives in the tavern, shop or clinic, and the shop sells only bread.
+The lot may include water or rocks you cannot build on. Pawns can walk through each other and are drawn over tree canopies. Social and Faith wait for things that can satisfy them. Townspeople's wages come from nowhere and pile up (nothing for them to buy but meals), and there is no business income or trade yet. Townspeople are not clickable, and only chat, work, live, wander and die. Nobody lives in the tavern, shop or clinic, and the shop sells only bread.
 
 ## Next
 
-Building is instant, with no builders, materials or roofs: a house is just walls, a door and a floor, paid for in coin. Your lot is given to you; a later milestone replaces that with the three ways of getting land (buy, inherit, arrive with nothing), and the two empty lots are there for a business. Rooms, roofs, materials and builders come after the economy exists.
+Building is instant, with no builders, materials or roofs: a house is just walls, a door and a floor, paid for in coin. Your lot is given to you; milestone 11 replaces that with the three ways of getting land (buy, inherit, arrive with nothing), and the two empty lots are there for a business. Rooms, roofs, materials and builders come after the economy exists.

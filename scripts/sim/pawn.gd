@@ -68,6 +68,9 @@ var work_lot := ""
 var work_job := ""
 ## The day number on which the player took this person off their shift (see Simulation).
 var skip_work_day := -1
+## What this person thinks of each other person they have met, -100 to 100, by that person's id
+## (see Relations). Missing means a stranger: 0.
+var relations: Dictionary = {}
 ## Ticks to wait before looking for something to do about a need again.
 var think_cooldown := 0
 
@@ -75,6 +78,18 @@ var think_cooldown := 0
 var step_to := Vector2i.ZERO
 var step_ticks_total := 0
 var step_ticks_done := 0
+
+
+func opinion_of(other_id: int) -> float:
+	return float(relations.get(other_id, 0.0))
+
+
+func set_opinion(other_id: int, value: float) -> void:
+	relations[other_id] = clampf(value, Relations.MIN, Relations.MAX)
+
+
+func add_opinion(other_id: int, delta: float) -> void:
+	set_opinion(other_id, opinion_of(other_id) + delta)
 
 
 func is_moving() -> bool:
@@ -153,6 +168,7 @@ func to_dict() -> Dictionary:
 		"work_lot": work_lot,
 		"work_job": work_job,
 		"skip_work_day": skip_work_day,
+		"relations": _relations_for_save(),
 		"look": look.duplicate(),
 		"tile": _vec_to_array(tile),
 		"facing": _vec_to_array(facing),
@@ -190,6 +206,10 @@ static func from_dict(data: Dictionary) -> Pawn:
 	pawn.work_lot = str(data.get("work_lot", ""))
 	pawn.work_job = str(data.get("work_job", ""))
 	pawn.skip_work_day = int(data.get("skip_work_day", -1))
+	var saved_relations: Variant = data.get("relations", {})
+	if saved_relations is Dictionary:
+		for other_id in saved_relations:
+			pawn.relations[int(other_id)] = float(saved_relations[other_id])  # JSON keys are text
 	var saved_look: Variant = data.get("look", {})
 	pawn.look = saved_look.duplicate() if saved_look is Dictionary else {}
 	if pawn.look.has("hair_style"):
@@ -225,6 +245,13 @@ static func from_dict(data: Dictionary) -> Pawn:
 	pawn.pose = str(data.get("pose", ""))
 	pawn.think_cooldown = int(data.get("think", 0))
 	return pawn
+
+
+func _relations_for_save() -> Dictionary:
+	var saved := {}
+	for other_id in relations:
+		saved[str(other_id)] = snappedf(float(relations[other_id]), 0.1)
+	return saved
 
 
 ## Need values rounded for the save file, so a save and a reload give identical numbers.

@@ -42,6 +42,12 @@ static func create(world: WorldState) -> Household:
 				remaining -= 1
 				progress = true
 	_assign_jobs(world, town, rng)
+	for home in homes:
+		var family_members: Array[Pawn] = []
+		for pawn in town.pawns:
+			if pawn.home_lot == str(home["lot"]["id"]):
+				family_members.append(pawn)
+		Relations.make_family(family_members)
 	return town
 
 

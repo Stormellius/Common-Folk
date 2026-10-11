@@ -26,6 +26,8 @@ func _ready() -> void:
 	_test_building()
 	_test_town()
 	_test_economy()
+	_test_social()
+	_test_events()
 	_test_death()
 	_test_mood()
 	_test_save_and_load()
@@ -440,7 +442,7 @@ func _test_needs() -> void:
 	print("Needs and objects")
 	var active := Needs.active_ids()
 	_check("hunger" in active and "rest" in active and "toilet" in active and "fun" in active, "needs with something to fix them are in play")
-	_check("social" not in active and "faith" not in active, "needs with nothing to fix them, or optional ones, stay dormant")
+	_check("social" in active and "faith" not in active, "social is in play because chatting fills it; faith, with nothing to fix it, stays dormant")
 	_check("libido" in active and not Needs.slows_when_empty("libido") and Needs.slows_when_empty("hunger"), "libido is in play because an interaction fills it, and never slows anyone")
 	var per_tick := Needs.drain_per_tick("hunger", [], {})
 	_check(absf(per_tick - 4.0 / 60.0) < 0.0001, "hunger drains at the rate in needs.json")
@@ -544,7 +546,7 @@ func _test_needs() -> void:
 	var entries := PawnActions.list_for(sim, pawn, partner.tile)
 	var intimate := {}
 	for entry in entries:
-		if str(entry["id"]).begins_with(PawnActions.INTERACT_PREFIX):
+		if str(entry["id"]).begins_with(PawnActions.INTERACT_PREFIX + "intimacy"):
 			intimate = entry
 	_check(not intimate.is_empty() and intimate["enabled"] and "Tester" in str(intimate["label"]), "right-clicking a willing adult lists the interaction")
 	_check(PawnActions.list_for(sim, pawn, Vector2i(9, 9)).size() == 1, "an empty spot lists no interactions")
@@ -1077,6 +1079,354 @@ func _has_action_starting(actions: Array[Dictionary], prefix: String) -> bool:
 		if str(entry["id"]).begins_with(prefix):
 			return true
 	return false
+
+
+## Two household members standing a few tiles apart in the small test world, both a little lonely.
+func _social_pair() -> Dictionary:
+	var setup := _building_setup()
+	var household: Household = setup["household"]
+	var a: Pawn = setup["pawn"]
+	var b := Pawn.new()
+	b.display_name = "Second Person"
+	b.tile = Vector2i(6, 5)
+	b.step_to = b.tile
+	household.add_pawn(b)
+	var sim := Simulation.new(setup["world"], household)
+	for person in [a, b]:
+		_fill_needs(person)
+		person.needs["social"] = 20.0
+	return { "world": setup["world"], "household": household, "sim": sim, "a": a, "b": b }
+
+
+func _interaction_entries(sim: Simulation, from: Pawn, to: Pawn) -> Dictionary:
+	var found := {}
+	for entry in PawnActions.list_for(sim, from, to.tile):
+		var id := str(entry["id"])
+		if id.begins_with(PawnActions.INTERACT_PREFIX):
+			found[id.trim_prefix(PawnActions.INTERACT_PREFIX).get_slice(":", 0)] = entry
+	return found
+
+
+func _test_social() -> void:
+	print("Chatting and opinions")
+	_check(Relations.label(65.0) == "Close friend" and Relations.label(35.0) == "Friend" and Relations.label(0.0) == "Acquaintance" and Relations.label(-50.0) == "Rival", "an opinion is described in words")
+	var pair := _social_pair()
+	var sim: Simulation = pair["sim"]
+	var a: Pawn = pair["a"]
+	var b: Pawn = pair["b"]
+	var household: Household = pair["household"]
+	_check("social" in Needs.active_ids(), "Social is a need now that chatting can fill it")
+	_check(a.opinion_of(b.id) == Relations.FAMILY_START and b.opinion_of(a.id) == Relations.FAMILY_START, "people who live together start out fond of each other")
+
+	# The menu.
+	var entries := _interaction_entries(sim, a, b)
+	_check(entries.has("chat") and entries.has("joke") and entries.has("argue") and entries.has("intimacy"), "right-clicking someone lists chat, joke, argue and intimacy")
+	_check("Chat with Second" in str(entries["chat"]["label"]) and entries["chat"]["enabled"], "the chat entry names them")
+	# A stranger from the town: chat is open, intimacy is not.
+	var stranger := Pawn.new()
+	stranger.display_name = "Stella Stranger"
+	stranger.home_lot = "lot_9"
+	stranger.tile = Vector2i(9, 7)
+	stranger.step_to = stranger.tile
+	_fill_needs(stranger)
+	sim.town.add_pawn(stranger)
+	stranger.needs["social"] = 30.0
+	var met := _interaction_entries(sim, a, stranger)
+	_check(met["chat"]["enabled"] and not met["intimacy"]["enabled"] and "close enough" in str(met["intimacy"]["reason"]), "a stranger will chat, but intimacy needs you to know each other first (%s)" % met["intimacy"]["reason"])
+	a.needs["libido"] = 20.0
+	b.needs["libido"] = 30.0
+	_check(sim.interaction_blocker(a, b, "intimacy") == "", "family are close enough for intimacy, if both are willing")
+	_fill_needs(a)
+	_fill_needs(b)
+	a.needs["social"] = 20.0
+	b.needs["social"] = 20.0
+	var child := Pawn.new()
+	child.display_name = "Little One"
+	child.adult = false
+	child.age = 8
+	child.tile = Vector2i(5, 8)
+	child.step_to = child.tile
+	_fill_needs(child)
+	household.add_pawn(child)
+	a.set_opinion(child.id, 80.0)
+	child.set_opinion(a.id, 80.0)
+	_check(sim.interaction_blocker(a, child, "chat") == "", "a child can be chatted to")
+	_check("adults" in sim.interaction_blocker(a, child, "intimacy"), "but intimacy is only ever between adults")
+	household.remove_pawn(child.id)
+
+	# A chat: both feel less lonely, both like each other more, and it shows as talking, not hearts.
+	var before_a := a.opinion_of(b.id)
+	_check(PawnActions.perform(sim, a, PawnActions.INTERACT_PREFIX + "chat:%d" % b.id, b.tile)["ok"], "a chat can be started")
+	var talk_pose := false
+	for minute in 40:
+		GameClock.advance_one_tick()
+		sim.step()
+		talk_pose = talk_pose or (a.pose == "talk" and b.pose == "talk")
+	_check(talk_pose, "while they talk both stand with the talking pose")
+	_check(a.job_kind == "" and b.job_kind == "", "and it ends by itself")
+	_check(a.needs["social"] > 60.0 and b.needs["social"] > 60.0, "talking cures loneliness (%.0f and %.0f)" % [a.needs["social"], b.needs["social"]])
+	_check(is_equal_approx(a.opinion_of(b.id), before_a + 4.0) and is_equal_approx(b.opinion_of(a.id), before_a + 4.0), "and each likes the other a little more")
+	_check("Had a nice chat" in _mood_texts(a, household), "a good chat is a good thought")
+	a.needs["social"] = 95.0
+	b.needs["social"] = 95.0
+	_check("talking" in sim.interaction_blocker(a, b, "chat"), "nobody wants to chat when they are not lonely at all")
+
+	# An argument and a joke.
+	var opinion_now := a.opinion_of(b.id)
+	_fill_needs(a)
+	_fill_needs(b)
+	_check(sim.order_interact(a, b, "argue")["ok"], "anyone can be argued with")
+	for minute in 12:
+		GameClock.advance_one_tick()
+		sim.step()
+	_check(is_equal_approx(a.opinion_of(b.id), opinion_now - 10.0) and "Had a row" in _mood_texts(b, household), "an argument sours the opinion and the mood")
+	var gains := 0
+	var losses := 0
+	var joke := DataRegistry.get_def("interactions", "joke")
+	for attempt in 80:
+		a.job_interaction = "joke"
+		var was := a.opinion_of(b.id)
+		sim._finish_interaction(a, b, joke)
+		if a.opinion_of(b.id) > was:
+			gains += 1
+		elif a.opinion_of(b.id) < was:
+			losses += 1
+		a.set_opinion(b.id, 20.0)
+		b.set_opinion(a.id, 20.0)
+	_check(gains > 40 and losses > 5, "a joke usually lands and sometimes falls flat (%d landed, %d flopped of 80)" % [gains, losses])
+	_check("A joke fell flat" in _mood_texts(a, household) or losses == 0, "a flop is remembered by the one who told it")
+
+	# Intimacy needs a close enough friendship; the rest of its rules still hold.
+	a.needs["libido"] = 20.0
+	b.needs["libido"] = 30.0
+	a.set_opinion(b.id, 10.0)
+	b.set_opinion(a.id, 80.0)
+	_check("close enough" in sim.interaction_blocker(a, b, "intimacy"), "if either does not feel close enough, it is refused")
+	a.set_opinion(b.id, 30.0)
+	_check(sim.interaction_blocker(a, b, "intimacy") == "", "once both do, it is possible")
+
+	# Opinions drift back toward where they rest.
+	a.set_opinion(b.id, 80.0)
+	stranger.tile = a.tile
+	a.set_opinion(stranger.id, 10.0)
+	for day in 30:
+		Relations.drift(sim.people())
+	_check(is_equal_approx(a.opinion_of(b.id), 80.0 - 30.0 * Relations.DRIFT_PER_DAY), "a friendship needs tending: it slips %.1f a day toward where it rests" % Relations.DRIFT_PER_DAY)
+	_check(a.opinion_of(stranger.id) == 0.0, "and a stranger's goodwill fades")
+	var lines := sim.relationship_lines(a)
+	_check(not lines.is_empty() and lines[0]["name"] == "Second Person", "the panel lists who they know best")
+
+	# Autonomy: a lonely person walks up to someone and chats; the town talks among itself.
+	pair = _social_pair()
+	sim = pair["sim"]
+	a = pair["a"]
+	b = pair["b"]
+	for step in 3:
+		GameClock.advance_one_tick()
+		sim.step()
+	_check(a.job_kind == "interact" or b.job_kind == "interact", "two lonely people nearby start talking on their own")
+	_check(a.job_interaction == "chat" or b.job_interaction == "chat", "and never anything but a chat")
+	var quiet_a := Pawn.new()
+	var quiet_b := Pawn.new()
+	pair = _social_pair()
+	sim = pair["sim"]
+	a = pair["a"]
+	for villager in [quiet_a, quiet_b]:
+		villager.home_lot = "lot_5"
+		villager.age = 30
+		villager.tile = Vector2i(9, 8) if villager == quiet_a else Vector2i(11, 8)
+		villager.step_to = villager.tile
+		_fill_needs(villager)
+		villager.needs["social"] = 10.0
+		sim.town.add_pawn(villager)
+	pair["b"].needs["social"] = 100.0
+	a.needs["social"] = 100.0
+	for step in 4:
+		GameClock.advance_one_tick()
+		sim.step()
+	_check(quiet_a.job_kind == "interact" and quiet_a.job_partner == quiet_b.id, "townspeople chat with each other")
+	_check(a.job_kind == "" and pair["b"].job_kind == "", "and do not drag the household's people into it")
+	var neighbor := Pawn.new()
+	neighbor.home_lot = "lot_6"
+	neighbor.age = 40
+	neighbor.tile = Vector2i(8, 4)
+	neighbor.step_to = neighbor.tile
+	_fill_needs(neighbor)
+	neighbor.needs["social"] = 50.0
+	pair = _social_pair()
+	sim = pair["sim"]
+	a = pair["a"]
+	pair["b"].tile = Vector2i(20, 10)  # the family is out of reach
+	pair["b"].step_to = pair["b"].tile
+	pair["b"].needs["social"] = 100.0
+	sim.town.add_pawn(neighbor)
+	neighbor.set_opinion(a.id, 0.0)
+	for minute in 120:
+		GameClock.advance_one_tick()
+		sim.step()
+		if a.opinion_of(neighbor.id) > 0.0:
+			break
+	_check(a.opinion_of(neighbor.id) > 0.0 and neighbor.opinion_of(a.id) > 0.0, "a lonely household member goes and chats with a neighbor, and they get to know each other")
+
+	# A generated town is a fond family at home and gets to know its neighbors.
+	var big := MapGenerator.generate(42, 128, 96)
+	TownGenerator.generate(big)
+	var family := HouseholdGenerator.create(big)
+	CampGenerator.place(big, family)
+	var town := NpcGenerator.create(big)
+	var fond := true
+	for villager in town.pawns:
+		for other in town.pawns:
+			if other.id != villager.id and other.home_lot == villager.home_lot:
+				fond = fond and villager.opinion_of(other.id) >= Relations.FAMILY_START
+	_check(fond, "everyone in a household starts out fond of the rest")
+	var big_sim := Simulation.new(big, family, town)
+	GameClock.set_time(0, 6)
+	var lowest_social := 100.0
+	var strangers_met := 0
+	for minute in 2 * GameClock.MINUTES_PER_DAY:
+		GameClock.advance_one_tick()
+		big_sim.step()
+		if minute % 60 == 0:
+			for villager in town.pawns:
+				lowest_social = minf(lowest_social, float(villager.needs["social"]))
+	for villager in town.pawns:
+		for other in town.pawns:
+			if other.home_lot != villager.home_lot and villager.opinion_of(other.id) > 0.0:
+				strangers_met += 1
+	_check(strangers_met > 0, "over two days the townspeople get to know people from other households (%d acquaintances)" % strangers_met)
+	_check(lowest_social > 0.0, "and nobody in town goes completely without company (lowest %.0f)" % lowest_social)
+	GameClock.reset()
+
+
+func _collect_events(world_seed: int, days: int) -> Array[Dictionary]:
+	GameClock.reset()
+	var director := EventDirector.new()
+	var found: Array[Dictionary] = []
+	for day in days:
+		for hour in range(0, 24, 2):
+			GameClock.set_time(day, hour)
+			for change in director.update(world_seed):
+				if change["kind"] == "started":
+					found.append({ "id": change["id"], "day": day, "season": GameClock.get_date()["season_id"] })
+	return found
+
+
+func _test_events() -> void:
+	print("Town events")
+	var first := _collect_events(42, 120)
+	_check(not first.is_empty() and first == _collect_events(42, 120), "the same world has the same events, run twice (%d in 120 days)" % first.size())
+	_check(first != _collect_events(43, 120), "another world has other events")
+	var in_season := true
+	var spaced := true
+	var last_day := {}
+	for entry in first:
+		var def := DataRegistry.get_def("events", str(entry["id"]))
+		var seasons: Array = def.get("seasons", [])
+		in_season = in_season and (seasons.is_empty() or str(entry["season"]) in seasons)
+		if last_day.has(entry["id"]):
+			spaced = spaced and int(entry["day"]) - int(last_day[entry["id"]]) >= int(def.get("cooldown_days", 0))
+		last_day[entry["id"]] = entry["day"]
+	_check(in_season, "events only come in their own seasons")
+	_check(spaced, "and not again within their cooldown")
+	var kinds := {}
+	for entry in _collect_events(7, 240):
+		kinds[entry["id"]] = true
+	_check(kinds.has("festival") and kinds.has("market_day") and kinds.has("cold_snap"), "over a few years every kind of event comes up (%s)" % ", ".join(kinds.keys()))
+
+	# One event, start to finish.
+	GameClock.set_time(46, 6)  # deep winter
+	var director := EventDirector.new()
+	director.last_roll_day = GameClock.get_day_number()
+	director.scheduled.append({ "id": "cold_snap", "start": GameClock.tick + 60, "until": GameClock.tick + 60 + 72 * 60 })
+	_check(director.update(1).is_empty() and director.active.is_empty(), "a scheduled event waits for its hour")
+	GameClock.tick += 60
+	var changes := director.update(1)
+	_check(changes == [{ "kind": "started", "id": "cold_snap" }] and director.names() == ["Cold snap"], "it starts on time")
+	_check(is_equal_approx(float(director.drain_multipliers()["warmth"]), 1.6), "and speeds up warmth loss")
+	var copy := EventDirector.new()
+	copy.load_dict(director.to_dict())
+	_check(copy.to_dict() == director.to_dict(), "an event in progress survives saving")
+	GameClock.tick += 72 * 60
+	_check(director.update(1) == [{ "kind": "ended", "id": "cold_snap" }] and director.drain_multipliers().is_empty(), "and ends after its hours")
+
+	# What the events do inside a simulation.
+	var setup := _building_setup()
+	var world: WorldState = setup["world"]
+	world.lots = [{ "id": "lot_1", "kind": "park", "name": "Green", "template": "green", "facing": "west", "rect": Rect2i(14, 2, 8, 6), "public": true }]
+	var household: Household = setup["household"]
+	var sim := Simulation.new(world, household)
+	var heard: Array[String] = []
+	sim.event_started.connect(func(event_name: String, text: String) -> void: heard.append("%s|%s" % [event_name, text]))
+	sim.event_ended.connect(func(event_name: String) -> void: heard.append("end|%s" % event_name))
+	GameClock.set_time(46, 6)
+	sim.events.last_roll_day = GameClock.get_day_number()
+	var normal := float(sim._season_multipliers()["warmth"])
+	sim.events.scheduled.append({ "id": "cold_snap", "start": GameClock.tick, "until": GameClock.tick + 120 })
+	sim.step()
+	_check(heard.size() == 1 and heard[0].begins_with("Cold snap|") and "cold" in heard[0].to_lower(), "the player hears about it (%s)" % heard)
+	_check(is_equal_approx(float(sim._season_multipliers()["warmth"]), normal * 1.6), "warmth drains faster in a cold snap (%.1f instead of %.1f)" % [float(sim._season_multipliers()["warmth"]), normal])
+	for minute in 125:
+		GameClock.advance_one_tick()
+		sim.step()
+	_check(heard.back() == "end|Cold snap" and is_equal_approx(float(sim._season_multipliers()["warmth"]), normal), "and it passes")
+
+	GameClock.set_time(3, 8)
+	sim.events.last_roll_day = GameClock.get_day_number()
+	_check(sim.price_of("food_shelf") == Economy.price("food_shelf") and Economy.price("food_shelf") == 3, "bread costs its normal price")
+	sim.events.active.append({ "id": "market_day", "start": GameClock.tick, "until": GameClock.tick + 480 })
+	_check(sim.price_of("food_shelf") == 2 and sim.price_of("meal_table") == Economy.price("meal_table"), "on market day it is cheaper and nothing else changes")
+	sim.events.active.clear()
+
+	# A festival draws the townspeople to the green.
+	GameClock.set_time(3, 10)
+	var villager := Pawn.new()
+	villager.age = 30
+	villager.home_lot = "lot_5"
+	villager.tile = Vector2i(5, 8)
+	villager.step_to = villager.tile
+	_fill_needs(villager)
+	villager.needs["social"] = 40.0
+	sim.town.add_pawn(villager)
+	sim.events.active.append({ "id": "festival", "start": GameClock.tick, "until": GameClock.tick + 600 })
+	var green: Rect2i = world.lots[0]["rect"]
+	var went := false
+	var social_peak := 0.0
+	for minute in 240:
+		GameClock.advance_one_tick()
+		sim.step()
+		villager.needs["hunger"] = 100.0
+		went = went or green.has_point(villager.tile)
+		social_peak = maxf(social_peak, float(villager.needs["social"]))
+	_check(went, "a townsperson with nothing to do goes to the festival")
+	_check(social_peak > 60.0 and "Enjoying the festival" in _mood_texts(villager, sim.town), "and enjoys the company there (social up to %.0f)" % social_peak)
+	GameClock.reset()
+
+	# Saved with the game.
+	var big := MapGenerator.generate(5, 64, 48)
+	var family := HouseholdGenerator.create(big)
+	var saved_events := EventDirector.new()
+	saved_events.history.append({ "id": "festival", "day": 12 })
+	saved_events.last_roll_day = 12
+	saved_events.active.append({ "id": "market_day", "start": 100, "until": 900 })
+	_check(SaveGame.save(TEST_SAVE, big, family, {}, null, saved_events) == OK, "a save with events is written")
+	var loaded := SaveGame.load_from(TEST_SAVE)
+	var restored := EventDirector.new()
+	restored.load_dict(loaded["events"])
+	_check(restored.to_dict() == saved_events.to_dict(), "history, what is on now and the last day rolled survive a round trip")
+	var older := FileAccess.open(TEST_SAVE, FileAccess.WRITE)
+	older.store_string(JSON.stringify({ "format": 6, "world": big.to_dict(), "clock": GameClock.to_dict(), "household": family.to_dict() }))
+	older.close()
+	var old_save := SaveGame.load_from(TEST_SAVE)
+	_check(old_save["ok"] and old_save["events"] == {}, "a version 6 save loads with no events yet")
+	var no_relations := family.to_dict()
+	for saved in no_relations["pawns"]:
+		saved.erase("relations")
+	var old_family := Household.from_dict(no_relations)
+	Simulation.new(big, old_family)
+	_check(old_family.pawns[0].opinion_of(old_family.pawns[1].id) == Relations.FAMILY_START, "an older save's households are fond of each other")
+	DirAccess.remove_absolute(TEST_SAVE)
+	GameClock.reset()
 
 
 func _building_setup() -> Dictionary:

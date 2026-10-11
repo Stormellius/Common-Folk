@@ -1,0 +1,23 @@
+[
+  {
+    "id": "festival", "name": "Festival",
+    "announce": "A festival has begun on the village green.",
+    "chance": 0.07, "seasons": ["spring", "summer", "autumn"], "cooldown_days": 8,
+    "start_hour": 10, "duration_hours": 10,
+    "gather": "park", "restore": { "social": 45 }, "thought": "event:festival"
+  },
+  {
+    "id": "market_day", "name": "Market day",
+    "announce": "It is market day: bread is half price at the shop.",
+    "chance": 0.09, "cooldown_days": 6,
+    "start_hour": 8, "duration_hours": 8,
+    "gather": "shop", "price_multipliers": { "food_shelf": 0.5 }, "thought": "event:market_day"
+  },
+  {
+    "id": "cold_snap", "name": "Cold snap",
+    "announce": "A bitter cold snap settles over the town. Keep the fires lit.",
+    "chance": 0.10, "seasons": ["winter"], "cooldown_days": 10,
+    "start_hour": 0, "duration_hours": 72,
+    "need_drain_multipliers": { "warmth": 1.6 }
+  }
+]
