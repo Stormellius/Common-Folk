@@ -38,6 +38,7 @@ func step() -> void:
 		if cause != "":
 			die(pawn, cause)
 			continue
+		_update_mood(pawn)
 		pawn.tick(world)
 		_step_job(pawn)
 		if pawn.think_cooldown > 0:
@@ -300,6 +301,18 @@ func _season_multipliers() -> Dictionary:
 	return DataRegistry.get_def("seasons", season_id).get("need_drain_multipliers", {})
 
 
+## Fades old thoughts and works out mood. A miserable person drags their feet, like one with an
+## empty need.
+func _update_mood(pawn: Pawn) -> void:
+	var now := GameClock.tick
+	Mood.prune(pawn, now)
+	var result := Mood.evaluate(pawn, household, now)
+	pawn.mood = result["value"]
+	pawn.mood_parts = result["parts"]
+	if pawn.mood < Mood.LOW_BELOW:
+		pawn.slowed = true
+
+
 ## Drains the needs a little. Returns what killed the person ("starved"...) or "".
 func _drain_needs(pawn: Pawn, season_multipliers: Dictionary) -> String:
 	var empty := false
@@ -330,6 +343,8 @@ func die(pawn: Pawn, cause: String) -> void:
 	var spot := pawn.committed_tile()
 	household.dead.append({ "name": pawn.display_name, "cause": cause, "day": GameClock.get_day_number() })
 	household.remove_pawn(pawn.id)
+	for survivor in household.pawns:
+		Mood.add_event(survivor, "death", GameClock.tick)
 	_place_grave(spot)
 	var successor := household.selected()
 	pawn_died.emit(pawn.display_name, cause, successor.display_name if successor != null else "")
@@ -384,6 +399,7 @@ func _step_job(pawn: Pawn) -> void:
 			all_full = false
 	pawn.job_minutes += 1
 	if all_full or pawn.job_minutes >= int(object_def.get("max_use_minutes", 60)):
+		Mood.add_event(pawn, "used:%s" % placed.def_id, GameClock.tick)
 		_end_job(pawn)
 
 
@@ -421,6 +437,8 @@ func _step_interaction(pawn: Pawn) -> void:
 				all_full = false
 	pawn.job_minutes += 1
 	if all_full or pawn.job_minutes >= int(interaction.get("max_use_minutes", 30)):
+		Mood.add_event(pawn, "interaction:%s" % pawn.job_interaction, GameClock.tick)
+		Mood.add_event(partner, "interaction:%s" % pawn.job_interaction, GameClock.tick)
 		_end_job(pawn)
 
 

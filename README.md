@@ -1,6 +1,6 @@
 # Common Folk
 
-**Common Folk** is a medieval life sim sandbox with RimWorld-style looks: you live one person's life at a time in a randomly generated town that keeps running without you. The full plan is in the design document; this project is at **milestone 6 (Save and load)**.
+**Common Folk** is a medieval life sim sandbox with RimWorld-style looks: you live one person's life at a time in a randomly generated town that keeps running without you. The full plan is in the design document; this project is at **milestone 7 (Traits and thoughts)**.
 
 ## What works now
 
@@ -15,6 +15,7 @@
 - A panel on the left shows the selected person's needs and what they are doing; right-click an object for its action (Sleep, Eat a meal, Wash...)
 - Build mode (B): on your home lot, place furniture, timber and stone walls (drag to run a wall; they join up at corners), doors and three kinds of floor; move things; take them down. Routes update as you build, anyone heading for something you move or remove stops, and a walk that gets cut off finds another way. A shaded edge and a gold outline show where the lot ends
 - People can die: a need with `fatal_after_hours` in `needs.json` (hunger 72 hours, warmth 48) kills after being empty that long, and any meal or fire starts the clock over. A grave is left where they fell, control passes to the next person, and when the last one dies the playthrough ends with a message (N for a new world, F9 to load). The household bar shows a green, amber or red strip for each person's worst need, so you can see who is in trouble while you control someone else
+- Thoughts and mood: each person has timed thoughts ("Slept in a bed +5", "Hungry -6", "Someone in the household died -15") and a mood from 0 to 100 that the panel shows with the reasons. Traits change how strongly things land (a lazy person enjoys a bed more, a neat one hates being dirty, a greedy one cares less for comfort) and a few thoughts belong to one trait only. A miserable person (mood under 20) drags their feet
 - Hover a tile to see what it is and whether it is walkable
 - Save and load (F5 / F9) with an autosave every midnight (`user://autosave.json`). Saves are written to a temporary file first and moved into place, a damaged or cut-off file is refused without changing anything, older saves (formats 1 to 4) still load, and the camera position and zoom come back. New world (N)
 - All content (tiles, seasons, needs, traits) comes from JSON files in `data/`, and mods can add or replace it
@@ -73,6 +74,7 @@ scripts/
     pawn.gd              One person: position, walking path, one step per tick
     pawn_actions.gd      What a person can do at a spot (the right-click menu's entries)
     needs.gd             Which needs are in play, drain rates, when to look for a fix
+    mood.gd              Thoughts and mood from data/thoughts.json
     placed_object.gd     One bed, pot, wall... standing on the map
     camp_generator.gd    Sets out the starting camp
     household.gd         The people you control, who is selected, and who has died
@@ -127,7 +129,7 @@ A mod is a folder in `mods/` (or `user://mods/` in a built game) with the same k
 
 To try it, set `"enabled": true` in `mods/example_mod/mod.json` and restart. Grass turns bright green. Problems in data files (bad JSON, missing ids) are shown on screen and printed as warnings.
 
-`names.json` (given names and family names) and `appearance.json` (skin, hair and clothing colors) feed the household generator, so a mod can change who your people are. `needs.json` lists the needs (`drain_per_hour`, `optional: true` for ones nobody has yet, `slows_when_empty: false` for ones that can sit at zero harmlessly, like Libido, and `fatal_after_hours` with a `death_cause` for ones that can kill); `traits.json` changes drain rates (a trait with `"group": "orientation"` is an orientation: every new person gets exactly one of those plus two other, different traits); both are used now, and traits will matter more in milestone 7. Seasons in `seasons.json` can carry `need_drain_multipliers` (winter makes warmth drain 2.5 times faster).
+`names.json` (given names and family names) and `appearance.json` (skin, hair and clothing colors) feed the household generator, so a mod can change who your people are. `needs.json` lists the needs (`drain_per_hour`, `optional: true` for ones nobody has yet, `slows_when_empty: false` for ones that can sit at zero harmlessly, like Libido, and `fatal_after_hours` with a `death_cause` for ones that can kill); `traits.json` changes drain rates and, with `thought_multipliers`, how strongly thoughts land (a trait with `"group": "orientation"` is an orientation: every new person gets exactly one of those plus two other, different traits); both are used now, and traits will matter more in milestone 7. Seasons in `seasons.json` can carry `need_drain_multipliers` (winter makes warmth drain 2.5 times faster).
 
 `objects.json` describes the things people use:
 
@@ -138,6 +140,8 @@ To try it, set `"enabled": true` in `mods/example_mod/mod.json` and restart. Gra
 ```
 
 `category` (default `furniture`) picks the build palette tab, `buildable: false` keeps something out of it, `connects` makes walls and doors join their neighbors, and `drag: true` lets the tool run a row. `satisfies` is points restored per hour of use; a person stops when every need it fills is full or after `max_use_minutes`. `use_position` is `on` (stand on the tile) or `beside`. `action` is the right-click menu entry and `doing` the activity shown in the panel. A need is only in play while some object satisfies it, so adding an object with `"satisfies": { "faith": 20 }` switches Faith on (it also needs `optional` to be false). Objects with no drawing in `object_art.gd` appear as a crate.
+
+`thoughts.json` lists the thoughts. A state thought has a `when` (`need` with `below` or `above`, `idle`, or `alone`) and holds while that is true; thoughts sharing a `group` do not stack, the strongest wins. An event thought has `on` (`used:<object id>`, `interaction:<id>`, `death`) and `hours` it lasts. `only_for` and `never_for` take trait ids.
 
 `floors.json` lists the floors the player can lay (`color`, `line`, and a `pattern` of `planks`, `flags` or `straw`).
 
@@ -159,7 +163,13 @@ If you export the game, add `*.json` under **Resources > Filters to export non-r
 godot --headless --path . res://tests/smoke_test.tscn
 ```
 
-This checks data loading, mods, the clock and calendar, world generation (same seed, same world), pathfinding, pawn movement, the household, the right-click actions and the save round trip. Run it as a scene as shown; it needs the autoloads, which `--script` mode does not provide.
+This checks data loading, mods, the clock and calendar, world generation (same seed, same world), pathfinding, pawn movement, the household, the right-click actions, needs and objects, building, death, thoughts and mood, and the save round trip. Run it as a scene as shown; it needs the autoloads, which `--script` mode does not provide.
+
+```
+godot --headless --path . res://tests/balance_check.tscn
+```
+
+This is not a pass/fail test. It plays 15 days in spring and in winter on three seeds with nobody giving orders and prints deaths, mood and the lowest each need got, so you can see whether a change to needs, thoughts or the camp broke the balance.
 
 ## Graphics notes
 
@@ -169,7 +179,7 @@ This is a procedural approximation of the RimWorld look. The real thing relies o
 
 ## Known limits
 
-The lot may include water or rocks you cannot build on. Pawns can walk through each other and are drawn over tree canopies. Needs have no mood or death consequences yet beyond slowing people down. Social, Faith and Libido wait for things that can satisfy them.
+The lot may include water or rocks you cannot build on. Pawns can walk through each other and are drawn over tree canopies. Social, Faith and Libido wait for things that can satisfy them.
 
 ## Next
 

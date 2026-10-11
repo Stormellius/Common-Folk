@@ -25,6 +25,7 @@ func _ready() -> void:
 	_test_needs()
 	_test_building()
 	_test_death()
+	_test_mood()
 	_test_save_and_load()
 	print("")
 	if _failures == 0:
@@ -935,6 +936,147 @@ func _test_death() -> void:
 	_check(hud._game_over_panel.visible and hud._game_over_label.text == "The end", "the end screen shows its message")
 	hud.show_game_over("")
 	_check(not hud._game_over_panel.visible, "and hides again")
+	hud.queue_free()
+
+
+func _mood_person(traits: Array[String] = []) -> Pawn:
+	var person := Pawn.new()
+	person.display_name = "Mood Tester"
+	person.tile = Vector2i(2, 2)
+	person.step_to = person.tile
+	person.traits.assign(traits)
+	for need_id in Needs.active_ids():
+		person.needs[need_id] = 60.0
+	return person
+
+
+func _mood_texts(person: Pawn, household: Household) -> Array[String]:
+	var texts: Array[String] = []
+	for part in Mood.evaluate(person, household, GameClock.tick)["parts"]:
+		texts.append(str(part["text"]))
+	return texts
+
+
+func _test_mood() -> void:
+	print("Traits and thoughts")
+	GameClock.set_time(0, 12)
+	var household := Household.new()
+	var person := _mood_person()
+	household.add_pawn(person)
+	var now := GameClock.tick
+	_check(Mood.evaluate(person, household, now)["value"] == Mood.BASE, "someone with nothing on their mind sits at the baseline")
+	person.needs["hunger"] = 20.0
+	_check("Hungry" in _mood_texts(person, household) and Mood.evaluate(person, household, now)["value"] < Mood.BASE, "hunger is a bad thought")
+	person.needs["hunger"] = 5.0
+	var texts := _mood_texts(person, household)
+	_check("Starving" in texts and "Hungry" not in texts, "thoughts in a group do not stack: the worst one counts")
+	person.needs["hunger"] = 90.0
+	_check("Well fed" in _mood_texts(person, household) and Mood.evaluate(person, household, now)["value"] > Mood.BASE, "being full is a good thought")
+	_check("Stuffed and happy" not in _mood_texts(person, household), "a thought for gluttons only is not given to others")
+	person.needs["hunger"] = 100.0
+	var glutton := _mood_person(["glutton"])
+	household.add_pawn(glutton)
+	glutton.needs["hunger"] = 100.0
+	_check("Stuffed and happy" in _mood_texts(glutton, household), "but a glutton gets it")
+
+	# Events fade, and renew instead of piling up.
+	person.needs["hunger"] = 60.0
+	Mood.add_event(person, "used:bed", now)
+	Mood.add_event(person, "used:bed", now + 60)
+	_check(person.thoughts.size() == 1 and "Slept in a bed" in _mood_texts(person, household), "sleeping in a bed is a good thought, and a second night only renews it")
+	_check(int(person.thoughts[0]["until"]) == now + 60 + 12 * 60, "it lasts the hours in thoughts.json")
+	Mood.prune(person, now + 60 + 12 * 60)
+	_check(person.thoughts.is_empty(), "and then it is forgotten")
+
+	# Traits change how strongly things land.
+	var lazy := _mood_person(["lazy"])
+	var plain := _mood_person()
+	household.add_pawn(lazy)
+	household.add_pawn(plain)
+	Mood.add_event(lazy, "used:bed", now)
+	Mood.add_event(plain, "used:bed", now)
+	var lazy_value: float = Mood.evaluate(lazy, household, now)["value"]
+	var plain_value: float = Mood.evaluate(plain, household, now)["value"]
+	_check(lazy_value > plain_value, "a lazy person enjoys a bed more (%.1f against %.1f)" % [lazy_value, plain_value])
+	var greedy := _mood_person(["greedy"])
+	household.add_pawn(greedy)
+	Mood.add_event(greedy, "used:bed", now)
+	_check(Mood.evaluate(greedy, household, now)["value"] < plain_value, "a greedy one cares less for comfort")
+	var asexual := _mood_person(["asexual"])
+	household.add_pawn(asexual)
+	asexual.needs["libido"] = 2.0
+	var frustrated := _mood_person()
+	frustrated.needs["libido"] = 2.0
+	household.add_pawn(frustrated)
+	_check("Frustrated" in _mood_texts(frustrated, household) and "Frustrated" not in _mood_texts(asexual, household), "an unmet libido bothers everyone but an asexual person")
+
+	# Conditions on what the person is doing and who is near.
+	var idler := _mood_person(["lazy"])
+	household.add_pawn(idler)
+	_check("Doing nothing at all" in _mood_texts(idler, household), "a lazy person enjoys doing nothing")
+	idler.path.append(Vector2i(3, 2))
+	_check("Doing nothing at all" not in _mood_texts(idler, household), "but not while walking somewhere")
+	var loner := _mood_person(["loner"])
+	loner.tile = Vector2i(40, 40)
+	household.add_pawn(loner)
+	_check("Enjoying the quiet" in _mood_texts(loner, household), "a loner on their own enjoys the quiet")
+	var visitor := _mood_person()
+	visitor.tile = Vector2i(41, 40)
+	household.add_pawn(visitor)
+	_check("Enjoying the quiet" not in _mood_texts(loner, household), "until somebody comes close")
+
+	# In the simulation: needs well below the line make a person miserable and slow.
+	var setup := _needs_setup({})
+	var world: WorldState = setup["world"]
+	var pawn: Pawn = setup["pawn"]
+	pawn.traits.assign(["neat"])
+	pawn.needs["hunger"] = 5.0
+	pawn.needs["hygiene"] = 3.0
+	pawn.needs["rest"] = 5.0
+	pawn.needs["warmth"] = 5.0
+	pawn.needs["fun"] = 20.0
+	pawn.needs["toilet"] = 10.0
+	var sim := Simulation.new(world, setup["household"])
+	sim.step()
+	_check(pawn.mood < Mood.LOW_BELOW and pawn.slowed, "a person with everything going wrong is miserable and slowed (mood %.0f)" % pawn.mood)
+	_check(pawn.mood_parts.size() >= 5 and Mood.band_name(pawn.mood) == "miserable", "and the reasons are listed")
+	_check(Mood.band_name(55.0) == "content" and Mood.band_name(75.0) == "happy" and Mood.band_name(30.0) == "unhappy", "mood has names")
+
+	# Eating makes a thought; so does a death in the household; both survive a save.
+	setup = _needs_setup({ "hunger": 20.0 })
+	world = setup["world"]
+	household = setup["household"]
+	pawn = setup["pawn"]
+	var other := Pawn.new()
+	other.display_name = "Mood Two"
+	other.tile = Vector2i(2, 4)
+	other.step_to = other.tile
+	for need_id in Needs.active_ids():
+		other.needs[need_id] = 100.0
+	household.add_pawn(other)
+	world.add_object("cooking_pot", Vector2i(10, 5))
+	sim = Simulation.new(world, household)
+	var ticks := _run_until_idle(sim, pawn)
+	var ids: Array[String] = []
+	for thought in pawn.thoughts:
+		ids.append(str(thought["id"]))
+	_check("ate_meal" in ids, "finishing a meal leaves a good thought (%d ticks)" % ticks)
+	sim.die(other, "of a fever")
+	var grieving := false
+	for thought in pawn.thoughts:
+		grieving = grieving or thought["id"] == "grief"
+	_check(grieving, "a death in the household is a bad thought for the people who are left")
+	var copy := Pawn.from_dict(JSON.parse_string(JSON.stringify(pawn.to_dict())))
+	_check(copy.thoughts == pawn.thoughts, "thoughts survive a save")
+
+	# The panel.
+	var hud := Hud.new()
+	add_child(hud)
+	pawn.mood = 63.0
+	pawn.mood_parts = [{ "id": "ate_meal", "text": "Had a hot meal", "mood": 5.0 }, { "id": "hungry", "text": "Hungry", "mood": -6.0 }]
+	hud.show_pawn(pawn, "Idle")
+	_check(hud._mood_bar.value == 63.0 and hud._mood_label.text == "Content", "the panel shows mood")
+	_check("Had a hot meal" in hud._thoughts_text.text and "Hungry" in hud._thoughts_text.text, "and the thoughts behind it")
 	hud.queue_free()
 
 

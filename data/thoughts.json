@@ -1,0 +1,37 @@
+[
+  { "id": "starving",   "text": "Starving",                 "mood": -14, "group": "hunger", "when": { "need": "hunger", "below": 10 } },
+  { "id": "hungry",     "text": "Hungry",                   "mood": -6,  "group": "hunger", "when": { "need": "hunger", "below": 35 } },
+  { "id": "well_fed",   "text": "Well fed",                 "mood": 3,   "group": "hunger", "when": { "need": "hunger", "above": 85 } },
+  { "id": "feasted",    "text": "Stuffed and happy",        "mood": 5,   "group": "hunger", "when": { "need": "hunger", "above": 95 }, "only_for": ["glutton"] },
+
+  { "id": "exhausted",  "text": "Exhausted",                "mood": -12, "group": "rest", "when": { "need": "rest", "below": 10 } },
+  { "id": "tired",      "text": "Tired",                    "mood": -5,  "group": "rest", "when": { "need": "rest", "below": 35 } },
+  { "id": "rested",     "text": "Well rested",              "mood": 3,   "group": "rest", "when": { "need": "rest", "above": 85 } },
+
+  { "id": "freezing",   "text": "Freezing",                 "mood": -14, "group": "warmth", "when": { "need": "warmth", "below": 10 } },
+  { "id": "cold",       "text": "Cold",                     "mood": -6,  "group": "warmth", "when": { "need": "warmth", "below": 35 } },
+  { "id": "warm",       "text": "Nice and warm",            "mood": 2,   "group": "warmth", "when": { "need": "warmth", "above": 85 } },
+
+  { "id": "filthy",     "text": "Filthy",                   "mood": -8,  "group": "hygiene", "when": { "need": "hygiene", "below": 10 } },
+  { "id": "dirty",      "text": "Dirty",                    "mood": -4,  "group": "hygiene", "when": { "need": "hygiene", "below": 35 } },
+  { "id": "clean",      "text": "Clean",                    "mood": 2,   "group": "hygiene", "when": { "need": "hygiene", "above": 85 } },
+  { "id": "spotless",   "text": "Spotless",                 "mood": 4,   "group": "hygiene", "when": { "need": "hygiene", "above": 95 }, "only_for": ["neat"] },
+
+  { "id": "desperate",  "text": "Desperate for the privy",  "mood": -5,  "when": { "need": "toilet", "below": 20 } },
+
+  { "id": "bored",      "text": "Bored",                    "mood": -4,  "group": "fun", "when": { "need": "fun", "below": 35 } },
+  { "id": "amused",     "text": "Entertained",              "mood": 3,   "group": "fun", "when": { "need": "fun", "above": 85 } },
+
+  { "id": "frustrated", "text": "Frustrated",               "mood": -3,  "when": { "need": "libido", "below": 15 }, "never_for": ["asexual"] },
+
+  { "id": "lazing",     "text": "Doing nothing at all",     "mood": 3,   "when": { "idle": true }, "only_for": ["lazy"] },
+  { "id": "quiet",      "text": "Enjoying the quiet",       "mood": 3,   "when": { "alone": true }, "only_for": ["loner"] },
+
+  { "id": "slept_in_bed", "text": "Slept in a bed",         "mood": 5,   "hours": 12, "on": "used:bed" },
+  { "id": "ate_meal",     "text": "Had a hot meal",         "mood": 5,   "hours": 8,  "on": "used:cooking_pot" },
+  { "id": "warmed_up",    "text": "Warmed by the fire",     "mood": 3,   "hours": 6,  "on": "used:hearth" },
+  { "id": "washed",       "text": "Had a wash",             "mood": 3,   "hours": 8,  "on": "used:wash_basin" },
+  { "id": "played_music", "text": "Played some music",      "mood": 5,   "hours": 10, "on": "used:lute" },
+  { "id": "closeness",    "text": "Time with someone close", "mood": 10, "hours": 24, "on": "interaction:intimacy" },
+  { "id": "grief",        "text": "Someone in the household died", "mood": -15, "hours": 72, "on": "death" }
+]

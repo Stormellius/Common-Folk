@@ -27,6 +27,12 @@ var path: Array[Vector2i] = []
 
 ## How full each need is, 0 to 100, by need id (only the needs in play; see Needs).
 var needs: Dictionary = {}
+## Thoughts that have not faded yet: { "id", "until" } (until is a GameClock tick). Mood is
+## worked out from these and from how the person is doing right now; see Mood.
+var thoughts: Array[Dictionary] = []
+## Worked out every tick (not saved): 0 to 100, and the thoughts behind it, strongest first.
+var mood := Mood.BASE
+var mood_parts: Array[Dictionary] = []
 ## Trait ids from data/traits.json; they change how fast needs drain.
 var traits: Array[String] = []
 ## True while any need is empty: the person drags their feet.
@@ -136,6 +142,7 @@ func to_dict() -> Dictionary:
 		"traits": Array(traits),
 		"slowed": slowed,
 		"deprivation": deprivation.duplicate(),
+		"thoughts": thoughts.duplicate(true),
 		"job": job_kind,
 		"job_partner": job_partner,
 		"job_interaction": job_interaction,
@@ -172,6 +179,9 @@ static func from_dict(data: Dictionary) -> Pawn:
 	for trait_id in data.get("traits", []):
 		pawn.traits.append(str(trait_id))
 	pawn.slowed = bool(data.get("slowed", false))
+	for saved_thought in data.get("thoughts", []):
+		if saved_thought is Dictionary and saved_thought.has("id"):
+			pawn.thoughts.append({ "id": str(saved_thought["id"]), "until": int(saved_thought.get("until", 0)) })
 	var saved_deprivation: Variant = data.get("deprivation", {})
 	if saved_deprivation is Dictionary:
 		for need_id in saved_deprivation:

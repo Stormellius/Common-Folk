@@ -44,6 +44,10 @@ var _needs_panel: PanelContainer
 var _needs_name: Label
 var _needs_traits: Label
 var _needs_activity: Label
+var _mood_bar: ProgressBar
+var _mood_fill: StyleBoxFlat
+var _mood_label: Label
+var _thoughts_text: RichTextLabel
 var _need_rows: Dictionary = {}  # need id -> { "bar": ProgressBar, "fill": StyleBoxFlat }
 var _household_row: HBoxContainer
 var _action_menu := ActionMenu.new()
@@ -161,6 +165,15 @@ func show_pawn(pawn: Pawn, activity: String) -> void:
 		trait_names.append(str(DataRegistry.get_def("traits", trait_id).get("name", trait_id)))
 	_needs_traits.text = ", ".join(trait_names) if not trait_names.is_empty() else " "
 	_needs_activity.text = activity
+	_mood_bar.value = pawn.mood
+	_mood_fill.bg_color = BAND_COLORS[Needs.band(pawn.mood)]
+	_mood_label.text = Mood.band_name(pawn.mood).capitalize()
+	var lines: Array[String] = []
+	for part in pawn.mood_parts.slice(0, 8):
+		var value := float(part["mood"])
+		var color := "#9cc27a" if value > 0.0 else "#d97a6c"
+		lines.append("[color=%s]%s%d[/color]  %s" % [color, "+" if value > 0.0 else "-", roundi(absf(value)), str(part["text"])])
+	_thoughts_text.text = "\n".join(lines) if not lines.is_empty() else "[color=#9e9c94]Nothing on their mind[/color]"
 	for need_id in _need_rows:
 		var value := float(pawn.needs.get(need_id, Needs.FULL))
 		var row: Dictionary = _need_rows[need_id]
@@ -335,6 +348,31 @@ func _build_needs_panel() -> void:
 	separator.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(separator)
 
+	var mood_row := HBoxContainer.new()
+	mood_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mood_row.add_theme_constant_override("separation", 6)
+	box.add_child(mood_row)
+	var mood_title := _make_plain_label(13, TEXT_COLOR)
+	mood_title.text = "Mood"
+	mood_title.custom_minimum_size = Vector2(62, 0)
+	mood_row.add_child(mood_title)
+	_mood_bar = ProgressBar.new()
+	_mood_bar.min_value = 0.0
+	_mood_bar.max_value = 100.0
+	_mood_bar.show_percentage = false
+	_mood_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_mood_bar.custom_minimum_size = Vector2(110, 10)
+	_mood_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_mood_fill = _flat_box(BAND_COLORS["good"], Color(0, 0, 0, 0), 0, 0)
+	_mood_bar.add_theme_stylebox_override("background", _flat_box(Color(0.05, 0.05, 0.06), PANEL_BORDER, 1, 0))
+	_mood_bar.add_theme_stylebox_override("fill", _mood_fill)
+	mood_row.add_child(_mood_bar)
+	_mood_label = _make_plain_label(12, TEXT_DIM)
+	box.add_child(_mood_label)
+	var mood_separator := HSeparator.new()
+	mood_separator.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(mood_separator)
+
 	for need_id in Needs.active_ids():
 		var row := HBoxContainer.new()
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -356,6 +394,18 @@ func _build_needs_panel() -> void:
 		bar.add_theme_stylebox_override("fill", fill)
 		row.add_child(bar)
 		_need_rows[need_id] = { "bar": bar, "fill": fill }
+	var thoughts_separator := HSeparator.new()
+	thoughts_separator.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(thoughts_separator)
+	_thoughts_text = RichTextLabel.new()
+	_thoughts_text.bbcode_enabled = true
+	_thoughts_text.fit_content = true
+	_thoughts_text.scroll_active = false
+	_thoughts_text.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_thoughts_text.custom_minimum_size = Vector2(190, 0)
+	_thoughts_text.add_theme_font_size_override("normal_font_size", 12)
+	_thoughts_text.add_theme_color_override("default_color", TEXT_COLOR)
+	box.add_child(_thoughts_text)
 	_needs_panel.visible = false
 
 
