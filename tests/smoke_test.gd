@@ -25,6 +25,7 @@ func _ready() -> void:
 	_test_needs()
 	_test_building()
 	_test_town()
+	_test_economy()
 	_test_death()
 	_test_mood()
 	_test_save_and_load()
@@ -209,7 +210,7 @@ func _test_hud() -> void:
 	_check(hud._build_tabs.has("Furniture") and hud._build_tabs.has("Structure") and hud._build_tabs.has("Floors") and hud._build_tabs.has("Tools"), "the palette has tabs for furniture, structure, floors and tools")
 	var wall_button: Button = null
 	for button in hud._build_items:
-		if button.tooltip_text == "Timber wall":
+		if button.tooltip_text.begins_with("Timber wall"):
 			wall_button = button
 	wall_button.button_pressed = true
 	_check(chosen_tools == ["place:wall"], "picking a palette entry reports the tool")
@@ -854,12 +855,237 @@ func _test_town() -> void:
 	GameClock.reset()
 
 
+## A small world for money and work: your lot on the left, a shop on the right with two counters.
+func _work_setup() -> Dictionary:
+	var setup := _building_setup()
+	var world: WorldState = setup["world"]
+	world.lots = [{ "id": "lot_1", "kind": "shop", "name": "Shop", "template": "shop", "facing": "west", "rect": Rect2i(14, 2, 8, 6), "public": true }]
+	world.add_object("counter", Vector2i(16, 4))
+	world.add_object("counter", Vector2i(17, 4))
+	return setup
+
+
+func _test_economy() -> void:
+	print("Coin and work")
+	_check(Economy.format(12) == "12d" and Economy.start_coins() > 0, "coin is written like 12d and a household starts with some")
+	_check(HouseholdGenerator.create(MapGenerator.generate(3, 64, 48)).coins == Economy.start_coins(), "a new household has the starting purse")
+
+	# Building costs coin.
+	var setup := _building_setup()
+	var world: WorldState = setup["world"]
+	var household: Household = setup["household"]
+	var sim: Simulation = setup["sim"]
+	household.coins = 20
+	_check(sim.build_place("bed", Vector2i(8, 8))["ok"] and household.coins == 2, "a bed costs %s" % Economy.format(Economy.object_cost("bed")))
+	var broke := sim.build_place("bed", Vector2i(9, 8))
+	_check(not broke["ok"] and "costs" in str(broke["message"]) and household.coins == 2 and world.object_at(Vector2i(9, 8)) == null, "with too little coin it is refused, and says what it costs")
+	_check(sim.build_move(world.object_at(Vector2i(8, 8)).id, Vector2i(9, 8))["ok"] and household.coins == 2, "moving is free")
+	_check(sim.build_remove(Vector2i(9, 8))["ok"] and household.coins == 2 + Economy.refund(Economy.object_cost("bed")), "taking it down gives half back")
+	household.coins = 1
+	_check(sim.build_floor("planks", Vector2i(5, 5))["ok"] and household.coins == 0, "a floor tile costs coin too")
+	_check(not sim.build_floor("flagstone", Vector2i(6, 5))["ok"], "and is refused when there is none left")
+
+	# Paying for a meal at the tavern table.
+	setup = _building_setup()
+	world = setup["world"]
+	household = setup["household"]
+	sim = setup["sim"]
+	var diner: Pawn = setup["pawn"]
+	var table := world.add_object("meal_table", Vector2i(6, 5))
+	diner.needs["hunger"] = 20.0
+	household.coins = 3
+	_check("afford" in sim.use_blocker(diner, table), "a meal that costs more than the purse holds cannot be ordered")
+	household.coins = 10
+	_check(sim.use_blocker(diner, table) == "" and sim.order_use(diner, table)["ok"], "with the coin it can")
+	for minute in 40:
+		GameClock.advance_one_tick()
+		sim.step()
+	_check(household.coins == 10 - Economy.price("meal_table") and diner.needs["hunger"] > 90.0, "the price is paid once and the hunger is gone (%d coin left)" % household.coins)
+	var labels := []
+	for entry in PawnActions.list_for(sim, diner, Vector2i(6, 5)):
+		labels.append(entry["label"])
+	_check("Have a meal (4d)" in labels, "the menu shows the price")
+	household.coins = 0
+	diner.needs["hunger"] = 10.0
+	diner.think_cooldown = 0
+	for minute in 5:
+		sim.step()
+	_check(diner.job_kind == "", "a hungry person with no coin does not go to the tavern")
+
+	# Work.
+	setup = _work_setup()
+	world = setup["world"]
+	household = setup["household"]
+	sim = setup["sim"]
+	var worker: Pawn = setup["pawn"]
+	household.coins = 0
+	GameClock.set_time(0, 6)
+	_check(sim.open_positions().size() == 1 and int(sim.open_positions()[0]["open"]) == 2, "the shop has two vacancies")
+	var board_labels := []
+	var counter := world.object_at(Vector2i(16, 4))
+	for entry in PawnActions.list_for(sim, worker, counter.tile):
+		board_labels.append(entry["label"])
+	_check("Take the job: shop clerk at the shop (5d an hour)" in board_labels, "the counter lists the job")
+	var child := Pawn.new()
+	child.id = 77
+	child.age = 12
+	child.adult = false
+	_check("must be" in sim.hire_blocker(child, "lot_1", "shop_clerk"), "a child cannot be hired")
+	_check(sim.hire_blocker(worker, "lot_1", "tavern_hand") != "", "a job at the wrong kind of business does not exist")
+	var hired := PawnActions.perform(sim, worker, PawnActions.HIRE_PREFIX + "lot_1:shop_clerk", counter.tile)
+	_check(hired["ok"] and worker.work_job == "shop_clerk" and "shop clerk" in str(hired["message"]), "taking the job from the menu works (%s)" % hired["message"])
+	_check(sim.job_text(worker).begins_with("Shop clerk at the shop") and "5d an hour" in sim.job_text(worker), "the panel can say what the job is")
+	_check(sim.hire_blocker(worker, "lot_1", "shop_clerk") == "already works there", "but not twice")
+	var second := Pawn.new()
+	second.age = 30
+	second.work_lot = "lot_1"
+	second.work_job = "shop_clerk"
+	sim.town.add_pawn(second)
+	var third := Pawn.new()
+	third.age = 30
+	_check(sim.hire_blocker(third, "lot_1", "shop_clerk") == "no vacancy" and sim.open_positions().is_empty(), "when both positions are taken there is no vacancy")
+	second.work_lot = ""
+	second.work_job = ""
+	sim.town.remove_pawn(second.id)
+
+	# A shift: nothing before eight, off to work at eight, paid by four.
+	for minute in 100:
+		GameClock.advance_one_tick()
+		sim.step()
+	_check(worker.job_kind == "" and household.coins == 0, "before the shift starts they are not at work")
+	GameClock.set_time(0, 8)
+	_fill_needs(worker)
+	for minute in 60:
+		GameClock.advance_one_tick()
+		sim.step()
+	_check(worker.job_kind == "work" and "work" in sim.describe_activity(worker).to_lower(), "when the shift starts they go to work (%s)" % sim.describe_activity(worker))
+	_check(world.object_at(worker.tile) == null and _next_to_counter(world, worker.tile), "and stand beside a counter")
+	for minute in 8 * 60:
+		GameClock.advance_one_tick()
+		sim.step()
+	_check(worker.job_kind == "", "at the end of the shift they stop")
+	_check(absi(household.coins - 5 * 7) <= 5, "and are paid by the hour (%d coin for about 7 hours)" % household.coins)
+	_check("Put in an honest day's work" in _mood_texts(worker, household), "a day's work is a good feeling")
+
+	# A need that gets bad enough sends them home early; the player's orders take them off the shift.
+	GameClock.set_time(1, 8)
+	_fill_needs(worker)
+	var before := household.coins
+	for minute in 90:
+		GameClock.advance_one_tick()
+		sim.step()
+	_check(worker.job_kind == "work" and worker.job_stage == "using", "next morning they are at it again")
+	worker.needs["hunger"] = 5.0
+	sim.step()
+	_check(worker.job_kind != "work" and household.coins > before, "a person who is starving leaves their post, and is paid for the time")
+	GameClock.set_time(2, 9)
+	_fill_needs(worker)
+	for minute in 60:
+		GameClock.advance_one_tick()
+		sim.step()
+	_check(worker.job_kind == "work", "on the third day they are back at work")
+	var coins_then := household.coins
+	var walked := PawnActions.perform(sim, worker, PawnActions.WALK, Vector2i(5, 8))
+	_check(walked["ok"] and worker.job_kind == "" and worker.skip_work_day == GameClock.get_day_number(), "the player can take them off their shift")
+	_fill_needs(worker)
+	for minute in 240:
+		GameClock.advance_one_tick()
+		sim.step()
+	_check(worker.job_kind == "" and household.coins >= coins_then, "and they stay off it for the day")
+	var quit := PawnActions.perform(sim, worker, PawnActions.QUIT_JOB, Vector2i.ZERO)
+	_check(quit["ok"] and worker.work_job == "" and sim.open_positions().size() == 1 and int(sim.open_positions()[0]["open"]) == 2, "quitting opens the position again")
+
+	# The notice board lists everything in town.
+	var board := world.add_object("notice_board", Vector2i(10, 9))
+	var listed := PawnActions.list_for(sim, worker, board.tile)
+	var hire_entries := 0
+	for entry in listed:
+		hire_entries += 1 if str(entry["id"]).begins_with(PawnActions.HIRE_PREFIX) else 0
+	_check(hire_entries == 1, "the notice board lists the town's vacancies")
+	var nothing := PawnActions.list_for(_building_setup()["sim"], worker, Vector2i(3, 3))
+	_check(not _has_action_starting(nothing, PawnActions.HIRE_PREFIX), "other places offer no work")
+
+	# The generated town: people have jobs, every business keeps a vacancy, and wages are paid.
+	var big := MapGenerator.generate(42, 128, 96)
+	TownGenerator.generate(big)
+	var family := HouseholdGenerator.create(big)
+	CampGenerator.place(big, family)
+	var town := NpcGenerator.create(big)
+	var big_sim := Simulation.new(big, family, town)
+	var employed := 0
+	for villager in town.pawns:
+		employed += 1 if villager.work_job != "" else 0
+		_check(villager.work_job == "" or villager.adult, "only adults are given work")
+	_check(employed > 0, "some townspeople have jobs (%d)" % employed)
+	var every_business_has_room := true
+	for lot in big.lots:
+		var has_job := false
+		for job in DataRegistry.get_list("jobs"):
+			has_job = has_job or job["workplace"] == lot["kind"]
+		if has_job:
+			var room := false
+			for opening in big_sim.open_positions(str(lot["id"])):
+				room = true
+			every_business_has_room = every_business_has_room and room
+	_check(every_business_has_room, "every business still has a position for the player")
+	var coin_before := 0
+	for villager in town.pawns:
+		coin_before += villager.coins
+	GameClock.set_time(0, 6)
+	var worked := false
+	for minute in 16 * 60:
+		GameClock.advance_one_tick()
+		big_sim.step()
+		if minute % 30 == 0:
+			for villager in town.pawns:
+				worked = worked or (villager.job_kind == "work" and villager.job_stage == "using")
+	var coin_after := 0
+	var nobody_negative := true
+	for villager in town.pawns:
+		coin_after += villager.coins
+		nobody_negative = nobody_negative and villager.coins >= 0
+	_check(worked, "townspeople turn up for their shifts")
+	_check(nobody_negative and coin_after != coin_before, "wages come in and purchases go out (%d to %d)" % [coin_before, coin_after])
+
+	# Saving keeps the money and the jobs.
+	_check(SaveGame.save(TEST_SAVE, big, family, {}, town) == OK, "a save with money and jobs is written")
+	var loaded := SaveGame.load_from(TEST_SAVE)
+	_check(loaded["household"].coins == family.coins and loaded["town"].to_dict() == town.to_dict(), "the purse, pockets and jobs survive a round trip")
+	var old_household := family.to_dict()
+	old_household.erase("coins")
+	_check(Household.from_dict(old_household).coins == Economy.start_coins(), "an older save gets a starting purse")
+	DirAccess.remove_absolute(TEST_SAVE)
+	GameClock.reset()
+
+
+func _fill_needs(person: Pawn) -> void:
+	for need_id in person.needs:
+		person.needs[need_id] = 100.0
+	person.deprivation.clear()
+
+
+func _next_to_counter(world: WorldState, tile: Vector2i) -> bool:
+	for step in [Vector2i(0, 1), Vector2i(1, 0), Vector2i(0, -1), Vector2i(-1, 0)]:
+		var there := world.object_at(tile + step)
+		if there != null and there.def_id == "counter":
+			return true
+	return false
+
+
+func _has_action_starting(actions: Array[Dictionary], prefix: String) -> bool:
+	for entry in actions:
+		if str(entry["id"]).begins_with(prefix):
+			return true
+	return false
+
+
 func _building_setup() -> Dictionary:
 	GameClock.set_time(0, 12)
 	var world := WorldState.new(24, 12, 1, "grass")
 	world.set_tile(20, 5, "water")
 	world.lot = Rect2i(2, 2, 12, 8)
 	var household := Household.new()
+	household.coins = 100000  # building costs coin; these tests are about where, not how much
 	var person := Pawn.new()
 	person.display_name = "Builder One"
 	person.tile = Vector2i(3, 5)

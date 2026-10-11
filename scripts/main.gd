@@ -162,6 +162,7 @@ func _take_screenshot(path: String) -> void:
 
 
 func _build_demo_house() -> void:
+	sim.household.coins += 1000  # building costs coin now
 	var origin := world.lot.position + Vector2i(world.lot.size.x - 11, 2)
 	for dy in 7:
 		for dx in 9:
@@ -214,7 +215,8 @@ func _process(_delta: float) -> void:
 	if sim != null:
 		hud.update_household_status(sim.household)
 		var chosen := sim.household.selected()
-		hud.show_pawn(chosen, sim.describe_activity(chosen) if chosen != null else "")
+		hud.show_pawn(chosen, sim.describe_activity(chosen) if chosen != null else "", sim.job_text(chosen) if chosen != null else "")
+		hud.set_purse(sim.household.coins)
 
 
 func _on_pawn_died(person: String, cause: String, successor: String) -> void:
@@ -255,7 +257,7 @@ func _on_action_chosen(action_id: String) -> void:
 	if pawn == null:
 		return
 	var result := PawnActions.perform(sim, pawn, action_id, _menu_tile)
-	if not result["ok"] and result["message"] != "":
+	if result["message"] != "":
 		hud.show_message(result["message"])
 	hud.set_selected(sim.household.selected_id)  # an action may have switched person
 

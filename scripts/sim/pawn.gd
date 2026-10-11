@@ -45,7 +45,8 @@ var slowed := false
 var deprivation: Dictionary = {}
 
 ## What the person is doing on their own account, apart from walking orders:
-## "" (nothing), "use" (going to, or busy with, an object) or "interact" (with `job_partner`).
+## "" (nothing), "use" (going to, or busy with, an object), "interact" (with `job_partner`) or
+## "work" (on the way to their post, or at it, for the shift).
 ## In an interaction the one who asked has job_stage "walking" then "using"; the other
 ## person waits, with job_stage "partner", and stays put until it is over.
 var job_kind := ""
@@ -57,6 +58,16 @@ var job_tile := Vector2i.ZERO  # where the person stands while using it
 var job_minutes := 0         # how long the use has gone on
 ## "" standing, or "lie" while sleeping. Set by the simulation, read by the view.
 var pose := ""
+## Coin in this person's own pocket. Only the town's people use it; the player's household
+## shares one purse (Household.coins).
+var coins := 0
+## Wages earned but not yet a whole coin.
+var pay_carry := 0.0
+## The job: a lot id from WorldState.lots and a job id from data/jobs.json ("" when out of work).
+var work_lot := ""
+var work_job := ""
+## The day number on which the player took this person off their shift (see Simulation).
+var skip_work_day := -1
 ## Ticks to wait before looking for something to do about a need again.
 var think_cooldown := 0
 
@@ -137,6 +148,11 @@ func to_dict() -> Dictionary:
 		"adult": adult,
 		"age": age,
 		"home_lot": home_lot,
+		"coins": coins,
+		"pay_carry": snappedf(pay_carry, 0.001),
+		"work_lot": work_lot,
+		"work_job": work_job,
+		"skip_work_day": skip_work_day,
 		"look": look.duplicate(),
 		"tile": _vec_to_array(tile),
 		"facing": _vec_to_array(facing),
@@ -169,6 +185,11 @@ static func from_dict(data: Dictionary) -> Pawn:
 	pawn.adult = bool(data.get("adult", true))
 	pawn.age = int(data.get("age", 25 if pawn.adult else 10))
 	pawn.home_lot = str(data.get("home_lot", WorldState.HOME_LOT))
+	pawn.coins = int(data.get("coins", 0))
+	pawn.pay_carry = float(data.get("pay_carry", 0.0))
+	pawn.work_lot = str(data.get("work_lot", ""))
+	pawn.work_job = str(data.get("work_job", ""))
+	pawn.skip_work_day = int(data.get("skip_work_day", -1))
 	var saved_look: Variant = data.get("look", {})
 	pawn.look = saved_look.duplicate() if saved_look is Dictionary else {}
 	if pawn.look.has("hair_style"):

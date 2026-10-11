@@ -41,7 +41,27 @@ static func create(world: WorldState) -> Household:
 				_add(town, rng, world, home, rng.randi_range(3, 15))
 				remaining -= 1
 				progress = true
+	_assign_jobs(world, town, rng)
 	return town
+
+
+## Gives some adults work at the town's businesses. Each business keeps its last position open,
+## so there is always something for a newcomer to apply for.
+static func _assign_jobs(world: WorldState, town: Household, rng: RandomNumberGenerator) -> void:
+	for lot in world.lots:
+		for job in DataRegistry.get_list("jobs"):
+			if str(job.get("workplace", "")) != str(lot["kind"]):
+				continue
+			var filled := 0
+			var unemployed: Array[Pawn] = []
+			for pawn in town.pawns:
+				if pawn.work_job == "" and pawn.age >= int(job.get("min_age", 16)):
+					unemployed.append(pawn)
+			while filled < int(job.get("positions", 1)) - 1 and not unemployed.is_empty():
+				var worker: Pawn = unemployed.pop_at(rng.randi() % unemployed.size())
+				worker.work_lot = str(lot["id"])
+				worker.work_job = str(job["id"])
+				filled += 1
 
 
 ## Adds one person to a home, on the next free spot indoors.
@@ -49,6 +69,7 @@ static func _add(town: Household, rng: RandomNumberGenerator, _world: WorldState
 	var spots: Array = home["spots"]
 	var pawn := PersonFactory.make(rng, str(home["family"]), home["used_names"], age)
 	pawn.home_lot = str(home["lot"]["id"])
+	pawn.coins = Economy.npc_start_coins(rng) if pawn.adult else 0
 	pawn.tile = spots[int(home["size"]) % spots.size()]
 	pawn.step_to = pawn.tile
 	home["size"] = int(home["size"]) + 1

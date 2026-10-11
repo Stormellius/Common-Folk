@@ -42,18 +42,18 @@
   { "id": "tavern", "name": "Tavern", "kind": "tavern", "floor": "planks", "public": true,
     "grid": [
       "##########",
-      "#h..p..l.#",
+      "#h.....l.#",
+      "#kkkk....#",
+      "#m.m.m.m.#",
       "#........#",
-      "#t.t.t.t.#",
-      "#........#",
-      "#n.n.n.nr#",
+      "#n.n.n.na#",
       "#........#",
       "####+#####"
     ] },
   { "id": "shop", "name": "Shop", "kind": "shop", "floor": "planks", "public": true,
     "grid": [
       "#########",
-      "#s.s.s.r#",
+      "#f.f.f.r#",
       "#.......#",
       "#kkkkk..#",
       "#.......#",
@@ -73,7 +73,7 @@
   { "id": "green", "name": "Village green", "kind": "park", "floor": "", "public": true,
     "grid": [
       "          ",
-      " n      n ",
+      " n  B   n ",
       "          ",
       "    W     ",
       "          ",

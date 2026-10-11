@@ -9,9 +9,10 @@ extends RefCounted
 ## Older saves still load: format 1 had no household (the caller makes one), and formats 1 and 2
 ## had no objects or needs (the caller places a camp, and the simulation fills in the needs), and
 ## formats 1 to 3 had no lot or floors (the world gives a centered lot and no floors), and formats
-## 1 to 4 had no town (no other lots and nobody living in them).
+## 1 to 4 had no town (no other lots and nobody living in them), and formats 1 to 5 had no coin or
+## jobs (the household gets a starting purse, and nobody has work).
 
-const FORMAT_VERSION := 5
+const FORMAT_VERSION := 6
 
 
 ## Writes the save file. Returns OK or a Godot error code. `view` is anything the screen wants

@@ -1,6 +1,6 @@
 # Common Folk
 
-**Common Folk** is a medieval life sim sandbox with RimWorld-style looks: you live one person's life at a time in a randomly generated town that keeps running without you. The full plan is in the design document; this project is at **milestone 8 (World generation)**.
+**Common Folk** is a medieval life sim sandbox with RimWorld-style looks: you live one person's life at a time in a randomly generated town that keeps running without you. The full plan is in the design document; this project is at **milestone 9 (Jobs and economy)**.
 
 ## What works now
 
@@ -17,8 +17,9 @@
 - Build mode (B): on your home lot, place furniture, timber and stone walls (drag to run a wall; they join up at corners), doors and three kinds of floor; move things; take them down. Routes update as you build, anyone heading for something you move or remove stops, and a walk that gets cut off finds another way. A shaded edge and a gold outline show where the lot ends
 - People can die: a need with `fatal_after_hours` in `needs.json` (hunger 72 hours, warmth 48) kills after being empty that long, and any meal or fire starts the clock over. A grave is left where they fell, control passes to the next person, and when the last one dies the playthrough ends with a message (N for a new world, F9 to load). The household bar shows a green, amber or red strip for each person's worst need, so you can see who is in trouble while you control someone else
 - Thoughts and mood: each person has timed thoughts ("Slept in a bed +5", "Hungry -6", "Someone in the household died -15") and a mood from 0 to 100 that the panel shows with the reasons. Traits change how strongly things land (a lazy person enjoys a bed more, a neat one hates being dirty, a greedy one cares less for comfort) and a few thoughts belong to one trait only. A miserable person (mood under 20) drags their feet
+- Coin and work: your household shares a purse (shown under the clock, 120d to start). Right-click the notice board on the village green, or a counter in the shop, tavern or clinic, to take a job from the open vacancies; right-click again to quit. Each job has a shift and a wage: an idle worker walks to a free spot beside the business's counter when the shift starts, is paid by the hour on leaving, and goes home early if a need gets critical. Giving a worker any other order takes them off their shift for the day. The tavern sells meals and ale, the shop sells bread (the price shows in the menu); building now costs coin and taking something down gives half back. Some of the townspeople work too (each business keeps a vacancy for you), and they earn and spend by the same rules
 - Hover a tile to see what it is and whether it is walkable
-- Save and load (F5 / F9) with an autosave every midnight (`user://autosave.json`). Saves are written to a temporary file first and moved into place, a damaged or cut-off file is refused without changing anything, older saves (formats 1 to 5) still load, and the camera position and zoom come back. New world (N)
+- Save and load (F5 / F9) with an autosave every midnight (`user://autosave.json`). Saves are written to a temporary file first and moved into place, a damaged or cut-off file is refused without changing anything, older saves (formats 1 to 6) still load, and the camera position and zoom come back. New world (N)
 - All content (tiles, seasons, needs, traits, buildings, the town's makeup) comes from JSON files in `data/`, and mods can add or replace it
 
 ## Run it
@@ -82,6 +83,7 @@ scripts/
     placed_object.gd     One bed, pot, wall... standing on the map
     camp_generator.gd    Sets out the starting camp
     household.gd         A group of people: yours (selected, died) or the town's
+    economy.gd           Currency, prices and building costs from data/economy.json
     household_generator.gd  Seed -> starting family (names, looks, where they stand)
     path_finder.gd       A* over the tile map
     simulation.gd        Ticks the world; the commands views may give (order_move, order_use, build_place...)
@@ -147,6 +149,10 @@ To try it, set `"enabled": true` in `mods/example_mod/mod.json` and restart. Gra
 
 `thoughts.json` lists the thoughts. A state thought has a `when` (`need` with `below` or `above`, `idle`, or `alone`) and holds while that is true; thoughts sharing a `group` do not stack, the strongest wins. An event thought has `on` (`used:<object id>`, `interaction:<id>`, `death`) and `hours` it lasts. `only_for` and `never_for` take trait ids.
 
+`economy.json` has one entry: the currency's `symbol`, the `start_coins` of a household, a `npc_start_coins` range for townspeople and the `refund_percent` when something is taken down. An object's `cost` is what building it costs, its `price` is what each use costs (the tavern table is 4d), and `offers_work` (`"town"` for the notice board, `"lot"` for a counter) makes it list vacancies. A floor's `cost` is per tile.
+
+`jobs.json` lists jobs: `workplace` (the kind of building: `tavern`, `shop`, `clinic`, `park`), `positions`, `wage` per hour, the shift's `from` and `to` hours, the `station` object a worker stands beside and `min_age`. The town fills all but one position of each business with townspeople at the start. Wages are the only money coming in and prices and building the only money going out for now; taxes and rent come with the medieval layer.
+
 `worldgen.json` has one entry, `town`: `npc_count`, how many `buildings` of each kind (`tavern`, `shop`, `clinic`, `park`, `house`, `vacant`; a mod can add kinds), the clearing's `half_width`, `half_height_up` and `half_height_down`, the `home_lot_size` and the `vacant_lot_size`.
 
 `buildings.json` holds the templates, each a picture in characters, one per tile: `#` timber wall, `S` stone wall, `+` door, `.` floor, a space for nothing, and a letter for an object (b bed, p cooking pot, h hearth, w wash basin, c chamber pot, l lute, t table, k counter, s shelf, r barrel, n bench, W well). Draw the door in the bottom wall; the generator mirrors the template at random and turns it to face the road. `kind` says what it is (a `house` is filled with a family, one person per bed), `floor` is a floor id from `floors.json` laid inside, and `"public": true` lets anyone use what is in it.
@@ -171,7 +177,7 @@ If you export the game, add `*.json` under **Resources > Filters to export non-r
 godot --headless --path . res://tests/smoke_test.tscn
 ```
 
-This checks data loading, mods, the clock and calendar, world generation (same seed, same world), the town (lots keep apart, everything is reachable, houses are equipped, people live in families, private things stay private, a day in town, a death in town, saving it), pathfinding, pawn movement, the household, the right-click actions, needs and objects, building, death, thoughts and mood, and the save round trip. Run it as a scene as shown; it needs the autoloads, which `--script` mode does not provide.
+This checks data loading, mods, the clock and calendar, world generation (same seed, same world), the town (lots keep apart, everything is reachable, houses are equipped, people live in families, private things stay private, a day in town, a death in town, saving it), pathfinding, pawn movement, the household, the right-click actions, needs and objects, coin and work (prices, build costs, shifts, wages, hiring, quitting), building, coin and work (prices, build costs, hiring, shifts, wages, quitting), death, thoughts and mood, and the save round trip. Run it as a scene as shown; it needs the autoloads, which `--script` mode does not provide.
 
 ```
 godot --headless --path . res://tests/balance_check.tscn
@@ -189,8 +195,8 @@ This is a procedural approximation of the RimWorld look. The real thing relies o
 
 ## Known limits
 
-The lot may include water or rocks you cannot build on. Pawns can walk through each other and are drawn over tree canopies. Social and Faith wait for things that can satisfy them. Townspeople do not talk to each other or to you yet, do not work, and are not clickable; they only live, wander and die. Nobody lives in the tavern, shop or clinic, and nothing is for sale.
+The lot may include water or rocks you cannot build on. Pawns can walk through each other and are drawn over tree canopies. Social and Faith wait for things that can satisfy them. Townspeople's wages come from nowhere and pile up (nothing for them to buy but meals), and there is no business income or trade yet. Townspeople do not talk to each other or to you yet, and are not clickable; they only work, live, wander and die. Nobody lives in the tavern, shop or clinic, and the shop sells only bread.
 
 ## Next
 
-Building has no costs or roofs yet: everything is free and instant, and a house is just walls, a door and a floor. Your lot is given to you; a later milestone replaces that with the three ways of getting land (buy, inherit, arrive with nothing), and the two empty lots are there for a business. Rooms, roofs, materials and builders come after the economy exists.
+Building is instant, with no builders, materials or roofs: a house is just walls, a door and a floor, paid for in coin. Your lot is given to you; a later milestone replaces that with the three ways of getting land (buy, inherit, arrive with nothing), and the two empty lots are there for a business. Rooms, roofs, materials and builders come after the economy exists.

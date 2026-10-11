@@ -44,6 +44,8 @@ var _needs_panel: PanelContainer
 var _needs_name: Label
 var _needs_traits: Label
 var _needs_activity: Label
+var _needs_job: Label
+var _purse_label: Label
 var _mood_bar: ProgressBar
 var _mood_fill: StyleBoxFlat
 var _mood_label: Label
@@ -79,6 +81,11 @@ func _ready() -> void:
 	GameClock.speed_changed.connect(_on_speed_changed)
 	refresh_clock()
 	_on_speed_changed(GameClock.speed_level)
+
+
+## The household's purse, shown under the clock.
+func set_purse(coins: int) -> void:
+	_purse_label.text = "Purse: %s" % Economy.format(coins)
 
 
 func refresh_clock() -> void:
@@ -155,7 +162,7 @@ func show_game_over(text: String) -> void:
 
 
 ## Shows the selected person's name, what they are doing and their need bars (hidden if null).
-func show_pawn(pawn: Pawn, activity: String) -> void:
+func show_pawn(pawn: Pawn, activity: String, job: String = "") -> void:
 	_needs_panel.visible = pawn != null
 	if pawn == null:
 		return
@@ -165,6 +172,7 @@ func show_pawn(pawn: Pawn, activity: String) -> void:
 		trait_names.append(str(DataRegistry.get_def("traits", trait_id).get("name", trait_id)))
 	_needs_traits.text = ", ".join(trait_names) if not trait_names.is_empty() else " "
 	_needs_activity.text = activity
+	_needs_job.text = job if job != "" else "Out of work"
 	_mood_bar.value = pawn.mood
 	_mood_fill.bg_color = BAND_COLORS[Needs.band(pawn.mood)]
 	_mood_label.text = Mood.band_name(pawn.mood).capitalize()
@@ -243,6 +251,11 @@ func _build_clock_panel() -> void:
 	_date_label.add_theme_font_size_override("font_size", 14)
 	_date_label.add_theme_color_override("font_color", TEXT_DIM)
 	top.add_child(_date_label)
+
+	_purse_label = Label.new()
+	_purse_label.add_theme_font_size_override("font_size", 14)
+	_purse_label.add_theme_color_override("font_color", Color(0.90, 0.80, 0.45))
+	box.add_child(_purse_label)
 
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 3)
@@ -344,6 +357,10 @@ func _build_needs_panel() -> void:
 	box.add_child(_needs_traits)
 	_needs_activity = _make_plain_label(13, Color(0.84, 0.78, 0.55))
 	box.add_child(_needs_activity)
+	_needs_job = _make_plain_label(12, TEXT_DIM)
+	_needs_job.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_needs_job.custom_minimum_size = Vector2(190, 0)
+	box.add_child(_needs_job)
 	var separator := HSeparator.new()
 	separator.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(separator)
@@ -510,11 +527,11 @@ func _build_build_ui() -> void:
 		var category := str(object_def.get("category", "furniture")).capitalize()
 		if not tabs.has(category):
 			tabs[category] = []
-		tabs[category].append({ "kind": "place", "id": str(object_def["id"]), "name": str(object_def.get("name", object_def["id"])) })
+		tabs[category].append({ "kind": "place", "id": str(object_def["id"]), "name": str(object_def.get("name", object_def["id"])), "cost": int(object_def.get("cost", 0)) })
 	if DataRegistry.count("floors") > 0:
 		tabs["Floors"] = []
 		for floor_def in DataRegistry.get_list("floors"):
-			tabs["Floors"].append({ "kind": "floor", "id": str(floor_def["id"]), "name": str(floor_def.get("name", floor_def["id"])) })
+			tabs["Floors"].append({ "kind": "floor", "id": str(floor_def["id"]), "name": str(floor_def.get("name", floor_def["id"])), "cost": int(floor_def.get("cost", 0)) })
 	tabs["Tools"] = [
 		{ "kind": "move", "id": "", "name": "Move" },
 		{ "kind": "remove", "id": "", "name": "Remove" },
@@ -543,7 +560,7 @@ func _build_build_ui() -> void:
 			item.button_group = group
 			item.focus_mode = Control.FOCUS_NONE
 			item.custom_minimum_size = Vector2(88, 68)
-			item.tooltip_text = str(entry["name"])
+			item.tooltip_text = str(entry["name"]) + ("  -  %s" % Economy.format(int(entry["cost"])) if int(entry.get("cost", 0)) > 0 else "")
 			_style_button(item)
 			var icon := BuildIcon.new()
 			icon.kind = str(entry["kind"])
@@ -551,7 +568,7 @@ func _build_build_ui() -> void:
 			icon.position = Vector2(22, 2)
 			item.add_child(icon)
 			var label := Label.new()
-			label.text = str(entry["name"])
+			label.text = str(entry["name"]) + ("  %s" % Economy.format(int(entry["cost"])) if int(entry.get("cost", 0)) > 0 else "")
 			label.position = Vector2(0, 48)
 			label.size = Vector2(88, 18)
 			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

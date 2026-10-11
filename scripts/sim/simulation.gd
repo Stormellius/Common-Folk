@@ -10,6 +10,7 @@ extends RefCounted
 
 const THINK_COOLDOWN_TICKS := 30  # wait this long after finding nothing to fix a need with
 const OPTIONS_PER_NEED := 3       # how many nearest objects to try
+const WORK_BREAK_BELOW := 15.0    # a need this low sends a worker off their shift to see to it
 const MOOD_EVERY := 5             # minutes between mood checks for townspeople
 const ROAM_CHANCE := 0.012        # per minute, for an idle townsperson in the daytime
 const ROAM_FROM_MINUTE := 7 * 60
@@ -60,7 +61,7 @@ func step() -> void:
 		if pawn.think_cooldown > 0:
 			pawn.think_cooldown -= 1
 		elif not pawn.is_busy():
-			if not _think(pawn, minute) and town.get_pawn(pawn.id) != null:
+			if not _think(pawn, minute) and not _try_work(pawn, minute) and town.get_pawn(pawn.id) != null:
 				_roam(pawn, minute)
 
 
@@ -109,6 +110,9 @@ func use_blocker(pawn: Pawn, placed: PlacedObject) -> String:
 	var lot := world.lot_at(placed.tile)
 	if not lot.is_empty() and not bool(lot["public"]) and str(lot["id"]) != pawn.home_lot:
 		return "it belongs to someone else"
+	var price := Economy.price(placed.def_id)
+	if price > coins_of(pawn):
+		return "can't afford it (%s)" % Economy.format(price)
 	if _plan_use(pawn, placed).is_empty():
 		return "can't get there"
 	return ""
@@ -199,6 +203,195 @@ func order_interact(pawn: Pawn, other: Pawn, interaction_id: String) -> Dictiona
 	return { "ok": true, "message": "" }
 
 
+# --- coin and work -----------------------------------------------------------------
+
+## The player's household shares a purse; everyone in town carries their own.
+func coins_of(pawn: Pawn) -> int:
+	return household.coins if household.get_pawn(pawn.id) != null else pawn.coins
+
+
+## Adds wages. Fractions are carried over until they make a whole coin.
+func earn(pawn: Pawn, amount: float) -> void:
+	pawn.pay_carry += amount
+	var whole := floori(pawn.pay_carry)
+	pawn.pay_carry -= whole
+	if household.get_pawn(pawn.id) != null:
+		household.coins += whole
+	else:
+		pawn.coins += whole
+
+
+## Pays out of the household purse or the person's pocket. False (and nothing paid) if there is not enough.
+func spend(pawn: Pawn, amount: int) -> bool:
+	if amount > coins_of(pawn):
+		return false
+	if household.get_pawn(pawn.id) != null:
+		household.coins -= amount
+	else:
+		pawn.coins -= amount
+	return true
+
+
+## How many people hold this job at this business.
+func staff_count(lot_id: String, job_id: String) -> int:
+	var count := 0
+	for pawn in people():
+		if pawn.work_lot == lot_id and pawn.work_job == job_id:
+			count += 1
+	return count
+
+
+## Jobs with a vacancy: [{ "lot": lot entry, "job": job def, "open": how many }]. With a lot id,
+## only that business (the counter offers its own work; the notice board lists the whole town's).
+func open_positions(lot_id: String = "") -> Array[Dictionary]:
+	var found: Array[Dictionary] = []
+	for lot in world.lots:
+		if lot_id != "" and str(lot["id"]) != lot_id:
+			continue
+		for job in DataRegistry.get_list("jobs"):
+			if str(job.get("workplace", "")) != str(lot["kind"]):
+				continue
+			var vacancies := int(job.get("positions", 1)) - staff_count(str(lot["id"]), str(job["id"]))
+			if vacancies > 0:
+				found.append({ "lot": lot, "job": job, "open": vacancies })
+	return found
+
+
+## Why `pawn` cannot take this job, or "".
+func hire_blocker(pawn: Pawn, lot_id: String, job_id: String) -> String:
+	var job := DataRegistry.get_def("jobs", job_id)
+	var lot := world.get_lot(lot_id)
+	if job.is_empty() or lot.is_empty() or str(job.get("workplace", "")) != str(lot["kind"]):
+		return "there is no such job"
+	if pawn.work_lot == lot_id and pawn.work_job == job_id:
+		return "already works there"
+	if pawn.age < int(job.get("min_age", 16)):
+		return "must be %d or older" % int(job.get("min_age", 16))
+	if staff_count(lot_id, job_id) >= int(job.get("positions", 1)):
+		return "no vacancy"
+	return ""
+
+
+## Gives `pawn` the job (leaving any other one). Returns { "ok", "message" }.
+func hire(pawn: Pawn, lot_id: String, job_id: String) -> Dictionary:
+	var blocker := hire_blocker(pawn, lot_id, job_id)
+	if blocker != "":
+		return { "ok": false, "message": "Can't take that job: %s" % blocker }
+	quit_job(pawn)
+	pawn.work_lot = lot_id
+	pawn.work_job = job_id
+	pawn.skip_work_day = -1
+	var job := DataRegistry.get_def("jobs", job_id)
+	return { "ok": true, "message": "%s is now a %s at the %s" % [_first_name(pawn), str(job["name"]).to_lower(), str(world.get_lot(lot_id)["name"]).to_lower()] }
+
+
+func quit_job(pawn: Pawn) -> void:
+	if pawn.job_kind == "work":
+		_end_job(pawn)  # paid for the hours so far
+	pawn.work_lot = ""
+	pawn.work_job = ""
+
+
+## "Tavern hand at the tavern, 4d an hour, 12:00 to 20:00", or "" for someone out of work.
+func job_text(pawn: Pawn) -> String:
+	var job := DataRegistry.get_def("jobs", pawn.work_job)
+	if job.is_empty():
+		return ""
+	var lot := world.get_lot(pawn.work_lot)
+	return "%s at the %s: %s an hour, %d:00 to %d:00" % [str(job["name"]), str(lot.get("name", "town")).to_lower(), Economy.format(int(job.get("wage", 0))), int(job["from"]), int(job["to"])]
+
+
+## Called when the player gives an order: a person taken off their shift stays off it today.
+func note_player_order(pawn: Pawn, was_working: bool) -> void:
+	if was_working:
+		pawn.skip_work_day = GameClock.get_day_number()
+
+
+func _on_shift(job: Dictionary, minute: int) -> bool:
+	return minute >= int(job["from"]) * 60 and minute < int(job["to"]) * 60
+
+
+## True when some need is bad enough that work can wait.
+func _needs_break(pawn: Pawn) -> bool:
+	for need_id in active_needs:
+		if Needs.slows_when_empty(need_id) and float(pawn.needs.get(need_id, Needs.FULL)) < WORK_BREAK_BELOW:
+			return true
+	return false
+
+
+## An idle person with a job goes to work when their shift starts (unless the player took them
+## off it today). Returns true if they set off.
+func _try_work(pawn: Pawn, minute: int) -> bool:
+	if pawn.work_job == "" or pawn.skip_work_day == GameClock.get_day_number() or _needs_break(pawn):
+		return false
+	var job := DataRegistry.get_def("jobs", pawn.work_job)
+	if job.is_empty() or not _on_shift(job, minute):
+		return false
+	var plan := _plan_work(pawn, job)
+	if plan.is_empty():
+		pawn.think_cooldown = THINK_COOLDOWN_TICKS
+		return false
+	pawn.path = plan["route"]
+	pawn.job_kind = "work"
+	pawn.job_stage = "walking"
+	pawn.job_tile = plan["tile"]
+	pawn.job_minutes = 0
+	return true
+
+
+## Where to stand for the shift: a free tile beside one of the business's stations.
+func _plan_work(pawn: Pawn, job: Dictionary) -> Dictionary:
+	var lot := world.get_lot(pawn.work_lot)
+	if lot.is_empty():
+		return {}
+	var rect: Rect2i = lot["rect"]
+	var taken := {}
+	for other in people():
+		if other.id != pawn.id and other.job_kind == "work":
+			taken[other.job_tile] = true
+	var candidates: Array[Vector2i] = []
+	for placed in world.objects:
+		if placed.def_id != str(job.get("station", "")) or not rect.has_point(placed.tile):
+			continue
+		for step in [Vector2i(0, 1), Vector2i(1, 0), Vector2i(0, -1), Vector2i(-1, 0)]:
+			var spot: Vector2i = placed.tile + step
+			if rect.has_point(spot) and not taken.has(spot) and spot not in candidates:
+				candidates.append(spot)
+	return _plan_best(pawn, candidates)
+
+
+func _step_work(pawn: Pawn) -> void:
+	var job := DataRegistry.get_def("jobs", pawn.work_job)
+	if job.is_empty() or not _on_shift(job, GameClock.get_minute_of_day()) or _needs_break(pawn):
+		_end_job(pawn)
+		return
+	if pawn.job_stage == "walking":
+		if pawn.is_moving() or not pawn.path.is_empty():
+			return
+		if pawn.tile != pawn.job_tile:
+			_end_job(pawn)  # the route was blocked or cancelled
+			return
+		pawn.job_stage = "using"
+		pawn.job_minutes = 0
+		for step in [Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)]:
+			var there := world.object_at(pawn.tile + step)
+			if there != null and there.def_id == str(job.get("station", "")):
+				pawn.facing = step
+		return
+	pawn.job_minutes += 1
+
+
+## Wages for the minutes worked, and a good feeling if it was at least an hour.
+func _pay_shift(pawn: Pawn) -> void:
+	var job := DataRegistry.get_def("jobs", pawn.work_job)
+	if job.is_empty() or pawn.job_minutes <= 0:
+		return
+	earn(pawn, float(job.get("wage", 0)) * pawn.job_minutes / 60.0)
+	if pawn.job_minutes >= 60:
+		Mood.add_event(pawn, "worked", GameClock.tick)
+		Mood.add_event(pawn, "paid", GameClock.tick)
+
+
 # --- building ----------------------------------------------------------------------
 # The player builds on the home lot only. Each command returns { "ok", "message" }; the
 # message says why not. Nothing costs anything yet: materials come with the economy.
@@ -221,6 +414,9 @@ func build_blocker(def_id: String, tile: Vector2i, ignoring: int = 0) -> String:
 		for pawn in people():
 			if tile == pawn.tile or tile == pawn.committed_tile():
 				return "%s is standing there" % _first_name(pawn)
+	var cost := Economy.object_cost(def_id) if ignoring == 0 else 0  # moving is free
+	if cost > household.coins:
+		return "it costs %s and you have %s" % [Economy.format(cost), Economy.format(household.coins)]
 	return ""
 
 
@@ -228,6 +424,7 @@ func build_place(def_id: String, tile: Vector2i) -> Dictionary:
 	var blocker := build_blocker(def_id, tile)
 	if blocker != "":
 		return { "ok": false, "message": "Can't build here: %s" % blocker }
+	household.coins -= Economy.object_cost(def_id)
 	world.add_object(def_id, tile)
 	_reroute_blocked_walks()
 	return { "ok": true, "message": "" }
@@ -256,10 +453,13 @@ func build_remove(tile: Vector2i) -> Dictionary:
 		return { "ok": false, "message": "The %s can't be taken down" % placed.display_name().to_lower() }
 	if placed != null:
 		_release_user(placed)
+		household.coins += Economy.refund(Economy.object_cost(placed.def_id))
 		world.remove_object(placed.id)
 		_reroute_blocked_walks()
 		return { "ok": true, "message": "" }
+	var old_floor := world.floor_at(tile)
 	if world.set_floor(tile, ""):
+		household.coins += Economy.refund(Economy.floor_cost(old_floor))
 		return { "ok": true, "message": "" }
 	return { "ok": false, "message": "" }  # nothing there; not worth a message
 
@@ -271,7 +471,14 @@ func build_floor(floor_id: String, tile: Vector2i) -> Dictionary:
 		return { "ok": false, "message": "Can't build here: outside your lot" }
 	if not world.is_ground_walkable(tile.x, tile.y):
 		return { "ok": false, "message": "Can't build here: not solid ground" }
-	return { "ok": world.set_floor(tile, floor_id), "message": "" }
+	var cost := Economy.floor_cost(floor_id)
+	if cost > household.coins:
+		return { "ok": false, "message": "Can't build here: it costs %s and you have %s" % [Economy.format(cost), Economy.format(household.coins)] }
+	var old_floor := world.floor_at(tile)
+	if not world.set_floor(tile, floor_id):
+		return { "ok": false, "message": "" }
+	household.coins += Economy.refund(Economy.floor_cost(old_floor)) - cost
+	return { "ok": true, "message": "" }
 
 
 ## Whoever is using or heading for an object stops before it goes away or moves.
@@ -308,7 +515,10 @@ func describe_activity(pawn: Pawn) -> String:
 	var text := "Idle"
 	var placed := world.get_object(pawn.job_object) if pawn.job_kind == "use" else null
 	var partner := person(pawn.job_partner) if pawn.job_kind == "interact" else null
-	if partner != null:
+	if pawn.job_kind == "work":
+		var job_name := str(DataRegistry.get_def("jobs", pawn.work_job).get("name", "work")).to_lower()
+		text = "Working as a %s" % job_name if pawn.job_stage == "using" else "Heading to work"
+	elif partner != null:
 		var interaction := DataRegistry.get_def("interactions", pawn.job_interaction)
 		if pawn.pose == "close":
 			text = str(interaction.get("doing", "Busy"))
@@ -407,6 +617,9 @@ func _step_job(pawn: Pawn) -> void:
 	if pawn.job_kind == "interact":
 		_step_interaction(pawn)
 		return
+	if pawn.job_kind == "work":
+		_step_work(pawn)
+		return
 	if pawn.job_kind != "use":
 		return
 	var placed := world.get_object(pawn.job_object)
@@ -418,6 +631,10 @@ func _step_job(pawn: Pawn) -> void:
 			return
 		if pawn.tile != pawn.job_tile:
 			_end_job(pawn)  # the route was blocked or cancelled
+			return
+		var price := Economy.price(placed.def_id)
+		if price > 0 and not spend(pawn, price):
+			_end_job(pawn)  # somebody spent the money on the way
 			return
 		pawn.job_stage = "using"
 		pawn.job_minutes = 0
@@ -482,6 +699,11 @@ func _step_interaction(pawn: Pawn) -> void:
 
 
 func _end_job(pawn: Pawn) -> void:
+	if pawn.job_kind == "work":
+		if pawn.job_stage == "using":
+			_pay_shift(pawn)
+		else:
+			pawn.path.clear()  # still on the way to work: the walk is off too
 	var placed := world.get_object(pawn.job_object)
 	if placed != null and placed.user_id == pawn.id:
 		placed.user_id = 0
@@ -550,10 +772,11 @@ func _think(pawn: Pawn, minute: int) -> bool:
 	for want in wants:
 		var options: Array[PlacedObject] = []
 		for placed in world.objects:
-			if placed.user_id == 0 and placed.def().get("satisfies", {}).has(want[1]) and _may_use(pawn, placed):
+			if placed.user_id == 0 and placed.def().get("satisfies", {}).has(want[1]) and _may_use(pawn, placed) \
+					and Economy.price(placed.def_id) <= coins_of(pawn):
 				options.append(placed)
 		options.sort_custom(func(a: PlacedObject, b: PlacedObject) -> bool:
-			return _distance(pawn.tile, a.tile) < _distance(pawn.tile, b.tile))
+			return _effort(pawn, a) < _effort(pawn, b))
 		for placed in options.slice(0, OPTIONS_PER_NEED):
 			if order_use(pawn, placed)["ok"]:
 				return true
@@ -595,6 +818,12 @@ func _roam(pawn: Pawn, minute: int) -> void:
 			return
 
 
+## How much trouble an object is to use: how far away, and a little more if it costs money, so
+## that free things at home win over a paid meal when both are near.
+func _effort(pawn: Pawn, placed: PlacedObject) -> int:
+	return _distance(pawn.tile, placed.tile) + (12 if Economy.price(placed.def_id) > 0 else 0)
+
+
 func _distance(a: Vector2i, b: Vector2i) -> int:
 	return absi(a.x - b.x) + absi(a.y - b.y)
 
@@ -614,6 +843,12 @@ func _repair_after_load() -> void:
 				pawn.pose = ""
 			else:
 				placed.user_id = pawn.id
+		elif pawn.job_kind == "work":
+			if DataRegistry.get_def("jobs", pawn.work_job).is_empty() or world.get_lot(pawn.work_lot).is_empty():
+				pawn.job_minutes = 0
+				_end_job(pawn)
+				pawn.work_lot = ""
+				pawn.work_job = ""
 		elif pawn.job_kind == "interact":
 			var partner := person(pawn.job_partner)
 			if partner == null or partner.job_kind != "interact" or partner.job_partner != pawn.id \

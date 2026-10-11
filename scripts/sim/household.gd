@@ -7,6 +7,8 @@ var pawns: Array[Pawn] = []
 var selected_id := -1
 ## Everyone who died, in order: { "name", "cause", "day" }.
 var dead: Array[Dictionary] = []
+## The household's shared purse, in coins (see Economy). The town's people each carry their own.
+var coins := 0
 var _next_id := 1
 
 
@@ -78,7 +80,7 @@ func to_dict() -> Dictionary:
 	var saved_pawns: Array = []
 	for pawn in pawns:
 		saved_pawns.append(pawn.to_dict())
-	return { "pawns": saved_pawns, "selected": selected_id, "next_id": _next_id, "dead": dead.duplicate(true) }
+	return { "pawns": saved_pawns, "selected": selected_id, "next_id": _next_id, "dead": dead.duplicate(true), "coins": coins }
 
 
 static func from_dict(data: Dictionary, first_id: int = 1) -> Household:
@@ -89,6 +91,7 @@ static func from_dict(data: Dictionary, first_id: int = 1) -> Household:
 	for entry in data.get("dead", []):
 		if entry is Dictionary:
 			household.dead.append({ "name": str(entry.get("name", "")), "cause": str(entry.get("cause", "")), "day": int(entry.get("day", 0)) })
+	household.coins = int(data.get("coins", Economy.start_coins()))  # an older save gets a starting purse
 	household._next_id = int(data.get("next_id", first_id + household.pawns.size()))
 	household.selected_id = int(data.get("selected", -1))
 	if household.get_pawn(household.selected_id) == null:

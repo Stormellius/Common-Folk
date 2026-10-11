@@ -1,0 +1,3 @@
+[
+  { "id": "economy", "currency_name": "pennies", "symbol": "d", "start_coins": 120, "npc_start_coins": [10, 40], "refund_percent": 50 }
+]

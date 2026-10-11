@@ -12,6 +12,7 @@ static func create(world: WorldState, size: int = SIZE) -> Household:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = world.world_seed * 7919 + 17
 	var household := Household.new()
+	household.coins = Economy.start_coins()
 	var family := PersonFactory.pick_text(rng, "names", "family", "list", ["Smith"])
 	var used_names: Array[String] = []
 	for spot in _spawn_tiles(world, size):

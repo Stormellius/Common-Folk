@@ -39,13 +39,15 @@ static func draw(ci: CanvasItem, def_id: String, u: float, t: float, occupied: b
 			_chamber_pot(ci, u)
 		"lute":
 			_lute(ci, u)
-		"table":
+		"table", "meal_table":
 			_table(ci, u)
+		"notice_board":
+			_notice_board(ci, u)
 		"counter":
 			_counter(ci, u)
-		"shelf":
+		"shelf", "food_shelf":
 			_shelf(ci, u)
-		"barrel":
+		"barrel", "ale_barrel":
 			_barrel(ci, u)
 		"bench":
 			_bench(ci, u)
@@ -269,6 +271,17 @@ static func _well(ci: CanvasItem, u: float) -> void:
 	ci.draw_circle(Vector2.ZERO, 11.0 * u, Color(0.10, 0.12, 0.14))
 	ci.draw_circle(Vector2.ZERO, 9.0 * u, Color(0.22, 0.38, 0.52))
 	ci.draw_arc(Vector2(-1, -1) * u, 5.0 * u, 3.4, 5.6, 10, Color(0.55, 0.72, 0.84), maxf(1.0, u))
+
+
+## A board on two posts with pinned notes.
+static func _notice_board(ci: CanvasItem, u: float) -> void:
+	_shadow(ci, u, 18.0)
+	_rect(ci, u, -19, -10, 38, 20, Color(0.38, 0.27, 0.17), 1.3)
+	_rect(ci, u, -16, -7, 32, 14, Color(0.62, 0.48, 0.30), 0.0)
+	for note in [[-13, -5, 8, 6, Color(0.92, 0.89, 0.78)], [-2, -6, 7, 7, Color(0.88, 0.84, 0.70)], [8, -4, 6, 5, Color(0.94, 0.91, 0.82)]]:
+		_rect(ci, u, note[0], note[1], note[2], note[3], note[4], 0.7)
+	for post in [-16, 12]:
+		_rect(ci, u, post, 10, 4, 6, Color(0.30, 0.21, 0.13), 0.8)
 
 
 static func _crate(ci: CanvasItem, u: float) -> void:

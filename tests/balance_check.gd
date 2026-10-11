@@ -29,6 +29,9 @@ func _play(world_seed: int, start_day: int) -> void:
 		var town_deaths := [0]
 		sim.pawn_died.connect(func(_person: String, _cause: String, _next: String) -> void: deaths[0] += 1)
 		sim.town_death.connect(func(_person: String, _cause: String) -> void: town_deaths[0] += 1)
+		var coins_at_start := 0
+		for villager in sim.town.pawns:
+			coins_at_start += villager.coins
 		var lowest := {}
 		var total := 0.0
 		var samples := 0
@@ -46,4 +49,10 @@ func _play(world_seed: int, start_day: int) -> void:
 		var rounded := {}
 		for need_id in lowest:
 			rounded[need_id] = snappedf(lowest[need_id], 0.1)
+		var coins_at_end := 0
+		var employed := 0
+		for villager in sim.town.pawns:
+			coins_at_end += villager.coins
+			employed += 1 if villager.work_job != "" else 0
 		print("seed %d, day %d: %d deaths (%d in town), %d people, average mood %.1f, worst mood %.1f, lowest needs %s" % [world_seed, start_day, deaths[0], town_deaths[0], sim.people().size(), total / maxf(1.0, samples), worst_mood, rounded])
+		print("    town: %d in work, pockets %d -> %d coin; household purse %d" % [employed, coins_at_start, coins_at_end, household.coins])

@@ -16,6 +16,7 @@ extends RefCounted
 const LEGEND := {
 	"b": "bed", "p": "cooking_pot", "h": "hearth", "w": "wash_basin", "c": "chamber_pot",
 	"l": "lute", "t": "table", "k": "counter", "s": "shelf", "r": "barrel", "n": "bench", "W": "well",
+	"m": "meal_table", "a": "ale_barrel", "f": "food_shelf", "B": "notice_board",
 }
 const PRIORITY := ["tavern", "shop", "clinic", "park", "house", "vacant"]
 const YARD := 1       # tiles of open ground around a building, inside its lot

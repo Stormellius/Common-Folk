@@ -32,6 +32,12 @@
   { "id": "warmed_up",    "text": "Warmed by the fire",     "mood": 3,   "hours": 6,  "on": "used:hearth" },
   { "id": "washed",       "text": "Had a wash",             "mood": 3,   "hours": 8,  "on": "used:wash_basin" },
   { "id": "played_music", "text": "Played some music",      "mood": 5,   "hours": 10, "on": "used:lute" },
+  { "id": "ate_out",      "text": "Ate out at the tavern", "mood": 5,   "hours": 8,  "on": "used:meal_table" },
+  { "id": "had_a_drink",  "text": "Had a drink",            "mood": 4,   "hours": 6,  "on": "used:ale_barrel" },
+  { "id": "bought_bread", "text": "Bought some bread",      "mood": 2,   "hours": 6,  "on": "used:food_shelf" },
+  { "id": "worked",       "text": "Put in an honest day's work", "mood": 4, "hours": 10, "on": "worked", "never_for": ["lazy"] },
+  { "id": "worked_lazy",  "text": "Worn out by work",       "mood": -3,  "hours": 10, "on": "worked", "only_for": ["lazy"] },
+  { "id": "paid",         "text": "Earned good coin",       "mood": 3,   "hours": 12, "on": "paid", "only_for": ["greedy"] },
   { "id": "closeness",    "text": "Time with someone close", "mood": 10, "hours": 24, "on": "interaction:intimacy" },
   { "id": "grief",        "text": "Someone in the household died", "mood": -15, "hours": 72, "on": "death" }
 ]
