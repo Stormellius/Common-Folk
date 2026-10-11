@@ -6,9 +6,10 @@ extends RefCounted
 ## turn into Dictionaries), a save is just those dictionaries written out. As new
 ## systems are added (needs, relationships) each one adds its own section.
 ##
-## Format 1 had no household; those saves still load, and the caller makes a new one.
+## Older saves still load: format 1 had no household (the caller makes one), and formats 1 and 2
+## had no objects or needs (the caller places a camp, and the simulation fills in the needs).
 
-const FORMAT_VERSION := 2
+const FORMAT_VERSION := 3
 
 
 ## Writes the save file. Returns OK or a Godot error code.

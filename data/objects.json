@@ -1,0 +1,8 @@
+[
+  { "id": "bed",         "name": "Straw bed",    "action": "Sleep",                "doing": "Sleeping",               "blocks_walking": false, "use_position": "on",     "pose": "lie", "satisfies": { "rest": 14.0 },    "max_use_minutes": 600 },
+  { "id": "cooking_pot", "name": "Cooking pot",  "action": "Eat a meal",           "doing": "Eating",                 "blocks_walking": true,  "use_position": "beside", "satisfies": { "hunger": 150.0 }, "max_use_minutes": 45 },
+  { "id": "hearth",      "name": "Hearth",       "action": "Warm up by the fire",  "doing": "Warming up",             "blocks_walking": true,  "use_position": "beside", "satisfies": { "warmth": 40.0 },  "max_use_minutes": 120 },
+  { "id": "wash_basin",  "name": "Wash basin",   "action": "Wash",                 "doing": "Washing",                "blocks_walking": true,  "use_position": "beside", "satisfies": { "hygiene": 120.0 }, "max_use_minutes": 45 },
+  { "id": "chamber_pot", "name": "Chamber pot",  "action": "Use the chamber pot",  "doing": "Using the chamber pot",  "blocks_walking": true,  "use_position": "beside", "satisfies": { "toilet": 300.0 }, "max_use_minutes": 10 },
+  { "id": "lute",        "name": "Lute",         "action": "Play the lute",        "doing": "Playing the lute",       "blocks_walking": true,  "use_position": "beside", "satisfies": { "fun": 30.0 },     "max_use_minutes": 120 }
+]

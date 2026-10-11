@@ -12,6 +12,7 @@ var _menu_pawn_id := -1     # who the open right-click menu is for
 var _menu_tile := Vector2i.ZERO  # and which tile it was opened on
 
 @onready var map_view: MapView = $MapView
+@onready var object_layer: ObjectLayer = $ObjectLayer
 @onready var pawn_layer: PawnLayer = $PawnLayer
 @onready var tile_cursor: TileCursor = $TileCursor
 @onready var camera: CameraController = $Camera
@@ -70,7 +71,8 @@ func _unhandled_input(event: InputEvent) -> void:
 ## seed = world seed, day = day number to start on (0 = first), hour = hour of day,
 ## zoom = camera zoom, look = tile to center the camera on (x,y), speed = 0 (paused) to 3,
 ## walk = tile (x,y) to send the selected person to at the start,
-## menu = tile (x,y) to open the right-click menu on at the start.
+## menu = tile (x,y) to open the right-click menu on at the start,
+## needs = need values for the selected person, such as rest:10,hunger:30.
 ## Handy for screenshots and testing.
 func _launch_option(name: String) -> String:
 	var prefix := "--%s=" % name
@@ -102,6 +104,11 @@ func _apply_launch_options() -> void:
 		var goal := _launch_option("walk").split(",")
 		if goal.size() == 2 and sim.household.selected() != null:
 			sim.order_move(sim.household.selected(), Vector2i(int(goal[0]), int(goal[1])))
+	if _launch_option("needs") != "" and sim != null and sim.household.selected() != null:
+		for pair in _launch_option("needs").split(","):
+			var parts := pair.split(":")
+			if parts.size() == 2:
+				sim.household.selected().needs[parts[0]] = float(parts[1])
 	if _launch_option("menu") != "" and sim != null:
 		var spot := _launch_option("menu").split(",")
 		if spot.size() == 2:
@@ -114,7 +121,9 @@ func _apply_launch_options() -> void:
 func _start_new_world(world_seed: int) -> void:
 	GameClock.reset()
 	var new_world := MapGenerator.generate(world_seed, MAP_WIDTH, MAP_HEIGHT)
-	_show_world(new_world, HouseholdGenerator.create(new_world))
+	var household := HouseholdGenerator.create(new_world)
+	CampGenerator.place(new_world, household)
+	_show_world(new_world, household)
 
 
 func _show_world(new_world: WorldState, household: Household) -> void:
@@ -122,12 +131,19 @@ func _show_world(new_world: WorldState, household: Household) -> void:
 	sim = Simulation.new(world, household)
 	map_view.set_world(world)
 	tile_cursor.set_world(world)
+	object_layer.bind(sim)
 	pawn_layer.bind(sim)
 	hud.close_action_menu()
 	hud.set_household(household)
 	camera.set_world_size(Vector2(world.width, world.height) * MapView.TILE_SIZE)
 	_center_on_selected()
 	hud.set_info(_describe_tile(Vector2i(-1, -1)))
+
+
+func _process(_delta: float) -> void:
+	if sim != null:
+		var chosen := sim.household.selected()
+		hud.show_pawn(chosen, sim.describe_activity(chosen) if chosen != null else "")
 
 
 func _on_tick(_tick: int) -> void:
@@ -188,6 +204,8 @@ func _load() -> void:
 		var household: Household = result["household"]
 		if household == null:  # a save from before there were people
 			household = HouseholdGenerator.create(loaded_world)
+		if loaded_world.objects.is_empty():  # a save from before there were things
+			CampGenerator.place(loaded_world, household)
 		_show_world(loaded_world, household)
 		hud.show_message("Game loaded")
 	else:
@@ -205,4 +223,6 @@ func _describe_tile(tile: Vector2i) -> String:
 	var tile_id := world.get_tile_id(tile.x, tile.y)
 	var tile_name := str(DataRegistry.get_def("tiles", tile_id).get("name", tile_id))
 	var walk := "walkable" if world.is_walkable(tile.x, tile.y) else "blocked"
-	return "Tile (%d, %d): %s, %s\n%s" % [tile.x, tile.y, tile_name, walk, footer]
+	var placed := world.object_at(tile)
+	var what := tile_name if placed == null else "%s with %s" % [tile_name, placed.display_name().to_lower()]
+	return "Tile (%d, %d): %s, %s\n%s" % [tile.x, tile.y, what, walk, footer]

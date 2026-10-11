@@ -59,6 +59,8 @@ func _process(delta: float) -> void:
 	elif _phase != 0.0:
 		_phase = 0.0
 		queue_redraw()
+	if pawn.pose == "lie":
+		queue_redraw()  # the floating Zzz drifts
 	if pawn.facing != _drawn_facing:
 		queue_redraw()
 
@@ -74,10 +76,24 @@ func _draw() -> void:
 			var a := TAU * i / 24.0
 			ring.append(Vector2(cos(a) * 17.0, 7.0 + sin(a) * 10.0) * u)
 		draw_polyline(ring, Color(1.0, 0.95, 0.6, 0.95), 2.0)
-	PawnArt.draw(self, pawn.look, pawn.facing, u, _phase)
+	var asleep := pawn.pose == "lie"
+	PawnArt.draw(self, pawn.look, pawn.facing, u, _phase, asleep)
+	if asleep:
+		_draw_blanket_and_zzz(u)
 	if show_name:
 		var font := ThemeDB.fallback_font
 		draw_set_transform(Vector2(0.0, 27.0 * u), 0.0, Vector2(label_scale, label_scale))
 		draw_string_outline(font, Vector2(-70.0, 0.0), pawn.display_name, HORIZONTAL_ALIGNMENT_CENTER, 140.0, 13, 4, Color(0, 0, 0, 0.85))
 		draw_string(font, Vector2(-70.0, 0.0), pawn.display_name, HORIZONTAL_ALIGNMENT_CENTER, 140.0, 13, Color(0.95, 0.94, 0.9))
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## A blanket pulled up to the chest, and a little Zzz drifting up from the head.
+func _draw_blanket_and_zzz(u: float) -> void:
+	draw_rect(Rect2(Vector2(-15.0, -1.0) * u, Vector2(30.0, 17.0) * u), PawnArt.OUTLINE)
+	draw_rect(Rect2(Vector2(-14.0, 0.0) * u, Vector2(28.0, 15.0) * u), Color(0.49, 0.31, 0.31))
+	draw_line(Vector2(-14.0, 3.0) * u, Vector2(14.0, 3.0) * u, Color(0.64, 0.44, 0.44), maxf(1.0, 1.5 * u))
+	var drift := sin(Time.get_ticks_msec() / 500.0) * 2.0
+	var font := ThemeDB.fallback_font
+	draw_string_outline(font, Vector2(11.0, -17.0 + drift) * u, "Zzz", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, 4, Color(0, 0, 0, 0.8))
+	draw_string(font, Vector2(11.0, -17.0 + drift) * u, "Zzz", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.92, 0.94, 1.0))

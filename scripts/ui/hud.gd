@@ -29,6 +29,17 @@ var _time_label: Label
 var _info_label: Label
 var _toast_label: Label
 var _speed_buttons: Array[Button] = []
+const BAND_COLORS := {
+	"good": Color(0.48, 0.60, 0.32),
+	"low": Color(0.80, 0.64, 0.25),
+	"critical": Color(0.71, 0.28, 0.23),
+}
+
+var _needs_panel: PanelContainer
+var _needs_name: Label
+var _needs_traits: Label
+var _needs_activity: Label
+var _need_rows: Dictionary = {}  # need id -> { "bar": ProgressBar, "fill": StyleBoxFlat }
 var _household_row: HBoxContainer
 var _action_menu := ActionMenu.new()
 var _chips: Dictionary = {}  # pawn id -> Button
@@ -40,6 +51,7 @@ func _ready() -> void:
 	_build_clock_panel()
 	_build_corner_labels()
 	_build_household_bar()
+	_build_needs_panel()
 	add_child(_action_menu)  # last, so it sits above the other panels
 	_action_menu.action_chosen.connect(func(id: String) -> void: action_chosen.emit(id))
 	GameClock.ticked.connect(func(_tick: int) -> void: refresh_clock())
@@ -87,6 +99,24 @@ func set_household(household: Household) -> void:
 		_household_row.add_child(chip)
 		_chips[pawn.id] = chip
 	set_selected(household.selected_id)
+
+
+## Shows the selected person's name, what they are doing and their need bars (hidden if null).
+func show_pawn(pawn: Pawn, activity: String) -> void:
+	_needs_panel.visible = pawn != null
+	if pawn == null:
+		return
+	_needs_name.text = pawn.display_name
+	var trait_names: Array[String] = []
+	for trait_id in pawn.traits:
+		trait_names.append(str(DataRegistry.get_def("traits", trait_id).get("name", trait_id)))
+	_needs_traits.text = ", ".join(trait_names) if not trait_names.is_empty() else " "
+	_needs_activity.text = activity
+	for need_id in _need_rows:
+		var value := float(pawn.needs.get(need_id, Needs.FULL))
+		var row: Dictionary = _need_rows[need_id]
+		row["bar"].value = value
+		row["fill"].bg_color = BAND_COLORS[Needs.band(value)]
 
 
 ## Pops up the right-click menu at a screen position.
@@ -226,6 +256,65 @@ func _make_panel_label(text: String, color: Color, size: int) -> PanelContainer:
 	label.add_theme_font_size_override("font_size", size)
 	margin.add_child(label)
 	return panel
+
+
+func _build_needs_panel() -> void:
+	_needs_panel = PanelContainer.new()
+	add_child(_needs_panel)
+	_needs_panel.add_theme_stylebox_override("panel", _flat_box(PANEL_COLOR, PANEL_BORDER, 1, 0))
+	_needs_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_needs_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER_LEFT, Control.PRESET_MODE_MINSIZE, 10)
+	_needs_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	var margin := MarginContainer.new()
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for side in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
+		margin.add_theme_constant_override(side, 8)
+	_needs_panel.add_child(margin)
+	var box := VBoxContainer.new()
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_theme_constant_override("separation", 3)
+	margin.add_child(box)
+
+	_needs_name = _make_plain_label(16, TEXT_COLOR)
+	box.add_child(_needs_name)
+	_needs_traits = _make_plain_label(12, TEXT_DIM)
+	box.add_child(_needs_traits)
+	_needs_activity = _make_plain_label(13, Color(0.84, 0.78, 0.55))
+	box.add_child(_needs_activity)
+	var separator := HSeparator.new()
+	separator.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(separator)
+
+	for need_id in Needs.active_ids():
+		var row := HBoxContainer.new()
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_theme_constant_override("separation", 6)
+		box.add_child(row)
+		var label := _make_plain_label(13, TEXT_COLOR)
+		label.text = str(DataRegistry.get_def("needs", need_id).get("name", need_id))
+		label.custom_minimum_size = Vector2(62, 0)
+		row.add_child(label)
+		var bar := ProgressBar.new()
+		bar.min_value = 0.0
+		bar.max_value = Needs.FULL
+		bar.show_percentage = false
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		bar.custom_minimum_size = Vector2(110, 10)
+		bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		var fill := _flat_box(BAND_COLORS["good"], Color(0, 0, 0, 0), 0, 0)
+		bar.add_theme_stylebox_override("background", _flat_box(Color(0.05, 0.05, 0.06), PANEL_BORDER, 1, 0))
+		bar.add_theme_stylebox_override("fill", fill)
+		row.add_child(bar)
+		_need_rows[need_id] = { "bar": bar, "fill": fill }
+	_needs_panel.visible = false
+
+
+func _make_plain_label(size: int, color: Color) -> Label:
+	var label := Label.new()
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_font_size_override("font_size", size)
+	label.add_theme_color_override("font_color", color)
+	return label
 
 
 func _build_household_bar() -> void:

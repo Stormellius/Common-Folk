@@ -38,6 +38,11 @@ static func create(world: WorldState, size: int = SIZE) -> Household:
 			"bottom": _pick_text(rng, "appearance", "bottom", "colors", ["#4a3d32"]),
 			"hair_style": hair_styles[rng.randi() % hair_styles.size()],
 		}
+		var trait_ids := DataRegistry.get_ids("traits")
+		if not trait_ids.is_empty():
+			pawn.traits.append(str(trait_ids[rng.randi() % trait_ids.size()]))
+		for need_id in Needs.active_ids():
+			pawn.needs[need_id] = snappedf(rng.randf_range(55.0, 95.0), 0.01)  # not everyone hungry at once
 		pawn.tile = spot
 		pawn.step_to = spot
 		household.add_pawn(pawn)

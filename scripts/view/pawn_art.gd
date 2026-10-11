@@ -26,22 +26,22 @@ static func facing_kind(facing: Vector2i) -> int:
 
 ## Draws one pawn on a CanvasItem (call this from its _draw). `phase` is the walk cycle:
 ## feet and hands swing with sin(phase); pass 0 to stand still.
-static func draw(ci: CanvasItem, look: Dictionary, facing: Vector2i, u: float, phase: float) -> void:
+static func draw(ci: CanvasItem, look: Dictionary, facing: Vector2i, u: float, phase: float, lying: bool = false) -> void:
 	var skin := Color(str(look.get("skin", "#e0ac80")))
 	var hair := Color(str(look.get("hair", "#4a3220")))
 	var top := Color(str(look.get("top", "#6a7a4a")))
 	var bottom := Color(str(look.get("bottom", "#4a3d32")))
 	var style := int(look.get("hair_style", 0)) % HAIR_STYLES
-	var kind := facing_kind(facing)
+	var kind := SOUTH if lying else facing_kind(facing)  # in bed: head up, face to the ceiling
 	var side := kind == EAST or kind == WEST
 	var sx := 1.0 if kind == EAST else (-1.0 if kind == WEST else 0.0)
-	var swing := sin(phase)
+	var swing := 0.0 if lying else sin(phase)
 	var bob := -absf(swing) * 1.3
 
 	_ellipse(ci, Vector2(3.0, 7.0) * u, Vector2(12.0, 6.5) * u, Color(0, 0, 0, 0.22))
 
-	# Feet swing back and forth while walking.
-	for s in [-1.0, 1.0]:
+	# Feet swing back and forth while walking (a blanket hides them in bed).
+	for s in [] if lying else [-1.0, 1.0]:
 		var foot := Vector2(swing * s * 4.5, 11.0) if side else Vector2(s * 4.5, 10.5 + swing * s * 3.0)
 		_ellipse_outlined(ci, foot * u, Vector2(3.2, 2.8) * u, bottom.darkened(0.15), u)
 
@@ -52,7 +52,7 @@ static func draw(ci: CanvasItem, look: Dictionary, facing: Vector2i, u: float, p
 	_ellipse(ci, (torso_center + Vector2(-1.5, -1.8)) * u, torso_radius * 0.55 * u, Color(1, 1, 1, 0.12))
 
 	# Hands.
-	for s in [-1.0, 1.0]:
+	for s in [] if lying else [-1.0, 1.0]:
 		var hand := Vector2(swing * s * 4.5, 4.5) if side else Vector2(s * 11.5, 4.0 + swing * s * 2.0)
 		_ellipse_outlined(ci, hand * u, Vector2(2.6, 2.6) * u, skin, 0.9 * u)
 
@@ -84,7 +84,10 @@ static func draw(ci: CanvasItem, look: Dictionary, facing: Vector2i, u: float, p
 		_ellipse_outlined(ci, bun * u, Vector2(3.4, 3.4) * u, hair, 0.8 * u)
 
 	# Eyes: two from the front, one in profile, none from behind.
-	if kind == SOUTH:
+	if kind == SOUTH and lying:  # eyes shut
+		for s in [-1.0, 1.0]:
+			ci.draw_line((head + Vector2(s * 3.3 - 1.6, 1.2)) * u, (head + Vector2(s * 3.3 + 1.6, 1.2)) * u, EYE, maxf(1.0, 1.3 * u))
+	elif kind == SOUTH:
 		for s in [-1.0, 1.0]:
 			_ellipse(ci, (head + Vector2(s * 3.3, 1.0)) * u, Vector2(1.3, 1.5) * u, EYE)
 	elif side:

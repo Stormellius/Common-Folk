@@ -23,6 +23,25 @@ var facing := Vector2i(0, 1)
 ## Tiles still to walk, not including the step in progress.
 var path: Array[Vector2i] = []
 
+## How full each need is, 0 to 100, by need id (only the needs in play; see Needs).
+var needs: Dictionary = {}
+## Trait ids from data/traits.json; they change how fast needs drain.
+var traits: Array[String] = []
+## True while any need is empty: the person drags their feet.
+var slowed := false
+
+## What the person is doing on their own account, apart from walking orders:
+## "" (nothing) or "use" (going to, or busy with, an object).
+var job_kind := ""
+var job_object := 0          # id of the PlacedObject being used
+var job_stage := ""          # "walking" on the way there, "using" once started
+var job_tile := Vector2i.ZERO  # where the person stands while using it
+var job_minutes := 0         # how long the use has gone on
+## "" standing, or "lie" while sleeping. Set by the simulation, read by the view.
+var pose := ""
+## Ticks to wait before looking for something to do about a need again.
+var think_cooldown := 0
+
 ## The step in progress: heading to `step_to`, `step_ticks_done` of `step_ticks_total` done.
 var step_to := Vector2i.ZERO
 var step_ticks_total := 0
@@ -35,6 +54,11 @@ func is_moving() -> bool:
 
 func has_orders() -> bool:
 	return is_moving() or not path.is_empty()
+
+
+## True while walking somewhere or busy with an object.
+func is_busy() -> bool:
+	return has_orders() or job_kind != ""
 
 
 ## 0 to 1 progress through the step in progress.
@@ -69,6 +93,8 @@ func tick(world: WorldState) -> void:
 		var cost := BASE_MOVE_TICKS * maxf(world.get_move_cost(next.x, next.y), 1.0)
 		if diagonal:
 			cost *= 1.41421
+		if slowed:
+			cost *= 1.5
 		step_to = next
 		step_ticks_total = maxi(1, roundi(cost))
 		step_ticks_done = 0
@@ -97,6 +123,16 @@ func to_dict() -> Dictionary:
 		"step_to": _vec_to_array(step_to),
 		"step_total": step_ticks_total,
 		"step_done": step_ticks_done,
+		"needs": _rounded(needs),
+		"traits": Array(traits),
+		"slowed": slowed,
+		"job": job_kind,
+		"job_object": job_object,
+		"job_stage": job_stage,
+		"job_tile": _vec_to_array(job_tile),
+		"job_minutes": job_minutes,
+		"pose": pose,
+		"think": think_cooldown,
 	}
 
 
@@ -116,7 +152,29 @@ static func from_dict(data: Dictionary) -> Pawn:
 	pawn.step_to = _array_to_vec(data.get("step_to", [0, 0]))
 	pawn.step_ticks_total = int(data.get("step_total", 0))
 	pawn.step_ticks_done = int(data.get("step_done", 0))
+	var saved_needs: Variant = data.get("needs", {})
+	if saved_needs is Dictionary:
+		for need_id in saved_needs:
+			pawn.needs[str(need_id)] = float(saved_needs[need_id])
+	for trait_id in data.get("traits", []):
+		pawn.traits.append(str(trait_id))
+	pawn.slowed = bool(data.get("slowed", false))
+	pawn.job_kind = str(data.get("job", ""))
+	pawn.job_object = int(data.get("job_object", 0))
+	pawn.job_stage = str(data.get("job_stage", ""))
+	pawn.job_tile = _array_to_vec(data.get("job_tile", [0, 0]))
+	pawn.job_minutes = int(data.get("job_minutes", 0))
+	pawn.pose = str(data.get("pose", ""))
+	pawn.think_cooldown = int(data.get("think", 0))
 	return pawn
+
+
+## Need values rounded for the save file, so a save and a reload give identical numbers.
+static func _rounded(values: Dictionary) -> Dictionary:
+	var result := {}
+	for key in values:
+		result[key] = snappedf(float(values[key]), 0.01)
+	return result
 
 
 static func _vec_to_array(v: Vector2i) -> Array:

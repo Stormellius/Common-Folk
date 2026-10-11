@@ -1,6 +1,6 @@
 # Common Folk
 
-**Common Folk** is a medieval life sim sandbox with RimWorld-style looks: you live one person's life at a time in a randomly generated town that keeps running without you. The full plan is in the design document; this project is at **milestone 2 (One pawn)**.
+**Common Folk** is a medieval life sim sandbox with RimWorld-style looks: you live one person's life at a time in a randomly generated town that keeps running without you. The full plan is in the design document; this project is at **milestone 3 (Needs)**.
 
 ## What works now
 
@@ -11,6 +11,8 @@
 - Game clock with pause and 1x / 2x / 3x speed, a calendar with seasons, and a clock panel
 - A household of three people (names and looks from the world seed) drawn in RimWorld-style top-down art made by code. Control one at a time: click a person (or their portrait at the bottom, or press Tab) to select them, then right-click anywhere for a menu of what they can do there (walk, stop, switch to a neighbor, and later sleep, eat and work). The others keep walking if they have orders
 - Pathfinding around water and rock with A* (forest is slower to cross, diagonals never cut corners), walking at one step per clock tick so pause and speed control apply
+- Needs: hunger, rest, warmth, hygiene, toilet and fun fall over time (faster or slower with traits, and warmth faster in winter). A starter camp near the crossroads has a bed for everyone plus a cooking pot, hearth, wash basin, chamber pot and lute. When nobody is giving orders, a person with a low need walks to the nearest free thing that fixes it and uses it until the need is full; people head to bed earlier after dark. Your orders always win, and an empty need slows a person down
+- A panel on the left shows the selected person's needs and what they are doing; right-click an object for its action (Sleep, Eat a meal, Wash...)
 - Hover a tile to see what it is and whether it is walkable
 - Save and load (F5 / F9), new world (N)
 - All content (tiles, seasons, needs, traits) comes from JSON files in `data/`, and mods can add or replace it
@@ -27,7 +29,7 @@ Options go after `--` on the command line, which is handy for testing and screen
 godot --path . -- --seed=1234 --day=50 --hour=12 --zoom=0.5 --look=70,30 --speed=0
 ```
 
-`seed` is the world, `day` and `hour` set the date (day 0 is the first day, 15 days per season), `zoom` the camera zoom, `look` the tile to center on, and `speed` 0 to 3, `walk` a tile (such as `--walk=70,50`) to send the selected person to, and `menu` a tile to open the right-click menu on.
+`seed` is the world, `day` and `hour` set the date (day 0 is the first day, 15 days per season), `zoom` the camera zoom, `look` the tile to center on, and `speed` 0 to 3, `walk` a tile (such as `--walk=70,50`) to send the selected person to, and `menu` a tile to open the right-click menu on, and `needs` values for the selected person (such as `--needs=rest:10,hunger:30`).
 
 ## Controls
 
@@ -67,6 +69,9 @@ scripts/
     map_generator.gd     Seed -> terrain
     pawn.gd              One person: position, walking path, one step per tick
     pawn_actions.gd      What a person can do at a spot (the right-click menu's entries)
+    needs.gd             Which needs are in play, drain rates, when to look for a fix
+    placed_object.gd     One bed, pot... standing on the map
+    camp_generator.gd    Sets out the starting camp
     household.gd         The people you control and who is selected
     household_generator.gd  Seed -> starting family (names, looks, where they stand)
     path_finder.gd       A* over the tile map
@@ -77,6 +82,9 @@ scripts/
     day_night.gd         Tints the map by time of day
     tile_cursor.gd       Hover highlight and grid
     pawn_art.gd          Draws a person with code (swap for sprites later)
+    object_art.gd        Draws beds, pots, the hearth... with code
+    object_view.gd       One object on screen
+    object_layer.gd      All objects, drawn under the people
     pawn_view.gd         One pawn on screen, gliding between tiles
     pawn_layer.gd        All pawns, route overlay and mouse orders
     camera_controller.gd Pan and zoom
@@ -111,7 +119,17 @@ A mod is a folder in `mods/` (or `user://mods/` in a built game) with the same k
 
 To try it, set `"enabled": true` in `mods/example_mod/mod.json` and restart. Grass turns bright green. Problems in data files (bad JSON, missing ids) are shown on screen and printed as warnings.
 
-`names.json` (given names and family names) and `appearance.json` (skin, hair and clothing colors) feed the household generator, so a mod can change who your people are. `needs.json` and `traits.json` are starter content for milestones 3 and 7; nothing reads them yet.
+`names.json` (given names and family names) and `appearance.json` (skin, hair and clothing colors) feed the household generator, so a mod can change who your people are. `needs.json` lists the needs (`drain_per_hour`, and `optional: true` for ones nobody has yet); `traits.json` changes drain rates; both are used now, and traits will matter more in milestone 7. Seasons in `seasons.json` can carry `need_drain_multipliers` (winter makes warmth drain 2.5 times faster).
+
+`objects.json` describes the things people use:
+
+```json
+{ "id": "bed", "name": "Straw bed", "action": "Sleep", "doing": "Sleeping",
+  "blocks_walking": false, "use_position": "on", "pose": "lie",
+  "satisfies": { "rest": 14.0 }, "max_use_minutes": 600 }
+```
+
+`satisfies` is points restored per hour of use; a person stops when every need it fills is full or after `max_use_minutes`. `use_position` is `on` (stand on the tile) or `beside`. `action` is the right-click menu entry and `doing` the activity shown in the panel. A need is only in play while some object satisfies it, so adding an object with `"satisfies": { "faith": 20 }` switches Faith on (it also needs `optional` to be false). Objects with no drawing in `object_art.gd` appear as a crate.
 
 If you export the game, add `*.json` under **Resources > Filters to export non-resource files** so the data files are included.
 
@@ -131,27 +149,8 @@ This is a procedural approximation of the RimWorld look. The real thing relies o
 
 ## Known limits
 
-Pawns can walk through each other and are drawn over tree canopies. Neither matters until there are buildings and more people; both get revisited with milestones 3 and 4.
+Pawns can walk through each other and are drawn over tree canopies. Needs have no mood or death consequences yet beyond slowing people down. Social, Faith and Libido wait for things that can satisfy them.
 
-## Next: milestone 3, needs
+## Next: milestone 4, building
 
-Hunger, energy and the other needs from `needs.json` that fall over time, and a person who walks to food or a bed and uses it on their own when you are not giving orders.
-
-## Working with git
-
-This folder is already a git repository on the `main` branch. Godot's generated `.godot/` folder is ignored. After unzipping:
-
-```
-git config user.name "Your Name"
-git config user.email "you@example.com"
-git log --oneline          # the history so far, one commit per step
-```
-
-To put it on GitHub, create an empty repository there, then:
-
-```
-git remote add origin git@github.com:YOUR-NAME/common-folk.git
-git push -u origin main
-```
-
-Commit after each working change (`git add -A && git commit -m "..."`) so you can always go back.
+Let the player place, move and remove things and walls on their lot, with the routes and the camp updating as they go.

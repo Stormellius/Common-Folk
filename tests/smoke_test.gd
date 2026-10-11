@@ -22,6 +22,7 @@ func _ready() -> void:
 	_test_pawn_movement()
 	_test_household()
 	_test_actions()
+	_test_needs()
 	_test_save_and_load()
 	print("")
 	if _failures == 0:
@@ -43,9 +44,9 @@ func _test_registry() -> void:
 	print("Data registry")
 	_check(DataRegistry.count("tiles") >= 5, "tiles.json loaded")
 	_check(DataRegistry.count("seasons") == 4, "seasons.json has four seasons")
-	_check(DataRegistry.count("needs") == 7, "needs.json has seven needs")
+	_check(DataRegistry.count("needs") >= 7, "needs.json has at least the seven starting needs")
 	_check(DataRegistry.count("traits") >= 6, "traits.json loaded")
-	_check(DataRegistry.count("names") == 3 and DataRegistry.count("appearance") == 4, "names.json and appearance.json loaded")
+	_check(DataRegistry.count("names") == 3 and DataRegistry.count("appearance") == 4 and DataRegistry.count("objects") >= 6, "names, appearance and objects loaded")
 	_check(DataRegistry.has_def("tiles", "grass"), "grass tile exists")
 	_check(not DataRegistry.has_def("tiles", "nonexistent"), "unknown id reports missing")
 	_check(DataRegistry.get_def("tiles", "nonexistent").is_empty(), "unknown id gives an empty Dictionary")
@@ -376,6 +377,142 @@ func _test_actions() -> void:
 	menu.queue_free()
 
 
+## A 24x12 meadow with one person at (2, 2); every need full except the ones given.
+func _needs_setup(low: Dictionary) -> Dictionary:
+	GameClock.set_time(0, 12)  # noon, so the night-time bedtime rule is off
+	var world := WorldState.new(24, 12, 1, "grass")
+	var household := Household.new()
+	var person := Pawn.new()
+	person.display_name = "Tester One"
+	person.tile = Vector2i(2, 2)
+	person.step_to = person.tile
+	for need_id in Needs.active_ids():
+		person.needs[need_id] = low.get(need_id, 100.0)
+	household.add_pawn(person)
+	return { "world": world, "household": household, "pawn": person }
+
+
+func _run_until_idle(sim: Simulation, pawn: Pawn, limit: int = 1500) -> int:
+	var ticks := 0
+	while ticks < limit:
+		sim.step()
+		ticks += 1
+		if not pawn.is_busy() and pawn.think_cooldown == 0 and ticks > 1:
+			break
+	return ticks
+
+
+func _test_needs() -> void:
+	print("Needs and objects")
+	var active := Needs.active_ids()
+	_check("hunger" in active and "rest" in active and "toilet" in active and "fun" in active, "needs with something to fix them are in play")
+	_check("social" not in active and "faith" not in active and "libido" not in active, "needs with nothing to fix them, or optional ones, stay dormant")
+	var per_tick := Needs.drain_per_tick("hunger", [], {})
+	_check(absf(per_tick - 4.0 / 60.0) < 0.0001, "hunger drains at the rate in needs.json")
+	_check(Needs.drain_per_tick("hunger", ["glutton"], {}) > per_tick * 1.4, "the glutton trait speeds hunger up")
+	_check(Needs.drain_per_tick("warmth", [], { "warmth": 2.5 }) > 2.0 * 2.4 / 60.0, "a cold season speeds warmth loss up")
+	_check(Needs.seek_below("rest", 23 * 60) > Needs.seek_below("rest", 12 * 60), "people go looking for a bed earlier at night")
+	_check(Needs.band(80.0) == "good" and Needs.band(30.0) == "low" and Needs.band(5.0) == "critical", "bars are banded good, low and critical")
+
+	# Eating: a hungry person walks to the pot, eats until full and lets it go.
+	var setup := _needs_setup({ "hunger": 20.0 })
+	var world: WorldState = setup["world"]
+	var pawn: Pawn = setup["pawn"]
+	var pot := world.add_object("cooking_pot", Vector2i(10, 5))
+	_check(pot != null and not world.is_walkable(10, 5), "an object that blocks walking makes its tile unwalkable")
+	var sim := Simulation.new(world, setup["household"])
+	var ticks := _run_until_idle(sim, pawn)
+	_check(float(pawn.needs["hunger"]) > 90.0, "a hungry person goes to eat and ends up full (%d ticks)" % ticks)
+	_check(pot.user_id == 0 and pawn.job_kind == "", "the pot is free again afterwards")
+	_check(absi(pawn.tile.x - 10) + absi(pawn.tile.y - 5) == 1, "they ate standing beside the pot")
+
+	# Sleeping: on the bed, lying down, until rested.
+	setup = _needs_setup({ "rest": 10.0 })
+	world = setup["world"]
+	pawn = setup["pawn"]
+	var bed := world.add_object("bed", Vector2i(8, 2))
+	sim = Simulation.new(world, setup["household"])
+	var lay_down := false
+	for i in 1500:
+		sim.step()
+		if pawn.pose == "lie" and pawn.tile == Vector2i(8, 2):
+			lay_down = true
+		if not pawn.is_busy() and i > 5:
+			break
+	_check(lay_down, "a tired person lies down on the bed")
+	_check(float(pawn.needs["rest"]) >= 99.0 and pawn.pose == "" and bed.user_id == 0, "they get up rested and the bed is free")
+
+	# Content people stay put; other needs run down slowly rather than all at once.
+	setup = _needs_setup({})
+	pawn = setup["pawn"]
+	setup["world"].add_object("bed", Vector2i(8, 2))
+	sim = Simulation.new(setup["world"], setup["household"])
+	for i in 100:
+		sim.step()
+	_check(not pawn.is_busy() and pawn.tile == Vector2i(2, 2), "someone with every need full does nothing")
+	_check(float(pawn.needs["hunger"]) < 100.0 and float(pawn.needs["hunger"]) > 90.0, "needs drain a little each tick")
+
+	# One person at a time; orders from the player win.
+	setup = _needs_setup({ "hunger": 10.0 })
+	world = setup["world"]
+	var household: Household = setup["household"]
+	var second := Pawn.new()
+	second.display_name = "Tester Two"
+	second.tile = Vector2i(3, 2)
+	second.step_to = second.tile
+	for need_id in Needs.active_ids():
+		second.needs[need_id] = 100.0
+	household.add_pawn(second)
+	pot = world.add_object("cooking_pot", Vector2i(10, 5))
+	sim = Simulation.new(world, household)
+	pawn = household.pawns[0]
+	sim.step()
+	_check(pawn.job_kind == "use" and pot.user_id == pawn.id, "a hungry person reserves the pot")
+	_check("is using it" in sim.use_blocker(second, pot), "someone else is told it is in use")
+	_check(not sim.order_use(second, pot)["ok"], "a second person cannot take it")
+	var menu_entry := PawnActions.list_for(sim, second, Vector2i(10, 5))[0]
+	_check(not menu_entry["enabled"] and menu_entry["id"] == PawnActions.USE_PREFIX + str(pot.id), "the menu lists it as in use")
+	sim.order_move(pawn, Vector2i(2, 9))
+	_check(pawn.job_kind == "" and pot.user_id == 0, "a walking order from the player cancels the job and frees the pot")
+	var free_entry := PawnActions.list_for(sim, second, Vector2i(10, 5))[0]
+	_check(free_entry["enabled"] and sim.order_use(second, pot)["ok"], "now the other person can use it")
+	sim.order_stop(second)
+	_check(pot.user_id == 0 and second.job_kind == "", "stopping puts the job down")
+
+	# Empty needs slow people down.
+	setup = _needs_setup({ "hunger": 0.0 })
+	pawn = setup["pawn"]
+	sim = Simulation.new(setup["world"], setup["household"])
+	sim.step()
+	_check(pawn.slowed, "an empty need slows someone down")
+	sim.order_move(pawn, Vector2i(3, 2))
+	var slow_ticks := 0
+	while pawn.has_orders() and slow_ticks < 50:
+		sim.step()
+		slow_ticks += 1
+	_check(slow_ticks > int(Pawn.BASE_MOVE_TICKS), "so a one-tile walk takes longer than usual (%d ticks)" % slow_ticks)
+
+	# The starting camp.
+	var big_world := MapGenerator.generate(42, 96, 64)
+	var family := HouseholdGenerator.create(big_world)
+	CampGenerator.place(big_world, family)
+	var beds := 0
+	var spots := {}
+	var on_road := false
+	for placed in big_world.objects:
+		beds += 1 if placed.def_id == "bed" else 0
+		spots[placed.tile] = true
+		on_road = on_road or placed.tile.x == 48 or placed.tile.y == 32
+	_check(beds == family.pawns.size(), "there is a bed for everyone")
+	_check(spots.size() == big_world.objects.size() and big_world.objects.size() == family.pawns.size() + CampGenerator.SHARED.size(), "every object has its own tile")
+	_check(not on_road, "the roads through the middle are kept clear")
+	var again := MapGenerator.generate(42, 96, 64)
+	CampGenerator.place(again, HouseholdGenerator.create(again))
+	_check(again.to_dict()["objects"] == big_world.to_dict()["objects"], "the same seed gives the same camp")
+	GameClock.reset()
+	GameClock.set_speed(1)
+
+
 func _test_save_and_load() -> void:
 	print("Save and load")
 	var world := MapGenerator.generate(7, 64, 48)
@@ -383,9 +520,15 @@ func _test_save_and_load() -> void:
 	GameClock.advance_ticks(123)
 	var saved_tick := GameClock.tick
 	var household := HouseholdGenerator.create(world)
+	CampGenerator.place(world, household)
 	var walker := household.pawns[0]
 	var sim := Simulation.new(world, household)
-	sim.order_move(walker, walker.tile + Vector2i(3, 0))
+	var pot: PlacedObject = null
+	for placed in world.objects:
+		if placed.def_id == "cooking_pot":
+			pot = placed
+	sim.order_move(household.pawns[1], household.pawns[1].tile + Vector2i(3, 0))
+	sim.order_use(walker, pot)
 	sim.step()
 	household.select(household.pawns[1].id)
 	_check(SaveGame.save(TEST_SAVE, world, household) == OK, "save file is written")
@@ -399,7 +542,10 @@ func _test_save_and_load() -> void:
 	_check(GameClock.tick == saved_tick, "the clock is restored")
 	var loaded_household: Household = result["household"]
 	var same := loaded_household != null and loaded_household.to_dict() == household.to_dict()
-	_check(same, "household, selection and walking orders survive a round trip")
+	_check(same, "household, needs, jobs and walking orders survive a round trip")
+	_check(loaded.to_dict()["objects"] == world.to_dict()["objects"] and loaded.objects.size() == world.objects.size(), "objects survive a round trip")
+	var reloaded_sim := Simulation.new(loaded, loaded_household)
+	_check(loaded.get_object(pot.id).user_id == walker.id and reloaded_sim.household.pawns[0].job_kind == "use", "a person on their way to an object is still reserved for it after loading")
 	var legacy := FileAccess.open(TEST_SAVE, FileAccess.WRITE)
 	legacy.store_string(JSON.stringify({ "format": 1, "world": world.to_dict(), "clock": GameClock.to_dict() }))
 	legacy.close()
