@@ -1,6 +1,6 @@
-# Medieval Sim
+# Common Folk
 
-A medieval life sim sandbox with RimWorld-style looks: you live one person's life at a time in a randomly generated town that keeps running without you. The full plan is in the design document; this project is at **milestone 2 (One pawn)**.
+**Common Folk** is a medieval life sim sandbox with RimWorld-style looks: you live one person's life at a time in a randomly generated town that keeps running without you. The full plan is in the design document; this project is at **milestone 2 (One pawn)**.
 
 ## What works now
 
@@ -134,3 +134,22 @@ Pawns can walk through each other and are drawn over tree canopies. Neither matt
 ## Next: milestone 3, needs
 
 Hunger, energy and the other needs from `needs.json` that fall over time, and a person who walks to food or a bed and uses it on their own when you are not giving orders.
+
+## Working with git
+
+This folder is already a git repository on the `main` branch. Godot's generated `.godot/` folder is ignored. After unzipping:
+
+```
+git config user.name "Your Name"
+git config user.email "you@example.com"
+git log --oneline          # the history so far, one commit per step
+```
+
+To put it on GitHub, create an empty repository there, then:
+
+```
+git remote add origin git@github.com:YOUR-NAME/common-folk.git
+git push -u origin main
+```
+
+Commit after each working change (`git add -A && git commit -m "..."`) so you can always go back.
