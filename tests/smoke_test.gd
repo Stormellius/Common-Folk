@@ -24,6 +24,7 @@ func _ready() -> void:
 	_test_actions()
 	_test_needs()
 	_test_building()
+	_test_death()
 	_test_save_and_load()
 	print("")
 	if _failures == 0:
@@ -825,6 +826,116 @@ func _test_building() -> void:
 	controller._unhandled_input(escape)
 	_check(not controller.active, "Esc with no tool leaves build mode")
 	controller.queue_free()
+
+
+func _test_death() -> void:
+	print("Death and the household")
+	var setup := _building_setup()
+	var world: WorldState = setup["world"]
+	var household: Household = setup["household"]
+	var first: Pawn = setup["pawn"]
+	var second := Pawn.new()
+	second.display_name = "Builder Two"
+	second.tile = Vector2i(4, 5)
+	second.step_to = second.tile
+	for need_id in Needs.active_ids():
+		second.needs[need_id] = 100.0
+	household.add_pawn(second)
+	var third := Pawn.new()
+	third.display_name = "Builder Three"
+	third.tile = Vector2i(5, 5)
+	third.step_to = third.tile
+	for need_id in Needs.active_ids():
+		third.needs[need_id] = 100.0
+	household.add_pawn(third)
+	var sim: Simulation = setup["sim"]
+	var announced: Array = []
+	sim.pawn_died.connect(func(person: String, cause: String, successor: String) -> void: announced.append([person, cause, successor]))
+
+	# Libido at zero is harmless; hunger at zero is not.
+	first.needs["libido"] = 0.0
+	sim.step()
+	_check(not first.slowed, "an empty libido does not slow anyone down")
+	first.needs["fun"] = 0.0
+	sim.step()
+	_check(first.slowed, "but an empty fun does")
+	first.needs["fun"] = 100.0
+
+	# Starving takes a long time and ends in a death.
+	first.needs["hunger"] = 0.0
+	for i in 100:
+		sim.step()
+	_check(household.pawns.size() == 3 and int(first.deprivation.get("hunger", 0)) >= 99, "being hungry for a while does not kill, but it is counted")
+	first.needs["hunger"] = 50.0
+	sim.step()
+	_check(not first.deprivation.has("hunger"), "a bite to eat starts the clock over")
+	first.needs["hunger"] = 0.0
+	first.deprivation["hunger"] = int(Needs.fatal_after_hours("hunger") * 60.0) - 2
+	household.select(first.id)
+	var ticks := 0
+	while household.pawns.size() == 3 and ticks < 10:
+		sim.step()
+		ticks += 1
+	_check(household.pawns.size() == 2 and household.get_pawn(first.id) == null, "after three days empty, a person dies and leaves the household")
+	_check(announced.size() == 1 and announced[0][0] == "Builder One" and announced[0][1] == "starved" and announced[0][2] == "Builder Two", "the death is announced with the cause and who you control now")
+	_check(household.selected_id == second.id, "control passes to the next person")
+	_check(household.dead.size() == 1 and household.dead[0]["name"] == "Builder One", "the dead are remembered")
+	var graves := 0
+	for placed in world.objects:
+		graves += 1 if placed.def_id == "grave" else 0
+	_check(graves == 1, "a grave is left behind")
+	_check(not sim.is_game_over(), "the others carry on")
+
+	# Dying in the middle of something lets go of it.
+	var bed := world.add_object("bed", Vector2i(8, 8))
+	second.needs["rest"] = 5.0
+	sim.step()
+	_check(second.job_kind == "use" and bed.user_id == second.id, "someone heads for the bed")
+	sim.die(second, "of old age")
+	_check(bed.user_id == 0 and household.selected_id == third.id, "when they die the bed is free and control passes on")
+	var saved := household.to_dict()
+	var reloaded := Household.from_dict(JSON.parse_string(JSON.stringify(saved)))
+	_check(reloaded.dead.size() == 2 and reloaded.dead[1]["cause"] == "of old age", "the dead survive a save")
+	var pawn_copy := Pawn.from_dict(JSON.parse_string(JSON.stringify(first.to_dict())))
+	_check(pawn_copy.deprivation == first.deprivation, "so does the time someone has gone without")
+
+	# The last one.
+	var announced_last := [""]
+	sim.pawn_died.connect(func(_p: String, _c: String, successor: String) -> void: announced_last[0] = successor)
+	sim.die(third, "froze to death")
+	_check(sim.is_game_over() and household.selected() == null and household.selected_id == -1, "with nobody left the playthrough is over")
+	_check(announced_last[0] == "", "and nobody is named as the successor")
+	sim.step()
+	_check(true, "the world keeps ticking without anyone")
+
+	# Graves stay put.
+	var grave_tile := Vector2i(-1, -1)
+	for placed in world.objects:
+		if placed.def_id == "grave":
+			grave_tile = placed.tile
+	world.lot = Rect2i(0, 0, 24, 12)
+	_check(not sim.build_remove(grave_tile)["ok"] and world.object_at(grave_tile) != null, "a grave cannot be taken down")
+
+	# The household bar and the end screen.
+	var hud := Hud.new()
+	add_child(hud)
+	var living := Household.new()
+	var one := Pawn.new()
+	one.display_name = "Chip One"
+	for need_id in Needs.active_ids():
+		one.needs[need_id] = 90.0
+	living.add_pawn(one)
+	hud.set_household(living)
+	hud.update_household_status(living)
+	_check(hud._chip_marks[one.id].color == Hud.BAND_COLORS["good"], "a healthy person's chip is green")
+	one.needs["hunger"] = 10.0
+	hud.update_household_status(living)
+	_check(hud._chip_marks[one.id].color == Hud.BAND_COLORS["critical"] and "Hunger" in hud._chips[one.id].tooltip_text, "a person with a critical need gets a red chip that says which")
+	hud.show_game_over("The end")
+	_check(hud._game_over_panel.visible and hud._game_over_label.text == "The end", "the end screen shows its message")
+	hud.show_game_over("")
+	_check(not hud._game_over_panel.visible, "and hides again")
+	hud.queue_free()
 
 
 func _test_save_and_load() -> void:

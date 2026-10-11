@@ -14,6 +14,9 @@ const OPTIONS_PER_NEED := 3       # how many nearest objects to try
 var world: WorldState
 var household: Household
 var pathfinder: PathFinder
+## Someone died: their name, what killed them and the name of whoever you now control ("" if
+## nobody is left, which ends the playthrough).
+signal pawn_died(person: String, cause: String, successor: String)
 ## Ids of the needs in play; see Needs.
 var active_needs: Array[String] = []
 
@@ -30,8 +33,11 @@ func _init(p_world: WorldState, p_household: Household) -> void:
 func step() -> void:
 	var season_multipliers := _season_multipliers()
 	var minute := GameClock.get_minute_of_day()
-	for pawn in household.pawns:
-		_drain_needs(pawn, season_multipliers)
+	for pawn in household.pawns.duplicate():
+		var cause := _drain_needs(pawn, season_multipliers)
+		if cause != "":
+			die(pawn, cause)
+			continue
 		pawn.tick(world)
 		_step_job(pawn)
 		if pawn.think_cooldown > 0:
@@ -212,6 +218,8 @@ func build_remove(tile: Vector2i) -> Dictionary:
 	if not world.in_lot(tile):
 		return { "ok": false, "message": "Outside your lot" }
 	var placed := world.object_at(tile)
+	if placed != null and not bool(placed.def().get("buildable", true)):
+		return { "ok": false, "message": "The %s can't be taken down" % placed.display_name().to_lower() }
 	if placed != null:
 		_release_user(placed)
 		world.remove_object(placed.id)
@@ -292,15 +300,53 @@ func _season_multipliers() -> Dictionary:
 	return DataRegistry.get_def("seasons", season_id).get("need_drain_multipliers", {})
 
 
-func _drain_needs(pawn: Pawn, season_multipliers: Dictionary) -> void:
+## Drains the needs a little. Returns what killed the person ("starved"...) or "".
+func _drain_needs(pawn: Pawn, season_multipliers: Dictionary) -> String:
 	var empty := false
+	var cause := ""
 	for need_id in active_needs:
 		var value := float(pawn.needs.get(need_id, Needs.FULL))
 		value = maxf(0.0, value - Needs.drain_per_tick(need_id, pawn.traits, season_multipliers))
 		pawn.needs[need_id] = value
-		if value <= 0.0:
+		if value <= 0.0 and Needs.slows_when_empty(need_id):
 			empty = true
+		var limit := Needs.fatal_after_hours(need_id)
+		if limit > 0.0:
+			if value <= 0.0:
+				pawn.deprivation[need_id] = int(pawn.deprivation.get(need_id, 0)) + 1
+				if pawn.deprivation[need_id] >= limit * 60.0:
+					cause = str(DataRegistry.get_def("needs", need_id).get("death_cause", "died"))
+			elif pawn.deprivation.has(need_id):
+				pawn.deprivation.erase(need_id)  # relief: the clock starts over
 	pawn.slowed = empty
+	return cause
+
+
+## Someone dies: whatever they were doing stops, a grave is left where they fell, and control
+## passes to the next person in the household. With nobody left the playthrough is over.
+func die(pawn: Pawn, cause: String) -> void:
+	_end_job(pawn)
+	pawn.path.clear()
+	var spot := pawn.committed_tile()
+	household.dead.append({ "name": pawn.display_name, "cause": cause, "day": GameClock.get_day_number() })
+	household.remove_pawn(pawn.id)
+	_place_grave(spot)
+	var successor := household.selected()
+	pawn_died.emit(pawn.display_name, cause, successor.display_name if successor != null else "")
+
+
+func is_game_over() -> bool:
+	return household.pawns.is_empty()
+
+
+func _place_grave(spot: Vector2i) -> void:
+	if not DataRegistry.has_def("objects", "grave"):
+		return
+	for radius in 3:
+		for dy in range(-radius, radius + 1):
+			for dx in range(-radius, radius + 1):
+				if maxi(absi(dx), absi(dy)) == radius and world.add_object("grave", spot + Vector2i(dx, dy)) != null:
+					return
 
 
 func _step_job(pawn: Pawn) -> void:

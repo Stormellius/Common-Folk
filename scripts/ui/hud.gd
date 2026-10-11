@@ -48,6 +48,9 @@ var _need_rows: Dictionary = {}  # need id -> { "bar": ProgressBar, "fill": Styl
 var _household_row: HBoxContainer
 var _action_menu := ActionMenu.new()
 var _chips: Dictionary = {}  # pawn id -> Button
+var _chip_marks: Dictionary = {}  # pawn id -> ColorRect, the strip showing how they are doing
+var _game_over_panel: PanelContainer
+var _game_over_label: Label
 var _toast_serial := 0
 var _build_button: Button
 var _build_panel: PanelContainer
@@ -64,6 +67,7 @@ func _ready() -> void:
 	_build_household_bar()
 	_build_needs_panel()
 	_build_build_ui()
+	_build_game_over_panel()
 	add_child(_action_menu)  # last, so it sits above the other panels
 	_action_menu.action_chosen.connect(func(id: String) -> void: action_chosen.emit(id))
 	GameClock.ticked.connect(func(_tick: int) -> void: refresh_clock())
@@ -84,6 +88,7 @@ func set_household(household: Household) -> void:
 	for chip in _household_row.get_children():
 		chip.queue_free()
 	_chips.clear()
+	_chip_marks.clear()
 	var group := ButtonGroup.new()
 	for pawn in household.pawns:
 		var chip := Button.new()
@@ -106,11 +111,43 @@ func set_household(household: Household) -> void:
 		label.add_theme_font_size_override("font_size", 12)
 		label.add_theme_color_override("font_color", TEXT_COLOR)
 		chip.add_child(label)
+		var mark := ColorRect.new()  # green, amber or red: the worst of their needs
+		mark.position = Vector2(4, 64)
+		mark.size = Vector2(80, 3)
+		mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		chip.add_child(mark)
+		_chip_marks[pawn.id] = mark
 		var id := pawn.id
 		chip.pressed.connect(func() -> void: pawn_chosen.emit(id))
 		_household_row.add_child(chip)
 		_chips[pawn.id] = chip
 	set_selected(household.selected_id)
+
+
+## Colors each household chip by the worst need of that person, so you can see who is in
+## trouble while you control someone else. Cheap enough to call every frame.
+func update_household_status(household: Household) -> void:
+	for pawn in household.pawns:
+		if not _chip_marks.has(pawn.id):
+			continue
+		var worst_value := Needs.FULL
+		var worst_need := ""
+		for need_id in pawn.needs:
+			if float(pawn.needs[need_id]) < worst_value and need_id in Needs.active_ids():
+				worst_value = float(pawn.needs[need_id])
+				worst_need = str(need_id)
+		var band := Needs.band(worst_value)
+		_chip_marks[pawn.id].color = BAND_COLORS[band]
+		var tip := pawn.display_name
+		if band != "good":
+			tip += "  -  %s %s" % [str(DataRegistry.get_def("needs", worst_need).get("name", worst_need)), "is critical" if band == "critical" else "is low"]
+		_chips[pawn.id].tooltip_text = tip
+
+
+## Covers the screen with the end-of-playthrough message, or hides it (empty text).
+func show_game_over(text: String) -> void:
+	_game_over_panel.visible = text != ""
+	_game_over_label.text = text
 
 
 ## Shows the selected person's name, what they are doing and their need bars (hidden if null).
@@ -344,6 +381,25 @@ func _build_household_bar() -> void:
 	_household_row = HBoxContainer.new()
 	_household_row.add_theme_constant_override("separation", 4)
 	margin.add_child(_household_row)
+
+
+func _build_game_over_panel() -> void:
+	_game_over_panel = PanelContainer.new()
+	add_child(_game_over_panel)
+	_game_over_panel.add_theme_stylebox_override("panel", _flat_box(Color(0.05, 0.04, 0.04, 0.88), PANEL_BORDER, 1, 0))
+	_game_over_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE)
+	_game_over_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_game_over_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	var margin := MarginContainer.new()
+	for side in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
+		margin.add_theme_constant_override(side, 24)
+	_game_over_panel.add_child(margin)
+	_game_over_label = Label.new()
+	_game_over_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_game_over_label.add_theme_font_size_override("font_size", 20)
+	_game_over_label.add_theme_color_override("font_color", TEXT_COLOR)
+	margin.add_child(_game_over_label)
+	_game_over_panel.visible = false
 
 
 # --- build mode -------------------------------------------------------------------

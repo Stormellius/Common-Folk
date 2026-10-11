@@ -47,6 +47,11 @@ static func slows_when_empty(need_id: String) -> bool:
 	return bool(DataRegistry.get_def("needs", need_id).get("slows_when_empty", true))
 
 
+## How many hours a need may stay empty before it kills, or 0 if it never does.
+static func fatal_after_hours(need_id: String) -> float:
+	return float(DataRegistry.get_def("needs", need_id).get("fatal_after_hours", 0.0))
+
+
 ## Below this value an idle person starts looking for a fix.
 static func seek_below(need_id: String, minute_of_day: int) -> float:
 	var override: Variant = DataRegistry.get_def("needs", need_id).get("seek_below")

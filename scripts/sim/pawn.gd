@@ -31,6 +31,8 @@ var needs: Dictionary = {}
 var traits: Array[String] = []
 ## True while any need is empty: the person drags their feet.
 var slowed := false
+## How many game minutes each deadly need (hunger, warmth) has been empty; see Simulation.
+var deprivation: Dictionary = {}
 
 ## What the person is doing on their own account, apart from walking orders:
 ## "" (nothing), "use" (going to, or busy with, an object) or "interact" (with `job_partner`).
@@ -133,6 +135,7 @@ func to_dict() -> Dictionary:
 		"needs": _rounded(needs),
 		"traits": Array(traits),
 		"slowed": slowed,
+		"deprivation": deprivation.duplicate(),
 		"job": job_kind,
 		"job_partner": job_partner,
 		"job_interaction": job_interaction,
@@ -169,6 +172,10 @@ static func from_dict(data: Dictionary) -> Pawn:
 	for trait_id in data.get("traits", []):
 		pawn.traits.append(str(trait_id))
 	pawn.slowed = bool(data.get("slowed", false))
+	var saved_deprivation: Variant = data.get("deprivation", {})
+	if saved_deprivation is Dictionary:
+		for need_id in saved_deprivation:
+			pawn.deprivation[str(need_id)] = int(saved_deprivation[need_id])
 	pawn.job_kind = str(data.get("job", ""))
 	pawn.job_partner = int(data.get("job_partner", 0))
 	pawn.job_interaction = str(data.get("job_interaction", ""))

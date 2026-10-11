@@ -25,6 +25,8 @@ static func draw(ci: CanvasItem, def_id: String, u: float, t: float, occupied: b
 			_wall(ci, u, connections, Color(0.56, 0.57, 0.58), Color(0.39, 0.40, 0.41))
 		"door":
 			_door(ci, u, connections)
+		"grave":
+			_grave(ci, u)
 		"bed":
 			_bed(ci, u, occupied)
 		"cooking_pot":
@@ -189,6 +191,13 @@ static func _door(ci: CanvasItem, u: float, connections: int) -> void:
 	else:
 		ci.draw_line(Vector2(-19, 0) * u, Vector2(19, 0) * u, line, maxf(1.0, u))
 		ci.draw_circle(Vector2(11, 2.5) * u, 1.6 * u, Color(0.16, 0.12, 0.08))
+
+
+static func _grave(ci: CanvasItem, u: float) -> void:
+	_ellipse(ci, u, Vector2(0, 5), Vector2(15.0, 10.0), Color(0.33, 0.25, 0.18), 1.2)  # a low mound
+	_ellipse(ci, u, Vector2(0, 4), Vector2(11.0, 6.5), Color(0.41, 0.31, 0.22), 0.0)
+	_rect(ci, u, -2, -15, 4, 18, Color(0.45, 0.33, 0.21), 1.0)  # a wooden cross
+	_rect(ci, u, -7, -10, 14, 4, Color(0.45, 0.33, 0.21), 1.0)
 
 
 static func _crate(ci: CanvasItem, u: float) -> void:

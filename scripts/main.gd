@@ -83,6 +83,7 @@ func _unhandled_input(event: InputEvent) -> void:
 ## menu = tile (x,y) to open the right-click menu on at the start,
 ## needs = need values for the selected person, such as rest:10,hunger:30,
 ## build = start in build mode with a tool, such as place:wall, floor:planks, remove or move,
+## dying = the selected person is minutes from starving (to see the death and the hand-over),
 ## demohouse = build a small walled room with a door and a floor on the lot, using the real build commands.
 ## Handy for screenshots and testing.
 func _launch_option(name: String) -> String:
@@ -124,6 +125,10 @@ func _apply_launch_options() -> void:
 		for person in sim.household.pawns:
 			person.needs["libido"] = 10.0
 		sim.order_interact(sim.household.pawns[0], sim.household.pawns[1], "intimacy")
+	if _launch_option("dying") != "" and sim != null and sim.household.selected() != null:
+		var doomed := sim.household.selected()
+		doomed.needs["hunger"] = 0.0
+		doomed.deprivation["hunger"] = int(Needs.fatal_after_hours("hunger") * 60.0) - 4
 	if _launch_option("demohouse") != "" and sim != null:
 		_build_demo_house()
 	if _launch_option("build") != "" and sim != null:
@@ -169,6 +174,8 @@ func _start_new_world(world_seed: int) -> void:
 func _show_world(new_world: WorldState, household: Household) -> void:
 	world = new_world
 	sim = Simulation.new(world, household)
+	sim.pawn_died.connect(_on_pawn_died)
+	hud.show_game_over("")
 	map_view.set_world(world)
 	tile_cursor.set_world(world)
 	floor_layer.bind(world)
@@ -184,8 +191,20 @@ func _show_world(new_world: WorldState, household: Household) -> void:
 
 func _process(_delta: float) -> void:
 	if sim != null:
+		hud.update_household_status(sim.household)
 		var chosen := sim.household.selected()
 		hud.show_pawn(chosen, sim.describe_activity(chosen) if chosen != null else "")
+
+
+func _on_pawn_died(person: String, cause: String, successor: String) -> void:
+	hud.set_household(sim.household)
+	if successor != "":
+		hud.show_message("%s %s. You now control %s." % [person, cause, successor], 6.0)
+		_on_pawn_chosen(sim.household.selected_id)
+	else:
+		GameClock.set_speed(0)
+		var days := GameClock.get_day_number() + 1
+		hud.show_game_over("%s %s.\n\nThe household has died out, after %d days.\n\nN: new world     F9: load a save" % [person, cause, days])
 
 
 func _on_tick(_tick: int) -> void:

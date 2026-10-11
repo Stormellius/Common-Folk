@@ -1,7 +1,7 @@
 [
-  { "id": "hunger",  "name": "Hunger",  "drain_per_hour": 4.0, "optional": false },
+  { "id": "hunger",  "name": "Hunger",  "drain_per_hour": 4.0, "optional": false, "fatal_after_hours": 72, "death_cause": "starved" },
   { "id": "rest",    "name": "Rest",    "drain_per_hour": 3.0, "optional": false },
-  { "id": "warmth",  "name": "Warmth",  "drain_per_hour": 2.0, "optional": false },
+  { "id": "warmth",  "name": "Warmth",  "drain_per_hour": 2.0, "optional": false, "fatal_after_hours": 48, "death_cause": "froze to death" },
   { "id": "hygiene", "name": "Hygiene", "drain_per_hour": 2.0, "optional": false },
   { "id": "social",  "name": "Social",  "drain_per_hour": 2.0, "optional": false },
   { "id": "fun",     "name": "Fun",     "drain_per_hour": 2.0, "optional": false },

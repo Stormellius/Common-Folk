@@ -7,5 +7,6 @@
   { "id": "lute",        "name": "Lute",         "action": "Play the lute",        "doing": "Playing the lute",       "blocks_walking": true,  "use_position": "beside", "satisfies": { "fun": 30.0 },     "max_use_minutes": 120 },
   { "id": "wall",       "name": "Timber wall",  "category": "structure", "blocks_walking": true,  "connects": "wall", "drag": true },
   { "id": "stone_wall", "name": "Stone wall",   "category": "structure", "blocks_walking": true,  "connects": "wall", "drag": true },
-  { "id": "door",       "name": "Wooden door",  "category": "structure", "blocks_walking": false, "connects": "wall" }
+  { "id": "door",       "name": "Wooden door",  "category": "structure", "blocks_walking": false, "connects": "wall" },
+  { "id": "grave",      "name": "Grave",        "category": "structure", "blocks_walking": false, "buildable": false }
 ]
