@@ -956,7 +956,8 @@ func _test_save_and_load() -> void:
 	sim.order_use(walker, pot)
 	sim.step()
 	household.select(household.pawns[1].id)
-	_check(SaveGame.save(TEST_SAVE, world, household) == OK, "save file is written")
+	_check(SaveGame.save(TEST_SAVE, world, household, { "camera": [123.5, 456.0], "zoom": 1.5 }) == OK, "save file is written")
+	_check(not FileAccess.file_exists(TEST_SAVE + ".tmp"), "no half-written file is left behind")
 
 	GameClock.reset()
 	var result := SaveGame.load_from(TEST_SAVE)
@@ -976,6 +977,19 @@ func _test_save_and_load() -> void:
 	legacy.close()
 	var old_result := SaveGame.load_from(TEST_SAVE)
 	_check(old_result["ok"] and old_result["household"] == null, "a version 1 save without people still loads")
+
+	SaveGame.save(TEST_SAVE, world, household, { "camera": [123.5, 456.0], "zoom": 1.5 })
+	var viewed := SaveGame.load_from(TEST_SAVE)
+	_check(viewed["ok"] and viewed["view"]["camera"] == [123.5, 456.0] and viewed["view"]["zoom"] == 1.5, "the camera is remembered")
+	_check(SaveGame.newest([TEST_SAVE, "user://nothing_here.json"]) == TEST_SAVE and SaveGame.newest(["user://nothing_here.json"]) == "", "the newest save is found, and none is reported as none")
+	var before_tick := GameClock.tick
+	_write_file(TEST_SAVE, "{ \"format\": 4, \"world\": { \"width\": 0 }, \"clock\": { \"tick\": 99999 } }")
+	var empty_world := SaveGame.load_from(TEST_SAVE)
+	_check(not empty_world["ok"] and GameClock.tick == before_tick, "a save with no map is refused without touching the clock")
+	_write_file(TEST_SAVE, "{ \"format\": 4, \"world\": { \"wid")
+	_check(not SaveGame.load_from(TEST_SAVE)["ok"], "a cut-off file reports damage instead of crashing")
+	_write_file(TEST_SAVE, "{ \"format\": 99, \"world\": {} }")
+	_check("different version" in str(SaveGame.load_from(TEST_SAVE)["error"]), "a save from a newer game says so")
 
 	var missing := SaveGame.load_from("user://does_not_exist.json")
 	_check(not missing["ok"], "a missing save reports an error instead of crashing")

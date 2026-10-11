@@ -13,37 +13,60 @@ extends RefCounted
 const FORMAT_VERSION := 4
 
 
-## Writes the save file. Returns OK or a Godot error code.
-static func save(path: String, world: WorldState, household: Household = null) -> Error:
+## Writes the save file. Returns OK or a Godot error code. `view` is anything the screen wants
+## remembered (the camera), handed back by load_from. The file is written next to the real one
+## and moved into place, so a crash in the middle never leaves a half-written save.
+static func save(path: String, world: WorldState, household: Household = null, view: Dictionary = {}) -> Error:
 	var data := {
 		"format": FORMAT_VERSION,
 		"world": world.to_dict(),
 		"clock": GameClock.to_dict(),
+		"view": view,
 	}
 	if household != null:
 		data["household"] = household.to_dict()
-	var file := FileAccess.open(path, FileAccess.WRITE)
+	var temp_path := path + ".tmp"
+	var file := FileAccess.open(temp_path, FileAccess.WRITE)
 	if file == null:
 		return FileAccess.get_open_error()
 	file.store_string(JSON.stringify(data))
 	file.close()
-	return OK
+	return DirAccess.rename_absolute(temp_path, path)
+
+
+## Of these save files, the one written most recently, or "" if none exists.
+static func newest(paths: Array[String]) -> String:
+	var best := ""
+	var best_time := -1
+	for path in paths:
+		if FileAccess.file_exists(path):
+			var modified := int(FileAccess.get_modified_time(path))
+			if modified > best_time:
+				best_time = modified
+				best = path
+	return best
 
 
 ## Loads a save and restores the clock. Returns
-## { "ok": bool, "error": String, "world": WorldState, "household": Household or null }.
+## { "ok": bool, "error": String, "world": WorldState, "household": Household or null, "view": Dictionary }.
+## The clock is only touched once the whole file has proved readable.
 static func load_from(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
 		return { "ok": false, "error": "No save file found" }
-	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
-	if not (parsed is Dictionary):
+	var json := JSON.new()
+	if json.parse(FileAccess.get_file_as_string(path)) != OK or not (json.data is Dictionary):
 		return { "ok": false, "error": "Save file is damaged" }
+	var parsed: Dictionary = json.data
 	var format := int(parsed.get("format", 0))
 	if format < 1 or format > FORMAT_VERSION:
 		return { "ok": false, "error": "Save file is from a different version" }
-	var world := WorldState.from_dict(parsed.get("world", {}))
+	var saved_world: Variant = parsed.get("world")
+	if not (saved_world is Dictionary) or int(saved_world.get("width", 0)) <= 0 or int(saved_world.get("height", 0)) <= 0:
+		return { "ok": false, "error": "Save file is damaged" }
+	var world := WorldState.from_dict(saved_world)
 	GameClock.from_dict(parsed.get("clock", {}))
 	var household: Household = null
 	if parsed.get("household") is Dictionary:
 		household = Household.from_dict(parsed["household"])
-	return { "ok": true, "world": world, "household": household }
+	var view: Variant = parsed.get("view", {})
+	return { "ok": true, "world": world, "household": household, "view": view if view is Dictionary else {} }

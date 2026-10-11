@@ -5,11 +5,13 @@ extends Node2D
 const MAP_WIDTH := 128
 const MAP_HEIGHT := 96
 const SAVE_PATH := "user://savegame.json"
+const AUTOSAVE_PATH := "user://autosave.json"
 
 var world: WorldState
 var sim: Simulation
 var _menu_pawn_id := -1     # who the open right-click menu is for
 var _menu_tile := Vector2i.ZERO  # and which tile it was opened on
+var _loading := false           # true while a save is being put in place (no autosave then)
 
 @onready var map_view: MapView = $MapView
 @onready var floor_layer: FloorLayer = $FloorLayer
@@ -33,6 +35,7 @@ func _ready() -> void:
 	build.tool_cleared.connect(hud.clear_build_selection)
 	build.message.connect(func(text: String) -> void: hud.show_message(text))
 	GameClock.ticked.connect(_on_tick)
+	GameClock.day_changed.connect(_on_day_changed)
 	_start_new_world(_pick_seed())
 	_apply_launch_options()
 	if not DataRegistry.load_errors.is_empty():
@@ -83,6 +86,7 @@ func _unhandled_input(event: InputEvent) -> void:
 ## menu = tile (x,y) to open the right-click menu on at the start,
 ## needs = need values for the selected person, such as rest:10,hunger:30,
 ## build = start in build mode with a tool, such as place:wall, floor:planks, remove or move,
+## load = load the newest save right away (as F9 does),
 ## dying = the selected person is minutes from starving (to see the death and the hand-over),
 ## demohouse = build a small walled room with a door and a floor on the lot, using the real build commands.
 ## Handy for screenshots and testing.
@@ -103,6 +107,8 @@ func _pick_seed() -> int:
 
 
 func _apply_launch_options() -> void:
+	if _launch_option("load") != "":
+		_load()
 	if _launch_option("day") != "" or _launch_option("hour") != "":
 		var hour := int(_launch_option("hour")) if _launch_option("hour") != "" else 6
 		GameClock.set_time(int(_launch_option("day")), hour)
@@ -251,15 +257,33 @@ func _center_on_selected() -> void:
 
 
 func _save() -> void:
-	var err := SaveGame.save(SAVE_PATH, world, sim.household)
+	var err := _write_save(SAVE_PATH)
 	if err == OK:
 		hud.show_message("Game saved")
 	else:
 		hud.show_message("Save failed: %s" % error_string(err))
 
 
+## A new day: keep a spare copy in case something goes wrong. Skipped when nobody is left.
+func _on_day_changed(_day: int) -> void:
+	if sim == null or sim.is_game_over() or _loading:
+		return
+	if _write_save(AUTOSAVE_PATH) == OK:
+		hud.show_message("Autosaved", 1.5)
+
+
+func _write_save(path: String) -> Error:
+	var view := { "camera": [camera.position.x, camera.position.y], "zoom": camera.zoom.x }
+	return SaveGame.save(path, world, sim.household, view)
+
+
+## F9: loads whichever of the quick save and the autosave is newer.
 func _load() -> void:
-	var result := SaveGame.load_from(SAVE_PATH)
+	var path := SaveGame.newest([SAVE_PATH, AUTOSAVE_PATH])
+	if path == "":
+		hud.show_message("Load failed: no save file found")
+		return
+	var result := SaveGame.load_from(path)
 	if result["ok"]:
 		var loaded_world: WorldState = result["world"]
 		var household: Household = result["household"]
@@ -267,8 +291,18 @@ func _load() -> void:
 			household = HouseholdGenerator.create(loaded_world)
 		if loaded_world.objects.is_empty():  # a save from before there were things
 			CampGenerator.place(loaded_world, household)
+		_loading = true
 		_show_world(loaded_world, household)
-		hud.show_message("Game loaded")
+		_loading = false
+		var view: Dictionary = result["view"]
+		if view.has("camera") and view["camera"] is Array and view["camera"].size() == 2:
+			camera.position = Vector2(float(view["camera"][0]), float(view["camera"][1]))
+			var saved_zoom := clampf(float(view.get("zoom", 1.0)), CameraController.ZOOM_MIN, CameraController.ZOOM_MAX)
+			camera.zoom = Vector2(saved_zoom, saved_zoom)
+		if sim.is_game_over():
+			hud.show_game_over("This household has died out.\n\nN: new world     F9: load a save")
+		var date := GameClock.get_date()
+		hud.show_message("Loaded %s: %s %d, %s" % ["the autosave" if path == AUTOSAVE_PATH else "your save", date["season_name"], date["day"], GameClock.get_time_text()])
 	else:
 		hud.show_message("Load failed: %s" % result["error"])
 
