@@ -1,7 +1,7 @@
 class_name HouseholdGenerator
 extends RefCounted
 ## Creates the starting household for a new world: a family of three standing near the
-## crossroads. The same world seed always gives the same people. Names and colors come
+## crossroads, each with an orientation trait and one other trait. The same world seed always gives the same people. Names and colors come
 ## from data/names.json and data/appearance.json, so mods can change them.
 
 const SIZE := 3
@@ -38,9 +38,14 @@ static func create(world: WorldState, size: int = SIZE) -> Household:
 			"bottom": _pick_text(rng, "appearance", "bottom", "colors", ["#4a3d32"]),
 			"hair_style": hair_styles[rng.randi() % hair_styles.size()],
 		}
-		var trait_ids := DataRegistry.get_ids("traits")
-		if not trait_ids.is_empty():
-			pawn.traits.append(str(trait_ids[rng.randi() % trait_ids.size()]))
+		# Everyone gets an orientation (a trait in the "orientation" group) and one other trait.
+		var orientations: Array[String] = []
+		var others: Array[String] = []
+		for trait_def in DataRegistry.get_list("traits"):
+			(orientations if str(trait_def.get("group", "")) == "orientation" else others).append(str(trait_def["id"]))
+		for pool in [orientations, others]:
+			if not pool.is_empty():
+				pawn.traits.append(pool[rng.randi() % pool.size()])
 		for need_id in Needs.active_ids():
 			pawn.needs[need_id] = snappedf(rng.randf_range(55.0, 95.0), 0.01)  # not everyone hungry at once
 		pawn.tile = spot

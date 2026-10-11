@@ -559,6 +559,9 @@ func _test_needs() -> void:
 	partner.gender = "male"
 	partner.traits.assign(["bisexual"])
 	_check(sim.interaction_blocker(pawn, partner, "intimacy") == "", "bisexual people are open to either")
+	pawn.traits.assign(["asexual"])
+	_check("interested" in sim.interaction_blocker(pawn, partner, "intimacy") and "interested" in sim.interaction_blocker(partner, pawn, "intimacy"), "an asexual person is not interested, and nobody can ask them")
+	_check(Needs.drain_per_tick("libido", ["asexual"], {}) == 0.0, "asexual people do not build up libido")
 	pawn.traits.clear()
 	partner.traits.clear()
 	_check(sim.interaction_blocker(pawn, partner, "intimacy") == "", "no orientation trait means open to anyone")
@@ -598,6 +601,13 @@ func _test_needs() -> void:
 	# The starting camp.
 	var big_world := MapGenerator.generate(42, 96, 64)
 	var family := HouseholdGenerator.create(big_world)
+	var everyone_has_both := true
+	for member in family.pawns:
+		var orientation_count := 0
+		for trait_id in member.traits:
+			orientation_count += 1 if str(DataRegistry.get_def("traits", trait_id).get("group", "")) == "orientation" else 0
+		everyone_has_both = everyone_has_both and member.traits.size() == 2 and orientation_count == 1
+	_check(everyone_has_both, "everyone starts with two traits, exactly one of them an orientation")
 	CampGenerator.place(big_world, family)
 	var beds := 0
 	var spots := {}

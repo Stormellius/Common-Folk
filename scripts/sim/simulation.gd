@@ -121,12 +121,14 @@ func interaction_blocker(pawn: Pawn, other: Pawn, interaction_id: String) -> Str
 
 
 ## Whether `person` is attracted to `other`, from an orientation trait ("attracted_to" in
-## data/traits.json: opposite, same or both). Someone with no such trait is open to anyone.
+## data/traits.json: opposite, same, both or none). Someone with no such trait is open to anyone.
 func _attracted_to(person: Pawn, other: Pawn) -> bool:
 	for trait_id in person.traits:
 		match str(DataRegistry.get_def("traits", trait_id).get("attracted_to", "")):
 			"both":
 				return true
+			"none":
+				return false
 			"same":
 				return person.gender == other.gender
 			"opposite":

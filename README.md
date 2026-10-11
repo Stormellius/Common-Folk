@@ -119,7 +119,7 @@ A mod is a folder in `mods/` (or `user://mods/` in a built game) with the same k
 
 To try it, set `"enabled": true` in `mods/example_mod/mod.json` and restart. Grass turns bright green. Problems in data files (bad JSON, missing ids) are shown on screen and printed as warnings.
 
-`names.json` (given names and family names) and `appearance.json` (skin, hair and clothing colors) feed the household generator, so a mod can change who your people are. `needs.json` lists the needs (`drain_per_hour`, `optional: true` for ones nobody has yet, `slows_when_empty: false` for ones that can sit at zero harmlessly, like Libido); `traits.json` changes drain rates; both are used now, and traits will matter more in milestone 7. Seasons in `seasons.json` can carry `need_drain_multipliers` (winter makes warmth drain 2.5 times faster).
+`names.json` (given names and family names) and `appearance.json` (skin, hair and clothing colors) feed the household generator, so a mod can change who your people are. `needs.json` lists the needs (`drain_per_hour`, `optional: true` for ones nobody has yet, `slows_when_empty: false` for ones that can sit at zero harmlessly, like Libido); `traits.json` changes drain rates (a trait with `"group": "orientation"` is an orientation: every new person gets exactly one of those plus one other trait); both are used now, and traits will matter more in milestone 7. Seasons in `seasons.json` can carry `need_drain_multipliers` (winter makes warmth drain 2.5 times faster).
 
 `objects.json` describes the things people use:
 
@@ -139,7 +139,7 @@ To try it, set `"enabled": true` in `mods/example_mod/mod.json` and restart. Gra
   "requires_attraction": true, "willing_below": { "libido": 85 }, "unwilling": "isn't in the mood" }
 ```
 
-Both people must be adults, attracted to each other (`requires_attraction` reads the orientation traits in `traits.json`: `attracted_to` is `opposite`, `same` or `both`; someone with none of them is open to anyone) and willing (`willing_below`: each need listed must be under that number, otherwise the entry is greyed out with the `unwilling` reason), and the other person must not be busy. The asker walks over, both stand still side by side with hearts over their heads, both needs fill, and the panel says only what `doing` says. Nothing explicit is shown, and the people never do this on their own: only the player starts it. Ordering either person elsewhere ends it for both.
+Both people must be adults, attracted to each other (`requires_attraction` reads the orientation traits in `traits.json`: `attracted_to` is `opposite`, `same`, `both` or `none`; someone with none of them is open to anyone) and willing (`willing_below`: each need listed must be under that number, otherwise the entry is greyed out with the `unwilling` reason), and the other person must not be busy. The asker walks over, both stand still side by side with hearts over their heads, both needs fill, and the panel says only what `doing` says. Nothing explicit is shown, and the people never do this on their own: only the player starts it. Ordering either person elsewhere ends it for both.
 
 If you export the game, add `*.json` under **Resources > Filters to export non-resource files** so the data files are included.
 
