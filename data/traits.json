@@ -1,8 +1,11 @@
 [
-  { "id": "neat",    "name": "Neat",    "description": "Keeps things tidy; hygiene drains slower.",         "need_drain_multipliers": { "hygiene": 0.7 } },
-  { "id": "lazy",    "name": "Lazy",    "description": "Tires quickly and avoids work.",                    "need_drain_multipliers": { "rest": 1.4 } },
-  { "id": "glutton", "name": "Glutton", "description": "Always hungry.",                                   "need_drain_multipliers": { "hunger": 1.5 } },
-  { "id": "loner",   "name": "Loner",   "description": "Needs company less than most.",                     "need_drain_multipliers": { "social": 0.5 } },
-  { "id": "pious",   "name": "Pious",   "description": "Faith matters; the need drains faster.",           "need_drain_multipliers": { "faith": 1.5 } },
-  { "id": "greedy",  "name": "Greedy",  "description": "Wants coin more than comfort.",                    "need_drain_multipliers": { "fun": 1.2 } }
+  { "id": "neat",    "name": "Neat",     "description": "Keeps things tidy; hygiene drains slower.",         "need_drain_multipliers": { "hygiene": 0.7 } },
+  { "id": "lazy",    "name": "Lazy",     "description": "Tires quickly and avoids work.",                    "need_drain_multipliers": { "rest": 1.4 } },
+  { "id": "glutton", "name": "Glutton",  "description": "Always hungry.",                                   "need_drain_multipliers": { "hunger": 1.5 } },
+  { "id": "loner",   "name": "Loner",    "description": "Needs company less than most.",                     "need_drain_multipliers": { "social": 0.5 } },
+  { "id": "pious",   "name": "Pious",    "description": "Faith matters; the need drains faster.",           "need_drain_multipliers": { "faith": 1.5 } },
+  { "id": "greedy",  "name": "Greedy",   "description": "Wants coin more than comfort.",                    "need_drain_multipliers": { "fun": 1.2 } },
+  { "id": "straight","name": "Straight", "description": "Is attracted to the opposite gender.",                    "need_drain_multipliers": { "libido": 0.5 } },
+  { "id": "gay",     "name": "Gay",      "description": "Is attracted to the same gender.",                    "need_drain_multipliers": { "libido": 0.5 } },
+  { "id": "bisexual","name": "Bisexual",  "description": "Is attracted to both genders.",                    "need_drain_multipliers": { "libido": 0.5 } }
 ]
