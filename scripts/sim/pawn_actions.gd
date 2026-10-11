@@ -3,13 +3,16 @@ extends RefCounted
 ## What the selected person can be told to do at a spot on the map. The right-click menu
 ## shows whatever list_for() returns, and perform() carries out the one that was chosen.
 ##
-## That is walking, stopping, switching to a neighbor and, on an object, whatever the object
-## offers ("Sleep", "Eat a meal"; its "action" in data/objects.json). An entry that cannot be used right now is still listed, switched off, with the reason.
+## That is walking, stopping and, on an object, whatever the object offers ("Sleep",
+## "Eat a meal"; its "action" in data/objects.json). Switching who you control is not here:
+## left-click a person (or their portrait, or Tab). An entry that cannot be used right now is
+## still listed, switched off, with the reason. Right-clicking another person lists the
+## two-person interactions from data/interactions.json (one needs both to be willing).
 
 const WALK := "walk"
 const STOP := "stop"
-const SWITCH_PREFIX := "switch:"
 const USE_PREFIX := "use:"
+const INTERACT_PREFIX := "interact:"  # "interact:<interaction id>:<other person's id>"
 
 
 ## One entry: { "id": String, "label": String, "enabled": bool, "reason": String }.
@@ -30,8 +33,12 @@ static func list_for(sim: Simulation, pawn: Pawn, tile: Vector2i) -> Array[Dicti
 	if pawn.is_busy():
 		actions.append(_entry(STOP, "Stop"))
 	for other in sim.household.pawns:
-		if other.id != pawn.id and other.tile == tile:
-			actions.append(_entry(SWITCH_PREFIX + str(other.id), "Switch to %s" % other.display_name))
+		if other.id == pawn.id or other.tile != tile:
+			continue
+		for interaction in DataRegistry.get_list("interactions"):
+			var blocker := sim.interaction_blocker(pawn, other, str(interaction["id"]))
+			var label := str(interaction.get("action", "Interact with {name}")).replace("{name}", other.display_name.get_slice(" ", 0))
+			actions.append(_entry(INTERACT_PREFIX + "%s:%d" % [interaction["id"], other.id], label, blocker == "", blocker))
 	return actions
 
 
@@ -47,9 +54,12 @@ static func perform(sim: Simulation, pawn: Pawn, action_id: String, tile: Vector
 		if placed == null:
 			return { "ok": false, "message": "That is gone" }
 		return sim.order_use(pawn, placed)
-	if action_id.begins_with(SWITCH_PREFIX):
-		var switched := sim.household.select(int(action_id.trim_prefix(SWITCH_PREFIX)))
-		return { "ok": switched, "message": "" if switched else "That person is not here" }
+	if action_id.begins_with(INTERACT_PREFIX):
+		var parts := action_id.trim_prefix(INTERACT_PREFIX).split(":")
+		var other := sim.household.get_pawn(int(parts[1])) if parts.size() == 2 else null
+		if other == null:
+			return { "ok": false, "message": "That person is not here" }
+		return sim.order_interact(pawn, other, parts[0])
 	return { "ok": false, "message": "Unknown action" }
 
 

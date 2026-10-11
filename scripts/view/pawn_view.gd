@@ -28,6 +28,7 @@ var label_scale := 1.0:
 
 var _phase := 0.0
 var _drawn_facing := Vector2i(-99, -99)
+var _drawn_pose := "?"
 
 
 func setup(new_pawn: Pawn) -> void:
@@ -59,9 +60,9 @@ func _process(delta: float) -> void:
 	elif _phase != 0.0:
 		_phase = 0.0
 		queue_redraw()
-	if pawn.pose == "lie":
-		queue_redraw()  # the floating Zzz drifts
-	if pawn.facing != _drawn_facing:
+	if pawn.pose == "lie" or pawn.pose == "close":
+		queue_redraw()  # the floating Zzz or hearts drift
+	if pawn.facing != _drawn_facing or pawn.pose != _drawn_pose:
 		queue_redraw()
 
 
@@ -69,6 +70,7 @@ func _draw() -> void:
 	if pawn == null:
 		return
 	_drawn_facing = pawn.facing
+	_drawn_pose = pawn.pose
 	var u := MapView.TILE_SIZE / 48.0
 	if selected:
 		var ring := PackedVector2Array()
@@ -80,6 +82,8 @@ func _draw() -> void:
 	PawnArt.draw(self, pawn.look, pawn.facing, u, _phase, asleep)
 	if asleep:
 		_draw_blanket_and_zzz(u)
+	elif pawn.pose == "close":
+		_draw_hearts(u)
 	if show_name:
 		var font := ThemeDB.fallback_font
 		draw_set_transform(Vector2(0.0, 27.0 * u), 0.0, Vector2(label_scale, label_scale))
@@ -97,3 +101,17 @@ func _draw_blanket_and_zzz(u: float) -> void:
 	var font := ThemeDB.fallback_font
 	draw_string_outline(font, Vector2(11.0, -17.0 + drift) * u, "Zzz", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, 4, Color(0, 0, 0, 0.8))
 	draw_string(font, Vector2(11.0, -17.0 + drift) * u, "Zzz", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.92, 0.94, 1.0))
+
+
+## Two little hearts drifting up from a pair who are spending time together. Nothing more is shown.
+func _draw_hearts(u: float) -> void:
+	var t := Time.get_ticks_msec() / 1000.0
+	for i in 2:
+		var rise := fposmod(t * 0.5 + i * 0.5, 1.0)
+		var center := Vector2((6.0 if i == 0 else -6.0) + sin(t * 2.0 + i) * 2.0, -22.0 - rise * 12.0) * u
+		var color := Color(0.93, 0.35, 0.45, 1.0 - rise * rise)
+		var r := 3.2 * u
+		draw_circle(center + Vector2(-r * 0.8, 0.0), r, color)
+		draw_circle(center + Vector2(r * 0.8, 0.0), r, color)
+		draw_colored_polygon(PackedVector2Array([
+			center + Vector2(-r * 1.75, r * 0.3), center + Vector2(r * 1.75, r * 0.3), center + Vector2(0.0, r * 2.6)]), color)

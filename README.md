@@ -9,7 +9,7 @@
 - Day and night light (blue nights, warm dawn and dusk) and seasons (green spring, golden summer, brown autumn, snowy winter) that follow the game clock
 - Camera: pan, zoom toward the cursor, middle-mouse drag
 - Game clock with pause and 1x / 2x / 3x speed, a calendar with seasons, and a clock panel
-- A household of three people (names and looks from the world seed) drawn in RimWorld-style top-down art made by code. Control one at a time: click a person (or their portrait at the bottom, or press Tab) to select them, then right-click anywhere for a menu of what they can do there (walk, stop, switch to a neighbor, and later sleep, eat and work). The others keep walking if they have orders
+- A household of three people (names and looks from the world seed) drawn in RimWorld-style top-down art made by code. Control one at a time: click a person (or their portrait at the bottom, or press Tab) to select them, then right-click anywhere for a menu of what they can do there (walk, stop, sleep, eat, wash, and with another adult, spend time together). The others keep walking if they have orders
 - Pathfinding around water and rock with A* (forest is slower to cross, diagonals never cut corners), walking at one step per clock tick so pause and speed control apply
 - Needs: hunger, rest, warmth, hygiene, toilet and fun fall over time (faster or slower with traits, and warmth faster in winter). A starter camp near the crossroads has a bed for everyone plus a cooking pot, hearth, wash basin, chamber pot and lute. When nobody is giving orders, a person with a low need walks to the nearest free thing that fixes it and uses it until the need is full; people head to bed earlier after dark. Your orders always win, and an empty need slows a person down
 - A panel on the left shows the selected person's needs and what they are doing; right-click an object for its action (Sleep, Eat a meal, Wash...)
@@ -37,7 +37,7 @@ godot --path . -- --seed=1234 --day=50 --hour=12 --zoom=0.5 --look=70,30 --speed
 | --- | --- |
 | WASD / arrow keys | Move the camera (hold Shift for faster) |
 | Left-click a person | Select that person |
-| Right-click | Menu of actions for the selected person at that spot (Walk here, Stop, Switch to...) |
+| Right-click | Menu of actions for the selected person at that spot (Walk here, Stop, object actions, and interactions when you click another person). Left-click a person to switch to them |
 | Escape | Close the menu |
 | Tab / Shift+Tab | Next / previous person (camera jumps to them) |
 | C | Center the camera on the selected person |
@@ -119,7 +119,7 @@ A mod is a folder in `mods/` (or `user://mods/` in a built game) with the same k
 
 To try it, set `"enabled": true` in `mods/example_mod/mod.json` and restart. Grass turns bright green. Problems in data files (bad JSON, missing ids) are shown on screen and printed as warnings.
 
-`names.json` (given names and family names) and `appearance.json` (skin, hair and clothing colors) feed the household generator, so a mod can change who your people are. `needs.json` lists the needs (`drain_per_hour`, and `optional: true` for ones nobody has yet); `traits.json` changes drain rates; both are used now, and traits will matter more in milestone 7. Seasons in `seasons.json` can carry `need_drain_multipliers` (winter makes warmth drain 2.5 times faster).
+`names.json` (given names and family names) and `appearance.json` (skin, hair and clothing colors) feed the household generator, so a mod can change who your people are. `needs.json` lists the needs (`drain_per_hour`, `optional: true` for ones nobody has yet, `slows_when_empty: false` for ones that can sit at zero harmlessly, like Libido); `traits.json` changes drain rates; both are used now, and traits will matter more in milestone 7. Seasons in `seasons.json` can carry `need_drain_multipliers` (winter makes warmth drain 2.5 times faster).
 
 `objects.json` describes the things people use:
 
@@ -130,6 +130,16 @@ To try it, set `"enabled": true` in `mods/example_mod/mod.json` and restart. Gra
 ```
 
 `satisfies` is points restored per hour of use; a person stops when every need it fills is full or after `max_use_minutes`. `use_position` is `on` (stand on the tile) or `beside`. `action` is the right-click menu entry and `doing` the activity shown in the panel. A need is only in play while some object satisfies it, so adding an object with `"satisfies": { "faith": 20 }` switches Faith on (it also needs `optional` to be false). Objects with no drawing in `object_art.gd` appear as a crate.
+
+`interactions.json` describes things two people do together. Libido is filled this way: right-click another adult and pick the entry.
+
+```json
+{ "id": "intimacy", "action": "Be intimate with {name}", "doing": "Spending private time together",
+  "satisfies": { "libido": 200 }, "max_use_minutes": 30, "adults_only": true,
+  "willing_below": { "libido": 85 }, "unwilling": "isn't in the mood" }
+```
+
+Both people must be adults and willing (`willing_below`: each need listed must be under that number, otherwise the entry is greyed out with the `unwilling` reason), and the other person must not be busy. The asker walks over, both stand still side by side with hearts over their heads, both needs fill, and the panel says only what `doing` says. Nothing explicit is shown, and the people never do this on their own: only the player starts it. Ordering either person elsewhere ends it for both.
 
 If you export the game, add `*.json` under **Resources > Filters to export non-resource files** so the data files are included.
 

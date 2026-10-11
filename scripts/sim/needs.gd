@@ -5,9 +5,10 @@ extends RefCounted
 ## live on each Pawn (`pawn.needs`, 0 = empty, 100 = full).
 ##
 ## A need is only in play while something in the world can fill it: that is, some object in
-## data/objects.json lists it under "satisfies". So adding a chapel object with
-## { "satisfies": { "faith": 20 } } switches Faith on, and until then it stays dormant.
-## Needs marked "optional" in needs.json are not given to anyone yet.
+## data/objects.json, or some two-person interaction in data/interactions.json, lists it under
+## "satisfies". So adding a chapel object with { "satisfies": { "faith": 20 } } switches Faith
+## on, and until then it stays dormant. Needs marked "optional" in needs.json are not given to
+## anyone yet. A need with "slows_when_empty": false (Libido) never drags a person's feet.
 
 const FULL := 100.0
 const DEFAULT_SEEK_BELOW := 35.0
@@ -19,9 +20,10 @@ const NIGHT_END_MINUTE := 6 * 60
 ## The ids of the needs in play, in the order of needs.json.
 static func active_ids() -> Array[String]:
 	var fillable := {}
-	for object_def in DataRegistry.get_list("objects"):
-		for need_id in object_def.get("satisfies", {}):
-			fillable[str(need_id)] = true
+	for kind in ["objects", "interactions"]:
+		for source in DataRegistry.get_list(kind):
+			for need_id in source.get("satisfies", {}):
+				fillable[str(need_id)] = true
 	var ids: Array[String] = []
 	for need_def in DataRegistry.get_list("needs"):
 		var need_id := str(need_def.get("id", ""))
@@ -38,6 +40,11 @@ static func drain_per_tick(need_id: String, traits: Array[String], season_multip
 		var multipliers: Dictionary = DataRegistry.get_def("traits", trait_id).get("need_drain_multipliers", {})
 		factor *= float(multipliers.get(need_id, 1.0))
 	return per_hour / 60.0 * factor
+
+
+## False for needs that may sit at zero without slowing the person down.
+static func slows_when_empty(need_id: String) -> bool:
+	return bool(DataRegistry.get_def("needs", need_id).get("slows_when_empty", true))
 
 
 ## Below this value an idle person starts looking for a fix.

@@ -13,6 +13,8 @@ const BASE_MOVE_TICKS := 3.0
 var id := 0
 var display_name := ""
 var gender := "female"
+## Interactions marked "adults_only" in data/interactions.json need every person to be one.
+var adult := true
 ## Colors as hex strings plus a hair style number; see PawnArt.
 var look: Dictionary = {}
 
@@ -31,8 +33,12 @@ var traits: Array[String] = []
 var slowed := false
 
 ## What the person is doing on their own account, apart from walking orders:
-## "" (nothing) or "use" (going to, or busy with, an object).
+## "" (nothing), "use" (going to, or busy with, an object) or "interact" (with `job_partner`).
+## In an interaction the one who asked has job_stage "walking" then "using"; the other
+## person waits, with job_stage "partner", and stays put until it is over.
 var job_kind := ""
+var job_partner := 0         # id of the other person in an interaction
+var job_interaction := ""    # id from data/interactions.json
 var job_object := 0          # id of the PlacedObject being used
 var job_stage := ""          # "walking" on the way there, "using" once started
 var job_tile := Vector2i.ZERO  # where the person stands while using it
@@ -116,6 +122,7 @@ func to_dict() -> Dictionary:
 		"id": id,
 		"name": display_name,
 		"gender": gender,
+		"adult": adult,
 		"look": look.duplicate(),
 		"tile": _vec_to_array(tile),
 		"facing": _vec_to_array(facing),
@@ -127,6 +134,8 @@ func to_dict() -> Dictionary:
 		"traits": Array(traits),
 		"slowed": slowed,
 		"job": job_kind,
+		"job_partner": job_partner,
+		"job_interaction": job_interaction,
 		"job_object": job_object,
 		"job_stage": job_stage,
 		"job_tile": _vec_to_array(job_tile),
@@ -141,6 +150,7 @@ static func from_dict(data: Dictionary) -> Pawn:
 	pawn.id = int(data.get("id", 0))
 	pawn.display_name = str(data.get("name", ""))
 	pawn.gender = str(data.get("gender", "female"))
+	pawn.adult = bool(data.get("adult", true))
 	var saved_look: Variant = data.get("look", {})
 	pawn.look = saved_look.duplicate() if saved_look is Dictionary else {}
 	if pawn.look.has("hair_style"):
@@ -160,6 +170,8 @@ static func from_dict(data: Dictionary) -> Pawn:
 		pawn.traits.append(str(trait_id))
 	pawn.slowed = bool(data.get("slowed", false))
 	pawn.job_kind = str(data.get("job", ""))
+	pawn.job_partner = int(data.get("job_partner", 0))
+	pawn.job_interaction = str(data.get("job_interaction", ""))
 	pawn.job_object = int(data.get("job_object", 0))
 	pawn.job_stage = str(data.get("job_stage", ""))
 	pawn.job_tile = _array_to_vec(data.get("job_tile", [0, 0]))

@@ -109,6 +109,10 @@ func _apply_launch_options() -> void:
 			var parts := pair.split(":")
 			if parts.size() == 2:
 				sim.household.selected().needs[parts[0]] = float(parts[1])
+	if _launch_option("together") != "" and sim != null and sim.household.pawns.size() >= 2:
+		for person in sim.household.pawns:
+			person.needs["libido"] = 10.0
+		sim.order_interact(sim.household.pawns[0], sim.household.pawns[1], "intimacy")
 	if _launch_option("menu") != "" and sim != null:
 		var spot := _launch_option("menu").split(",")
 		if spot.size() == 2:

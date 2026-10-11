@@ -351,15 +351,16 @@ func _test_actions() -> void:
 	_check(not by_id.call(here, PawnActions.WALK).get("enabled", true), "walking to where you stand is off")
 	_check(PawnActions.list_for(sim, pawn, Vector2i(-1, 0)).is_empty(), "no menu outside the map")
 	var neighbor := PawnActions.list_for(sim, pawn, Vector2i(2, 4))
-	_check(not by_id.call(neighbor, PawnActions.SWITCH_PREFIX + str(household.pawns[1].id)).is_empty(), "right-clicking another person offers to switch to them")
+	var offers_switch := false
+	for entry in neighbor:
+		offers_switch = offers_switch or "witch" in str(entry["label"]) or str(entry["id"]).begins_with("switch")
+	_check(not offers_switch, "right-clicking another person does not offer to switch to them (left-click does that)")
 
 	var walked := PawnActions.perform(sim, pawn, PawnActions.WALK, Vector2i(5, 4))
 	_check(walked["ok"] and pawn.goal_tile() == Vector2i(5, 4), "the walk entry sends the person there")
 	_check(not by_id.call(PawnActions.list_for(sim, pawn, Vector2i(4, 1)), PawnActions.STOP).is_empty(), "stop is offered while walking")
 	PawnActions.perform(sim, pawn, PawnActions.STOP, Vector2i.ZERO)
 	_check(pawn.path.is_empty(), "the stop entry cancels the walk")
-	var switched := PawnActions.perform(sim, pawn, PawnActions.SWITCH_PREFIX + str(household.pawns[1].id), Vector2i.ZERO)
-	_check(switched["ok"] and household.selected_id == household.pawns[1].id, "the switch entry changes who is selected")
 	_check(not PawnActions.perform(sim, pawn, "nonsense", Vector2i.ZERO)["ok"], "an unknown entry is refused")
 
 	var menu := ActionMenu.new()
@@ -392,6 +393,10 @@ func _needs_setup(low: Dictionary) -> Dictionary:
 	return { "world": world, "household": household, "pawn": person }
 
 
+func _distance_tiles(a: Vector2i, b: Vector2i) -> int:
+	return absi(a.x - b.x) + absi(a.y - b.y)
+
+
 func _run_until_idle(sim: Simulation, pawn: Pawn, limit: int = 1500) -> int:
 	var ticks := 0
 	while ticks < limit:
@@ -406,7 +411,8 @@ func _test_needs() -> void:
 	print("Needs and objects")
 	var active := Needs.active_ids()
 	_check("hunger" in active and "rest" in active and "toilet" in active and "fun" in active, "needs with something to fix them are in play")
-	_check("social" not in active and "faith" not in active and "libido" not in active, "needs with nothing to fix them, or optional ones, stay dormant")
+	_check("social" not in active and "faith" not in active, "needs with nothing to fix them, or optional ones, stay dormant")
+	_check("libido" in active and not Needs.slows_when_empty("libido") and Needs.slows_when_empty("hunger"), "libido is in play because an interaction fills it, and never slows anyone")
 	var per_tick := Needs.drain_per_tick("hunger", [], {})
 	_check(absf(per_tick - 4.0 / 60.0) < 0.0001, "hunger drains at the rate in needs.json")
 	_check(Needs.drain_per_tick("hunger", ["glutton"], {}) > per_tick * 1.4, "the glutton trait speeds hunger up")
@@ -491,6 +497,84 @@ func _test_needs() -> void:
 		sim.step()
 		slow_ticks += 1
 	_check(slow_ticks > int(Pawn.BASE_MOVE_TICKS), "so a one-tile walk takes longer than usual (%d ticks)" % slow_ticks)
+
+	# Two people: a right-click interaction that fills Libido, if both are willing adults.
+	setup = _needs_setup({ "libido": 20.0 })
+	world = setup["world"]
+	household = setup["household"]
+	pawn = setup["pawn"]
+	var partner := Pawn.new()
+	partner.display_name = "Tester Two"
+	partner.tile = Vector2i(6, 2)
+	partner.step_to = partner.tile
+	for need_id in Needs.active_ids():
+		partner.needs[need_id] = 100.0
+	partner.needs["libido"] = 30.0
+	household.add_pawn(partner)
+	sim = Simulation.new(world, household)
+	var entries := PawnActions.list_for(sim, pawn, partner.tile)
+	var intimate := {}
+	for entry in entries:
+		if str(entry["id"]).begins_with(PawnActions.INTERACT_PREFIX):
+			intimate = entry
+	_check(not intimate.is_empty() and intimate["enabled"] and "Tester" in str(intimate["label"]), "right-clicking a willing adult lists the interaction")
+	_check(PawnActions.list_for(sim, pawn, Vector2i(9, 9)).size() == 1, "an empty spot lists no interactions")
+	var started := PawnActions.perform(sim, pawn, str(intimate["id"]), partner.tile)
+	_check(started["ok"] and partner.job_kind == "interact" and partner.job_partner == pawn.id, "both people are committed once it is ordered")
+	var met := false
+	for i in 200:
+		sim.step()
+		if pawn.pose == "close" and partner.pose == "close":
+			met = true
+			break
+	_check(met and _distance_tiles(pawn.tile, partner.tile) == 1, "they come together side by side")
+	_check(sim.describe_activity(pawn) == "Spending private time together", "the panel describes it without detail")
+	for i in 200:
+		sim.step()
+		if not pawn.is_busy() and not partner.is_busy():
+			break
+	_check(float(pawn.needs["libido"]) > 90.0 and float(partner.needs["libido"]) > 90.0, "afterwards both have their libido filled")
+	_check(pawn.pose == "" and partner.pose == "" and partner.job_kind == "", "and both go back to normal")
+
+	# Consent and limits.
+	partner.needs["libido"] = 95.0
+	_check("mood" in sim.interaction_blocker(pawn, partner, "intimacy"), "someone who isn't in the mood says no")
+	partner.needs["libido"] = 30.0
+	pawn.needs["libido"] = 95.0
+	_check("mood" in sim.interaction_blocker(pawn, partner, "intimacy"), "the one asking has to be in the mood too")
+	pawn.needs["libido"] = 20.0
+	partner.adult = false
+	_check("adults" in sim.interaction_blocker(pawn, partner, "intimacy") and not sim.order_interact(pawn, partner, "intimacy")["ok"], "it is only ever between adults")
+	partner.adult = true
+	sim.order_move(partner, Vector2i(6, 8))
+	_check("busy" in sim.interaction_blocker(pawn, partner, "intimacy"), "someone who is walking elsewhere is busy")
+	sim.order_stop(partner)
+	partner.tile = partner.committed_tile()
+	partner.step_ticks_total = 0
+	partner.path.clear()
+
+	# The player can call it off, and it ends for both.
+	_check(sim.order_interact(pawn, partner, "intimacy")["ok"], "it can be started again")
+	sim.order_move(partner, Vector2i(6, 6))
+	_check(pawn.job_kind == "" and partner.job_kind == "" and pawn.job_partner == 0, "ordering one of them away ends the interaction for both, so nobody is left waiting")
+
+	# Saved mid-way, it carries on after loading.
+	partner.tile = Vector2i(6, 2)
+	partner.step_to = partner.tile
+	partner.path.clear()
+	partner.step_ticks_total = 0
+	sim.order_stop(partner)
+	pawn.tile = Vector2i(2, 2)
+	_check(sim.order_interact(pawn, partner, "intimacy")["ok"], "starting once more for the save test")
+	for i in 5:
+		sim.step()
+	var copy_a := Pawn.from_dict(pawn.to_dict())
+	var copy_b := Pawn.from_dict(partner.to_dict())
+	_check(copy_a.job_kind == "interact" and copy_a.job_partner == partner.id and copy_b.job_stage == "partner" and copy_a.job_interaction == "intimacy", "the interaction survives a save")
+	var broken := Household.new()
+	broken.add_pawn(copy_a)  # partner missing from the save: must not hang forever
+	Simulation.new(world, broken)
+	_check(copy_a.job_kind == "", "a loaded interaction whose partner is gone is dropped")
 
 	# The starting camp.
 	var big_world := MapGenerator.generate(42, 96, 64)
