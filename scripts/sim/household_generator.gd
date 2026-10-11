@@ -1,11 +1,12 @@
 class_name HouseholdGenerator
 extends RefCounted
 ## Creates the starting household for a new world: a family of three standing near the
-## crossroads, each with an orientation trait and one other trait. The same world seed always gives the same people. Names and colors come
+## crossroads, each with an orientation trait and two other traits. The same world seed always gives the same people. Names and colors come
 ## from data/names.json and data/appearance.json, so mods can change them.
 
 const SIZE := 3
 const SEARCH_RADIUS := 12
+const RANDOM_TRAITS := 2  # besides the orientation
 
 # Hair styles in PawnArt: 0 short, 1 long, 2 shaved, 3 bun. Listing a style twice makes it likelier.
 const HAIR_BY_GENDER := {
@@ -38,14 +39,17 @@ static func create(world: WorldState, size: int = SIZE) -> Household:
 			"bottom": _pick_text(rng, "appearance", "bottom", "colors", ["#4a3d32"]),
 			"hair_style": hair_styles[rng.randi() % hair_styles.size()],
 		}
-		# Everyone gets an orientation (a trait in the "orientation" group) and one other trait.
+		# Everyone gets an orientation (a trait in the "orientation" group) and RANDOM_TRAITS others, all different.
 		var orientations: Array[String] = []
 		var others: Array[String] = []
 		for trait_def in DataRegistry.get_list("traits"):
 			(orientations if str(trait_def.get("group", "")) == "orientation" else others).append(str(trait_def["id"]))
-		for pool in [orientations, others]:
-			if not pool.is_empty():
-				pawn.traits.append(pool[rng.randi() % pool.size()])
+		if not orientations.is_empty():
+			pawn.traits.append(orientations[rng.randi() % orientations.size()])
+		for i in mini(RANDOM_TRAITS, others.size()):
+			var pick := others[rng.randi() % others.size()]
+			others.erase(pick)
+			pawn.traits.append(pick)
 		for need_id in Needs.active_ids():
 			pawn.needs[need_id] = snappedf(rng.randf_range(55.0, 95.0), 0.01)  # not everyone hungry at once
 		pawn.tile = spot

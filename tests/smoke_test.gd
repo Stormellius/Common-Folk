@@ -606,8 +606,8 @@ func _test_needs() -> void:
 		var orientation_count := 0
 		for trait_id in member.traits:
 			orientation_count += 1 if str(DataRegistry.get_def("traits", trait_id).get("group", "")) == "orientation" else 0
-		everyone_has_both = everyone_has_both and member.traits.size() == 2 and orientation_count == 1
-	_check(everyone_has_both, "everyone starts with two traits, exactly one of them an orientation")
+		everyone_has_both = everyone_has_both and member.traits.size() == 3 and orientation_count == 1 and member.traits[1] != member.traits[2]
+	_check(everyone_has_both, "everyone starts with three different traits, exactly one of them an orientation")
 	CampGenerator.place(big_world, family)
 	var beds := 0
 	var spots := {}
