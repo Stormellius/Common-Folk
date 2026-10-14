@@ -56,6 +56,9 @@ func _ready() -> void:
 	menus.quit_requested.connect(func() -> void: get_tree().quit())
 	menus.closed.connect(_on_menus_closed)
 	menus.baby_named.connect(_on_baby_named)
+	menus.families_requested.connect(_open_families)
+	menus.play_family_requested.connect(_on_play_family)
+	menus.move_house_requested.connect(_on_move_house)
 	GameClock.ticked.connect(_on_tick)
 	GameClock.motion_ticked.connect(_on_motion_tick)
 	GameClock.day_changed.connect(_on_day_changed)
@@ -121,6 +124,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_visit_next_town()
 		KEY_M:
 			_toggle_overview()
+		KEY_F:
+			_open_menu(_open_families)
 		KEY_N:
 			_open_menu(menus.open_new_game)
 		KEY_F5:
@@ -150,7 +155,7 @@ func _unhandled_input(event: InputEvent) -> void:
 ## lifespan = how fast people age in a new game (an id from data/lifespans.json; normal if not given),
 ## fall = minutes: the selected person fell that long ago and lies dying (to see Death come),
 ## ghost = 1: a townsperson has died, and their ghost walks tonight,
-## screen = a menu to open at the start: pause, save, load, settings, new, name or game_over,
+## screen = a menu to open at the start: pause, save, load, settings, new, name, families or game_over,
 ## fire = 1: the nearest thing that can burn to the selected person catches alight,
 ## dreams = 1: the selected person is partway up an ambition and has two wishes.
 ## Handy for screenshots and testing.
@@ -444,10 +449,45 @@ func _open_screen(screen: String) -> void:
 			rng.seed = 11
 			var baby := PersonFactory.make(rng, "Brook", [], 0)
 			menus.open_naming(baby, "A baby %s for the Brook family, born to Maud." % ("girl" if baby.gender == "female" else "boy"), baby.display_name.get_slice(" ", 0), [])
+		"families":
+			_open_families()
 		"game_over":
 			menus.show_game_over("Gisela Brook starved.\n\nYour folk have all passed on, after 12 days.")
 		_:
 			_open_pause()
+
+
+## The families screen: who the player could be, the empty houses, and what has happened in the towns.
+func _open_families() -> void:
+	if sim == null:
+		return
+	var who := "You follow the %s family." % Families.family_name(sim.household.pawns) if not sim.household.pawns.is_empty() else "Your line has ended; take up another family."
+	menus.open_families(Families.rows(sim), Families.empty_rows(sim), Families.chronicle_lines(sim), who)
+
+
+func _on_play_family(lot_id: String) -> void:
+	var result := Families.play(sim, lot_id)
+	if not bool(result["ok"]):
+		menus.show_families_note(str(result["message"]))
+		return
+	_after_family_change(str(result["message"]))
+
+
+func _on_move_house(lot_id: String) -> void:
+	var result := Families.move(sim, lot_id)
+	if not bool(result["ok"]):
+		menus.show_families_note(str(result["message"]))
+		return
+	_after_family_change(str(result["message"]))
+
+
+## The household changed hands or homes: look at it afresh.
+func _after_family_change(message: String) -> void:
+	menus.close()
+	hud.set_household(sim.household)
+	_on_pawn_chosen(sim.household.selected_id)
+	_center_on_selected()
+	hud.show_message(message, 6.0)
 
 
 func _on_menus_closed() -> void:

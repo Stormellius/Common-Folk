@@ -40,6 +40,7 @@ func _ready() -> void:
 	_section("construction", _test_construction)
 	_section("trade", _test_trade)
 	_section("dreams", _test_dreams)
+	_section("families", _test_families)
 	_section("events", _test_events)
 	_section("realm", _test_realm)
 	_section("faith_and_illness", _test_faith_and_illness)
@@ -3497,6 +3498,251 @@ func _test_dreams() -> void:
 	_check(back.ambition == saved.ambition and back.ambition_step == saved.ambition_step and back.deeds == saved.deeds and back.ambitions_done == saved.ambitions_done and back.wishes == saved.wishes and back.wish_done == saved.wish_done and back.visited == saved.visited, "ambitions, deeds and wishes survive a save")
 	var old := Pawn.from_dict({ "name": "Old Save", "age": 30 })
 	_check(old.ambition == "" and old.deeds.is_empty() and old.wishes.is_empty(), "a person from an older save has none, and is given them when the game loads")
+
+
+func _ids_of(pawns: Array) -> Array:
+	var ids := []
+	for pawn in pawns:
+		ids.append(pawn.id)
+	ids.sort()
+	return ids
+
+
+func _test_families() -> void:
+	print("Other families: playing them, moving house, carrying on")
+	var game := _region_game(42)
+	var world: WorldState = game["world"]
+	var household: Household = game["household"]
+	var sim: Simulation = game["sim"]
+	var town: Household = sim.town
+	var anna: Pawn = household.selected()
+	_check(DataRegistry.has_def("families", "families") and float(Families.config()["arrive_chance"]) > 0.0, "the family rules are data")
+	var families := Families.list(sim)
+	var good := true
+	for family in families:
+		good = good and not (family["members"] as Array).is_empty() and family["head"] != null and family["name"] != "" and family["town_name"] != ""
+	_check(families.size() >= 40 and good, "every house with people in it is a family of the town (%d families)" % families.size())
+	var everyone_before := sim.people().size()
+
+	# Taking up another family.
+	var chosen := {}
+	for family in families:
+		if family["town"] == world.home_town()["id"] and (family["members"] as Array).size() >= 3 and Families.play_blocker(sim, str(family["lot"])) == "":
+			chosen = family
+			break
+	_check(not chosen.is_empty(), "there is a family of the home town with three or more people to take up")
+	var lot_id: String = chosen["lot"]
+	var family_ids := _ids_of(chosen["members"])
+	var old_ids := _ids_of(household.pawns)
+	var old_rect := world.lot
+	var new_rect: Rect2i = world.get_lot(lot_id)["rect"]
+	var home_town_id: String = world.home_town()["id"]
+	var old_realm := sim.realm
+	household.coins = 150
+	household.stock = { "grain": 10, "axe": 1 }
+	world.titles["lot_extra"] = "leasehold"
+	var pockets_before := 0
+	for pawn in chosen["members"]:
+		pockets_before += pawn.coins
+	var dog: Animal = Fauna.spawn(world, "dog", anna.tile + Vector2i(1, 0), sim.rng(), "household", WorldState.HOME_LOT)
+	var heard: Array[String] = []
+	sim.family_changed.connect(func(family_name: String) -> void: heard.append(family_name))
+	_check(Families.play_blocker(sim, WorldState.HOME_LOT) != "" and Families.play_blocker(sim, "nowhere") != "", "you cannot take up your own family, or one that is not there")
+	anna.dying_cause = "illness"
+	_check("dying" in Families.play_blocker(sim, lot_id), "nor while someone in your household is dying")
+	anna.dying_cause = ""
+	var result := Families.play(sim, lot_id)
+	_check(result["ok"] and _ids_of(household.pawns) == family_ids and _ids_of(town.pawns).size() + household.pawns.size() == everyone_before, "the family becomes the household and nobody is lost (%s)" % str(result["message"]))
+	_check(town.get_pawn(old_ids[0]) != null, "the old household is the town's now")
+	var lot_ok: bool = world.lot == new_rect and world.get_lot(lot_id)["rect"] == old_rect and world.get_lot(lot_id)["town"] == home_town_id and world.lot_at(new_rect.get_center())["id"] == WorldState.HOME_LOT and world.lot_at(old_rect.get_center())["id"] == lot_id
+	_check(lot_ok, "their house is the home lot now, and the old home is a house of the town")
+	var homes_ok := true
+	for pawn in household.pawns:
+		homes_ok = homes_ok and pawn.home_lot == WorldState.HOME_LOT
+	for pawn in town.pawns:
+		if pawn.id in old_ids:
+			homes_ok = homes_ok and pawn.home_lot == lot_id
+	_check(homes_ok, "and everyone lives where they live: the new household at home, the old one in the house you left")
+	var old_pockets := 0
+	for pawn in town.pawns:
+		if pawn.id in old_ids:
+			old_pockets += pawn.coins
+	_check(old_pockets >= 150 + 10 * Economy.resource_price("grain") * 70 / 100 and household.coins == pockets_before and household.stock.is_empty(), "the old household's purse and goods were turned into money for them (%d), and the new family's pockets became the purse (%d)" % [old_pockets, household.coins])
+	_check(world.titles.size() == 1 and world.titles.has(WorldState.HOME_LOT) and not world.home_lost, "the old land titles went with them; the new house is held for rent or freehold by class (%s)" % str(world.titles))
+	_check(dog.owner == "town" and dog.home_lot == lot_id, "the dog stays with the family that was yours")
+	_check(sim.realm != old_realm and sim.realm.reputation == 0.0 and household.get_pawn(sim.realm.head_id) != null and sim.realm.last_tax_day == old_realm.last_tax_day, "the Crown deals with the new family afresh, on the same quarter days")
+	_check(household.selected() != null and household.selected().adult and heard.size() == 1 and heard[0] == chosen["name"], "an adult of the new family is the one you control, and the screen is told")
+	_check(world.chronicle.size() >= 1 and "now follow" in str(world.chronicle[-1]["text"]), "and the chronicle says so")
+	_minutes(sim, 90)
+	_check(sim.people().size() == everyone_before and household.pawns.size() == family_ids.size(), "an hour and a half goes by with everyone going about their lives")
+	for pawn in household.pawns:
+		for need_id in Needs.active_ids():
+			pawn.needs[need_id] = 100.0
+	var back := Families.play(sim, lot_id)
+	_check(back["ok"] and _ids_of(household.pawns) == old_ids and world.lot == old_rect and world.get_lot(lot_id)["rect"] == new_rect, "and taking the old family up again puts everything back as it was")
+	_check(world.titles.has(WorldState.HOME_LOT) and Families.empty_rows(sim).size() >= 0, "with a home lot of its own")
+
+	# Moving house.
+	var vacant_family := {}
+	for family in Families.list(sim):
+		if family["town"] != world.home_town()["id"] and (family["members"] as Array).size() <= 3:
+			vacant_family = family
+			break
+	for pawn in vacant_family["members"]:
+		town.remove_pawn(pawn.id)
+	var empty := Families.empty_rows(sim)
+	var target := ""
+	for row in empty:
+		if row["lot"] == vacant_family["lot"]:
+			target = row["lot"]
+	_check(target != "" and Families.move_blocker(sim, target) == "", "a house with nobody in it can be moved into (%d empty houses)" % empty.size())
+	_check(Families.move_blocker(sim, WorldState.HOME_LOT) != "" and Families.move_blocker(sim, str(Families.list(sim)[0]["lot"])) != "", "but not your own, nor one with people in it")
+	var rect_there: Rect2i = world.get_lot(target)["rect"]
+	var here_before: Rect2i = world.lot
+	var town_there: String = world.get_lot(target)["town"]
+	household.coins = 33
+	household.stock = { "wood": 4 }
+	var kept_ids := _ids_of(household.pawns)
+	var moved := Families.move(sim, target)
+	var tiles_ok := true
+	for pawn in household.pawns:
+		tiles_ok = tiles_ok and rect_there.has_point(pawn.tile)
+	_check(moved["ok"] and world.lot == rect_there and world.get_lot(target)["rect"] == here_before and world.home_town()["id"] == town_there and _ids_of(household.pawns) == kept_ids, "the household moves to the house in the other town, and that town is home now")
+	_check(tiles_ok and household.coins == 33 and household.stock_of("wood") == 4 and world.titles.has(WorldState.HOME_LOT), "its people arrive there, and its purse, goods and title come along")
+	_check(Families.empty_rows(sim).any(func(row: Dictionary) -> bool: return row["lot"] == target), "and the house it left stands empty, to be moved into")
+	_check("moved from" in str(world.chronicle[-1]["text"]), "(the chronicle notes it)")
+
+	# When someone of the town dies.
+	var couple := {}
+	for family in Families.list(sim):
+		var spouses := 0
+		for pawn in family["members"]:
+			spouses += 1 if pawn.partner_id != 0 and pawn.adult else 0
+		if spouses >= 2 and family["town"] == world.home_town()["id"]:
+			couple = family
+			break
+	var estate_pawn: Pawn = null
+	var spouse: Pawn = null
+	if not couple.is_empty():
+		for pawn in couple["members"]:
+			if pawn.partner_id != 0 and pawn.adult and estate_pawn == null:
+				estate_pawn = pawn
+		spouse = sim.person(estate_pawn.partner_id)
+	if estate_pawn == null or spouse == null:  # no couple in this town: make one
+		var lot_entry := Families.list(sim)[0]
+		estate_pawn = (lot_entry["members"] as Array)[0]
+		spouse = _townsperson("Test Spouse", "female", 40, 4999)
+		spouse.home_lot = estate_pawn.home_lot
+		town.adopt(spouse)
+		estate_pawn.partner_id = spouse.id
+		spouse.partner_id = estate_pawn.id
+	estate_pawn.bond = "married"
+	spouse.bond = "married"
+	estate_pawn.coins = 90
+	var spouse_had := spouse.coins
+	sim.die(estate_pawn, "old age")
+	_check(spouse.coins >= spouse_had + 90 and estate_pawn.coins == 0, "when one of the town dies, the husband or wife has what they had (%d)" % spouse.coins)
+	_check("inherits" in str(world.chronicle[-1]["text"]), "and the chronicle tells of it (%s)" % str(world.chronicle[-1]["text"]))
+	var parent := _townsperson("Old Parent", "male", 60, 4998)
+	parent.home_lot = spouse.home_lot
+	var grown_child := _townsperson("Grown Child", "female", 30, 4997)
+	grown_child.parents = [parent.id] as Array[int]
+	grown_child.home_lot = spouse.home_lot
+	var other_child := _townsperson("Other Child", "male", 25, 4996)
+	other_child.parents = [parent.id] as Array[int]
+	town.adopt(parent)
+	town.adopt(grown_child)
+	town.adopt(other_child)
+	parent.coins = 41
+	var heirs := Families.heirs_of(sim, parent)
+	_check(_ids_of(heirs) == [other_child.id, grown_child.id] or _ids_of(heirs) == [grown_child.id, other_child.id], "with no husband or wife, the grown children share it")
+	sim.die(parent, "old age")
+	_check(grown_child.coins + other_child.coins >= 41, "(and it is divided between them)")
+
+	# Orphans.
+	var orphan_lot := ""
+	for family in Families.list(sim):
+		if family["town"] == world.home_town()["id"] and (family["members"] as Array).size() >= 2 and orphan_lot == "":
+			orphan_lot = family["lot"]
+	_check(orphan_lot != "", "there is a house to leave a child in")
+	for pawn in Families.residents_of(sim, orphan_lot):
+		if pawn.adult:
+			town.remove_pawn(pawn.id)
+	var child := _townsperson("Lonely Child", "male", 9, 4995)
+	child.home_lot = orphan_lot
+	child.tile = Romance._free_spot_in(sim, orphan_lot)
+	town.adopt(child)
+	Families.new_day(sim)
+	_check(child.home_lot != orphan_lot and Families.residents_of(sim, child.home_lot).any(func(p: Pawn) -> bool: return p.adult), "a child left with no grown-up is taken in by another family (%s)" % str(world.chronicle[-1]["text"]))
+
+	# Houses fill again.
+	var empty_lot := {}
+	for entry in Families.vacant_houses(sim):
+		if entry["town"] == world.home_town()["id"]:
+			empty_lot = entry
+			break
+	if empty_lot.is_empty():
+		var victim := Families.list(sim)[0]
+		for pawn in victim["members"]:
+			town.remove_pawn(pawn.id)
+		empty_lot = world.get_lot(victim["lot"])
+	var before := sim.people().size()
+	var arrival_rng := RandomNumberGenerator.new()
+	arrival_rng.seed = 5
+	var said := Families._arrive(sim, empty_lot, arrival_rng)
+	var arrived := Families.residents_of(sim, str(empty_lot["id"]))
+	var arrived_ok := arrived.size() >= 1 and arrived.size() == sim.people().size() - before
+	for pawn in arrived:
+		arrived_ok = arrived_ok and (empty_lot["rect"] as Rect2i).has_point(pawn.tile) and pawn.surname() == arrived[0].surname()
+	_check(arrived_ok and "has come to" in said, "newcomers settle into an empty house as a family (%s)" % said)
+	var names_before := {}
+	for pawn in sim.people():
+		if pawn not in arrived:
+			names_before[pawn.surname()] = true
+	_check(not names_before.has(arrived[0].surname()), "with a name not already in the region")
+
+	# A family from a town with no work goes where there is some.
+	var open_town := ""
+	for lot in world.lots:
+		if lot["kind"] == "shop" and not sim.open_positions(str(lot["id"])).is_empty() and str(lot["town"]) != "":
+			open_town = str(lot["town"])
+			break
+	var workless := {}
+	for family in Families.list(sim):
+		if family["town"] != open_town and (family["members"] as Array).size() <= 3 and Families._may_move(sim, family["members"]) == false:
+			for pawn in family["members"]:
+				sim.quit_job(pawn)
+			if Families._may_move(sim, family["members"]):
+				workless = family
+				break
+	var vacant_there := {}
+	for entry in world.lots:
+		if entry["kind"] == "house" and str(entry["town"]) == open_town and Families.residents_of(sim, str(entry["id"])).is_empty():
+			vacant_there = entry
+	if vacant_there.is_empty() and not workless.is_empty():
+		for family in Families.list(sim):
+			if family["town"] == open_town and (family["members"] as Array).size() <= 3 and family["lot"] != workless["lot"]:
+				for pawn in family["members"]:
+					town.remove_pawn(pawn.id)
+				vacant_there = world.get_lot(family["lot"])
+				break
+	if not workless.is_empty() and not vacant_there.is_empty() and open_town != "":
+		var told := Families._move_family_in(sim, vacant_there, arrival_rng)
+		var newcomers := Families.residents_of(sim, str(vacant_there["id"]))
+		var settled := not newcomers.is_empty()
+		for pawn in newcomers:
+			settled = settled and (vacant_there["rect"] as Rect2i).has_point(pawn.tile) and pawn.work_job == ""
+		_check(settled and "where there is work" in told, "a family with no work moves to a town that is hiring (%s)" % told)
+	else:
+		_check(false, "a family with no work could be moved (no suitable setup in this world)")
+
+	# The chronicle is kept and saved.
+	for i in 60:
+		Families.record(sim, "Something happened %d." % i)
+	_check(world.chronicle.size() == int(Families.config()["chronicle_limit"]) and Families.chronicle_lines(sim)[0].ends_with("59."), "the chronicle keeps the latest, newest first")
+	var copy := WorldState.from_dict(JSON.parse_string(JSON.stringify(world.to_dict())))
+	_check(copy.chronicle == world.chronicle and copy.lot == world.lot, "and it survives a save, with the home lot")
+	_check(SaveGame.FORMAT_VERSION == 14, "saves are format 14")
 
 
 func _test_events() -> void:

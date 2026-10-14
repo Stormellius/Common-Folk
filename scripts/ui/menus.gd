@@ -19,6 +19,11 @@ signal save_screen_requested
 signal closed
 ## A newborn of your household was given a name.
 signal baby_named(baby_id: int, given: String)
+## The families screen was asked for (from the pause menu, or the end of a line): the game fills it in.
+signal families_requested
+## Take up the family on this lot, or move the household into the empty house on it.
+signal play_family_requested(lot_id: String)
+signal move_house_requested(lot_id: String)
 
 const CREDIT := "Type: IM Fell English by Igino Marini and Alegreya by Huerta Tipográfica, under the SIL Open Font License"
 
@@ -61,6 +66,8 @@ var _name_portrait: PawnPortrait
 var _name_baby := 0
 var _name_gender := ""
 var _name_used: Array[String] = []
+var _family_list: VBoxContainer
+var _family_note: Label
 
 
 func _ready() -> void:
@@ -81,6 +88,7 @@ func _ready() -> void:
 	_screens["confirm"] = _build_confirm()
 	_screens["game_over"] = _build_game_over()
 	_screens["name"] = _build_naming()
+	_screens["families"] = _build_families()
 	_show("")
 
 
@@ -332,6 +340,7 @@ func _build_pause() -> Control:
 		["Load Game", func() -> void:
 			_refresh_load_list()
 			_show("load")],
+		["Town Families", func() -> void: families_requested.emit()],
 		["Settings", func() -> void:
 			_refresh_settings()
 			_show("settings")],
@@ -745,8 +754,97 @@ func _build_game_over() -> Control:
 	var title_button := Button.new()
 	title_button.text = "Main Menu"
 	title_button.pressed.connect(func() -> void: title_requested.emit())
-	box.add_child(_button_row([load_button, new_button, title_button]))
+	var family_button := Button.new()
+	family_button.text = "Another Family"
+	family_button.pressed.connect(func() -> void: families_requested.emit())
+	box.add_child(_button_row([family_button, load_button, new_button, title_button]))
 	return parts[0]
+
+
+# --- the town's families -----------------------------------------------------------
+
+func _build_families() -> Control:
+	var parts := _card("The Town's Families", 760.0)
+	var box: VBoxContainer = parts[1]
+	_family_note = _ink_label("", "InkDim")
+	_family_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_family_note.custom_minimum_size = Vector2(720, 0)
+	box.add_child(_family_note)
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(720, 400)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	box.add_child(scroll)
+	_family_list = VBoxContainer.new()
+	_family_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_family_list.add_theme_constant_override("separation", 6)
+	scroll.add_child(_family_list)
+	box.add_child(_button_row([_back_button()]))
+	return parts[0]
+
+
+## The families screen. `families` and `empty` are the rows from Families.rows and Families.empty_rows,
+## `chronicle` the lines of what has happened, and `note` says who you are now.
+func open_families(families: Array[Dictionary], empty: Array[Dictionary], chronicle: Array[String], note: String) -> void:
+	if _current == "":
+		_back_to = "pause"
+	_family_note.text = note
+	_clear(_family_list)
+	_family_list.add_child(_ink_label("Families of the town", "InkHeader"))
+	var last_town := "~"
+	for row in families:
+		if str(row["town"]) != last_town:
+			last_town = str(row["town"])
+			var heading := _ink_label(last_town, "InkLabel")
+			heading.add_theme_font_override("font", UiTheme.bold_font())
+			_family_list.add_child(heading)
+		_family_list.add_child(_family_row("%s  ·  %s" % [row["title"], row["class"]], str(row["who"]), "Play", str(row["blocker"]), str(row["lot"]), play_family_requested))
+	if families.is_empty():
+		_family_list.add_child(_ink_label("Nobody else lives in the town.", "InkDim"))
+	_family_list.add_child(_ink_rule())
+	_family_list.add_child(_ink_label("Empty houses", "InkHeader"))
+	for row in empty:
+		_family_list.add_child(_family_row("%s  ·  %s" % [row["title"], row["town"]], "%d beds" % int(row["beds"]), "Move in", str(row["blocker"]), str(row["lot"]), move_house_requested))
+	if empty.is_empty():
+		_family_list.add_child(_ink_label("Every house is lived in.", "InkDim"))
+	_family_list.add_child(_ink_rule())
+	_family_list.add_child(_ink_label("What has happened", "InkHeader"))
+	for line in chronicle.slice(0, 14):
+		var entry := _ink_label(line, "InkDim")
+		entry.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		entry.custom_minimum_size = Vector2(680, 0)
+		_family_list.add_child(entry)
+	if chronicle.is_empty():
+		_family_list.add_child(_ink_label("Nothing yet.", "InkDim"))
+	_show("families")
+
+
+## Words on the families screen (why something could not be done).
+func show_families_note(text: String) -> void:
+	_family_note.text = text
+
+
+func _family_row(title: String, detail: String, button_text: String, blocker: String, lot_id: String, request: Signal) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	var words := VBoxContainer.new()
+	words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	words.add_theme_constant_override("separation", 0)
+	row.add_child(words)
+	var heading := _ink_label(title, "InkLabel")
+	heading.add_theme_font_override("font", UiTheme.bold_font())
+	words.add_child(heading)
+	var who := _ink_label(detail, "InkDim")
+	who.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	who.custom_minimum_size = Vector2(540, 0)
+	words.add_child(who)
+	var button := Button.new()
+	button.text = button_text
+	button.disabled = blocker != ""
+	button.tooltip_text = blocker
+	button.custom_minimum_size = Vector2(90, 0)
+	button.pressed.connect(func() -> void: request.emit(lot_id))
+	row.add_child(button)
+	return row
 
 
 # --- small parts -------------------------------------------------------------------

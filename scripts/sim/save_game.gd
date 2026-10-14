@@ -17,7 +17,7 @@ extends RefCounted
 ## nobody is dying, and the old graves hold nobody restless), and formats 1 to 9 had one town and
 ## wrote every tile out as a number (the lots become one town, and the tiles are read as they come).
 
-const FORMAT_VERSION := 13
+const FORMAT_VERSION := 14
 
 
 ## Writes the save file. Returns OK or a Godot error code. `view` is anything the screen wants

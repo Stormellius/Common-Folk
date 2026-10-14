@@ -45,6 +45,8 @@ signal event_ended(event_name: String)
 signal realm_notice(text: String)
 ## Someone in the household fell ill, or got better.
 signal health_notice(text: String)
+## The player took up another family of the town, or moved house (see Families); `name` is the family's.
+signal family_changed(name: String)
 ## Who is in the household changed without a death: a baby was born, or grew old enough to be controlled.
 signal household_changed
 ## Babies were born into your household (their ids): the view may ask what to call them.
@@ -152,6 +154,8 @@ func step(motion_steps: int = 1) -> void:
 			health_notice.emit(notice)
 		Skills.find_work(self, _rng)
 		Ambitions.new_day(self)
+		for notice in Families.new_day(self):
+			health_notice.emit(notice)
 		for notice in Fauna.new_day(self, _rng):
 			health_notice.emit(notice)
 		Caravans.new_day(self, _rng)
@@ -1203,6 +1207,8 @@ func _drain_needs(pawn: Pawn, season_multipliers: Dictionary) -> String:
 ## next person in the household. With nobody left the playthrough is over.
 func die(pawn: Pawn, cause: String) -> void:
 	_end_job(pawn)
+	if household.get_pawn(pawn.id) == null:
+		Families.settle_estate(self, pawn)  # what they earned last included, and before the marriage ends with the death
 	Romance.on_death(self, pawn)
 	pawn.path.clear()
 	var spot := pawn.committed_tile()

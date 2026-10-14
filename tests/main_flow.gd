@@ -65,6 +65,26 @@ func _ready() -> void:
 	menus.load_requested.emit("user://saves/no_such_save.json")
 	_check(menus.current() == "load" and menus._load_error.visible, "a save that cannot be loaded says so on the load screen")
 
+	# The families screen: take up another family, and go back.
+	menus.close()
+	var before: int = main.sim.household.pawns.size()
+	var old_name: String = Families.family_name(main.sim.household.pawns)
+	main._open_menu(main._open_families)
+	_check(menus.current() == "families" and menus._family_list.get_child_count() > 6, "the families screen lists the town's families, the empty houses and what has happened")
+	var rows: Array = Families.rows(main.sim)
+	var lot_id := ""
+	for row in rows:
+		if str(row["blocker"]) == "":
+			lot_id = str(row["lot"])
+			break
+	menus.play_family_requested.emit(lot_id)
+	var new_name: String = Families.family_name(main.sim.household.pawns)
+	_check(lot_id != "" and not menus.is_open() and new_name != old_name and main.sim.household.selected() != null and main.sim.household.selected().home_lot == WorldState.HOME_LOT, "playing one closes the screen and you are that family (%s, then %s; %d folk before)" % [old_name, new_name, before])
+	main._open_menu(main._open_families)
+	menus.play_family_requested.emit(WorldState.HOME_LOT)
+	_check(menus.current() == "families" and "own family" in menus._family_note.text, "asking for your own family says why not")
+	menus.close()
+
 	SaveSlots.remove(path)
 	print("")
 	print("ALL CHECKS PASSED" if _failures == 0 else "%d CHECK(S) FAILED" % _failures)

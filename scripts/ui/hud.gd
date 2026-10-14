@@ -25,6 +25,7 @@ const HELP_LINES: Array = [
 	["G", "Grid"],
 	["F5 / F9", "Quick save / load the newest save"],
 	["F11", "Full screen"],
+	["F", "The town's families: play another, or move house"],
 	["N", "A new game"],
 	["Esc", "Menu"],
 ]

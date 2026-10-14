@@ -60,6 +60,8 @@ var fauna_seeded := false
 var roofs: Dictionary = {}
 var sites: Array[BuildSite] = []
 var reserved: Dictionary = {}
+## What has happened to the families of the towns (see Families): { "day", "text" }, newest last.
+var chronicle: Array[Dictionary] = []
 ## True for a world loaded from a save that had no roofs: the buildings need roofing (see Rooms).
 var needs_roofing := false
 
@@ -473,6 +475,7 @@ func to_dict() -> Dictionary:
 		"sites": sites.map(func(site: BuildSite) -> Dictionary: return site.to_dict()),
 		"reserved": reserved.duplicate(),
 		"next_site_id": _next_site_id,
+		"chronicle": chronicle.duplicate(true),
 		"caravans": caravans.map(func(caravan: Caravan) -> Dictionary: return caravan.to_dict()),
 		"next_caravan_id": _next_caravan_id,
 		"animals": animals.map(func(animal: Animal) -> Dictionary: return animal.to_dict()),
@@ -546,6 +549,9 @@ static func from_dict(data: Dictionary) -> WorldState:
 			world.sites.append(site)
 			world._site_by_id[site.id] = site
 			world._next_site_id = maxi(world._next_site_id, site.id + 1)
+	for saved in data.get("chronicle", []):
+		if saved is Dictionary and saved.has("text"):
+			world.chronicle.append({ "day": int(saved.get("day", 0)), "text": str(saved["text"]) })
 	var saved_reserved: Variant = data.get("reserved", {})
 	if saved_reserved is Dictionary:
 		for resource_id in saved_reserved:

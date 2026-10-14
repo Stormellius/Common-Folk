@@ -1,6 +1,6 @@
 # Common Folk: roadmap
 
-Milestones 1 to 23 are done. This file keeps the plan for 12 to 23 as it was built, and what comes next (24 and 25). Each milestone ended with the game playable, the smoke test passing and older saves still loading.
+Milestones 1 to 24 are done. This file keeps the plan for 12 to 24 as it was built, and what comes next (25). Each milestone ended with the game playable, the smoke test passing and older saves still loading.
 
 ## What the people are called
 
@@ -118,12 +118,19 @@ Folk are born, grow up, grow old and die, as in the Sims, with a medieval face o
 - **The panel** shows the ambition, its step and how far along, the wishes with their hours left, and what they have fulfilled; the player is told when a step is reached, an ambition fulfilled or a wish comes true. The panel shrinks to fit a short window
 - The rules (how many wishes, how often they come, how long before a new dream, how far folk will go) are in `data/dreams.json`. Saves are format 13; older ones load and everyone is given an ambition
 
+## Milestone 24: Other families (done)
+
+- **Playing another family**: the Town Families screen (F, or the pause menu, or at the end of a line) lists every family of the towns with who is in it and their class, and any can be taken up. The household and that family swap places: the old household becomes the town's (their stockpile and tools are sold, the purse and the money shared among the grown-ups), the chosen family becomes the household, and the two houses swap ids and ground so that the family's house is the home lot, with everything that points at a lot (who lives there, whose animals) following. Old land titles go; the new house is freehold for a burgher or better and rented otherwise; the Crown starts afresh with them but the quarter days and the threat to the town carry on. The dog that was yours stays with the family that was yours
+- **Moving house**: the household can move, people and pets, into any empty house in this town or another; goods, titles and standing come along, the furniture of each house stays, and the old home is an empty house for whoever comes next. The town you move to is your home town
+- **Inheritance**: when someone of the town dies their coin goes to their husband or wife, else their grown children (shared), else their parents, else the grown-ups of the house
+- **Orphans**: children left with no grown-up are taken in by kin or the nearest family with a bed to spare
+- **Arrivals and moves**: an empty house is taken, with some chance each day, by a family from another town with no work, if its town is hiring (they leave their jobs and sell nothing: they just go), or by newcomers with a name not yet in the region. Families that have just settled stay put for a while
+- **The chronicle** (the last forty things that happened: deaths and who inherits, orphans, families coming and going, and which family you took up) is on the Town Families screen and in the save. Saves are format 14
+
 ## The plan from here
 
-Two milestones, in the order that lets each one build on the last. Each ends with the game playable, the smoke test passing and older saves still loading.
+One milestone left. Each ends with the game playable, the smoke test passing and older saves still loading.
 
-- **21 Builders and rooms**: building as a job, with materials hauled to the site; rooms, roofs and the indoor/outdoor difference
-- **24 Other families**: play any family in the town, inheritance of land and goods, the town's families carrying on without you, moving between towns
 - **25 Sound and music**: ambient sound, music, instruments to play
 
 ## Later
