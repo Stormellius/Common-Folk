@@ -1,6 +1,6 @@
 # Common Folk: roadmap
 
-Milestones 1 to 11 are in the README's history; this is the plan from milestone 12 on (17 is done). Each milestone ends with the game playable, the smoke test passing and older saves still loading.
+Milestones 1 to 17 are done. This file keeps the plan for 12 to 17 as it was built, and what comes next. Each milestone ended with the game playable, the smoke test passing and older saves still loading.
 
 ## What the people are called
 
