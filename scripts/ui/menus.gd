@@ -7,7 +7,7 @@ extends CanvasLayer
 ## One screen shows at a time. Load, Save, Settings and New Game go back to wherever they were
 ## opened from (the title screen or the pause menu); Esc goes back too, or closes the pause menu.
 
-signal new_game_requested(world_seed: int, start_id: String)
+signal new_game_requested(world_seed: int, start_id: String, lifespan: String)
 signal load_requested(path: String)
 signal save_requested(slot_name: String)
 ## Leave the game for the title screen.
@@ -36,6 +36,8 @@ var _start_buttons: Dictionary = {}
 var _start_picked := ""
 var _begin_button: Button
 var _seed_field: LineEdit
+var _lifespan_option: OptionButton
+var _lifespan_note: Label
 var _load_list: VBoxContainer
 var _load_error: Label
 var _save_list: VBoxContainer
@@ -115,6 +117,7 @@ func open_new_game() -> void:
 	if not starts.is_empty():
 		_pick_start(str(starts[0]["id"]))
 	_seed_field.text = ""
+	_pick_lifespan("normal")
 	_show("new")
 
 
@@ -345,11 +348,28 @@ func _build_new_game() -> Control:
 	roll.text = "Roll"
 	roll.pressed.connect(func() -> void: _seed_field.text = str(randi() % 1000000))
 	seed_row.add_child(roll)
+	var life_row := HBoxContainer.new()
+	life_row.add_theme_constant_override("separation", 8)
+	box.add_child(life_row)
+	var life_label := _ink_label("Lifespan", "InkLabel")
+	life_label.custom_minimum_size = Vector2(110, 0)
+	life_row.add_child(life_label)
+	_lifespan_option = OptionButton.new()
+	_lifespan_option.custom_minimum_size = Vector2(200, 0)
+	for def in DataRegistry.get_list("lifespans"):
+		_lifespan_option.add_item(str(def.get("name", def["id"])))
+		_lifespan_option.set_item_metadata(_lifespan_option.item_count - 1, str(def["id"]))
+	_lifespan_option.item_selected.connect(func(index: int) -> void: _pick_lifespan(str(_lifespan_option.get_item_metadata(index))))
+	life_row.add_child(_lifespan_option)
+	_lifespan_note = _ink_label("", "InkDim")
+	_lifespan_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_lifespan_note.custom_minimum_size = Vector2(540, 0)
+	box.add_child(_lifespan_note)
 	_begin_button = Button.new()
 	_begin_button.text = "Begin"
 	_begin_button.pressed.connect(func() -> void:
 		if _start_picked != "":
-			new_game_requested.emit(seed_from_text(_seed_field.text), _start_picked))
+			new_game_requested.emit(seed_from_text(_seed_field.text), _start_picked, chosen_lifespan()))
 	box.add_child(_button_row([_back_button(), _begin_button]))
 	return parts[0]
 
@@ -363,6 +383,19 @@ static func seed_from_text(text: String) -> int:
 	if clean.is_valid_int():
 		return int(clean)
 	return absi(hash(clean))
+
+
+## The lifespan picked on the new game screen (an id from data/lifespans.json).
+func chosen_lifespan() -> String:
+	var index := _lifespan_option.selected
+	return str(_lifespan_option.get_item_metadata(index)) if index >= 0 else "normal"
+
+
+func _pick_lifespan(id: String) -> void:
+	for i in _lifespan_option.item_count:
+		if str(_lifespan_option.get_item_metadata(i)) == id:
+			_lifespan_option.select(i)
+	_lifespan_note.text = str(DataRegistry.get_def("lifespans", id).get("text", ""))
 
 
 func _pick_start(id: String) -> void:

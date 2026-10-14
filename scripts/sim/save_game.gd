@@ -12,9 +12,11 @@ extends RefCounted
 ## 1 to 4 had no town (no other lots and nobody living in them), and formats 1 to 5 had no coin or
 ## jobs (the household gets a starting purse, and nobody has work), and formats 1 to 6 had no
 ## opinions or events (families start out fond of each other, and no event has happened yet), and formats
-## 1 to 7 had no land titles, realm or classes (the home lot is freehold, nothing is owed, everyone is a peasant).
+## 1 to 7 had no land titles, realm or classes (the home lot is freehold, nothing is owed, everyone is a peasant),
+## and formats 1 to 8 had no lifespan, dying or graves with spirits (people age by the calendar,
+## nobody is dying, and the old graves hold nobody restless).
 
-const FORMAT_VERSION := 8
+const FORMAT_VERSION := 9
 
 
 ## Writes the save file. Returns OK or a Godot error code. `view` is anything the screen wants

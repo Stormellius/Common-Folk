@@ -6,7 +6,7 @@ Milestones 1 to 11 are done (see the README). This is the plan from milestone 12
 
 The people you play are your **folk**: "your folk", "select one of your folk", "a household of four folk". One person is a villager, a townsman or townswoman, or simply by name. The people of the town who are not yours are **townsfolk**.
 
-## Milestone 12: Interface
+## Milestone 12: Interface (done)
 
 The game gets a proper front door and menus that look like they belong in it.
 
@@ -18,7 +18,7 @@ The game gets a proper front door and menus that look like they belong in it.
 - Settings, kept between runs in `user://settings.cfg`: windowed, fullscreen or borderless, the window size, vsync, interface scale, autosave on or off
 - The words in the interface use "folk"
 
-## Milestone 13: Life and death
+## Milestone 13: Life and death (done)
 
 Folk are born, grow up, grow old and die, as in the Sims, with a medieval face on it.
 
@@ -27,7 +27,7 @@ Folk are born, grow up, grow old and die, as in the Sims, with a medieval face o
 - Elders walk slower, tire sooner, stop heavy work, and each has a hidden span: they die of old age somewhere between about 62 and 80
 - Dying is no longer instant. Someone who dies collapses, and a little later **Death** comes for them: a tall hooded figure with a scythe who walks up, waits, and leads the soul away. A family member can **plead with Death**; the better they loved the dying person, the likelier Death relents (they live, shaken, with a "brush with death" thought). Death always takes the old in the end
 - A grave is dug where they fell (or in the chapel yard if there is room), the household and friends mourn in proportion to how close they were, and the heir takes over as now
-- **Ghosts**: some of the dead do not rest. On some nights a ghost walks near its grave, pale and drifting; anyone who sees one is frightened. Praying at the grave (or the priest's blessing at the chapel) lays it to rest for good
+- **Ghosts**: some of the dead do not rest. On some nights a ghost walks near its grave, pale and drifting; anyone who sees one is frightened. Praying at the grave lays it to rest for good
 - All of it is data: `life_stages.json`, `lifespans.json` and the thoughts
 
 ## Milestone 14: Pregnancy and babies

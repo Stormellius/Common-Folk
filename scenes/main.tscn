@@ -1,4 +1,4 @@
-[gd_scene load_steps=17 format=3]
+[gd_scene load_steps=18 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/view/map_view.gd" id="2_map"]
@@ -15,6 +15,7 @@
 [ext_resource type="Script" path="res://scripts/view/cloud_shadows.gd" id="13_clouds"]
 [ext_resource type="Script" path="res://scripts/view/weather.gd" id="14_weather"]
 [ext_resource type="Script" path="res://scripts/ui/menus.gd" id="15_menus"]
+[ext_resource type="Script" path="res://scripts/view/death_layer.gd" id="16_death"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
@@ -36,6 +37,9 @@ script = ExtResource("8_objects")
 
 [node name="PawnLayer" type="Node2D" parent="."]
 script = ExtResource("7_pawns")
+
+[node name="DeathLayer" type="Node2D" parent="."]
+script = ExtResource("16_death")
 
 [node name="SmokeLayer" type="Node2D" parent="."]
 script = ExtResource("12_smoke")

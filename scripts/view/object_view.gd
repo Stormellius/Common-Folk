@@ -41,7 +41,7 @@ func _add_light() -> void:
 	if not spec is Dictionary:
 		return
 	_light = PointLight2D.new()
-	_light.texture = _glow_texture()
+	_light.texture = glow_texture()
 	_light.color = Color(str(spec.get("color", "#ffa24f")))
 	_light.texture_scale = float(spec.get("radius", 4.0)) * MapView.TILE_SIZE / (LIGHT_TEXTURE_SIZE * 0.5)
 	_light_energy = float(spec.get("energy", 1.0))
@@ -77,8 +77,8 @@ func _update_occluders() -> void:
 		_occluders.append(occluder)
 
 
-## A soft round falloff, shared by every light.
-static func _glow_texture() -> GradientTexture2D:
+## A soft round falloff, shared by every light (and the ghosts' glow).
+static func glow_texture() -> GradientTexture2D:
 	if _light_texture == null:
 		var gradient := Gradient.new()
 		gradient.offsets = PackedFloat32Array([0.0, 0.25, 0.6, 1.0])

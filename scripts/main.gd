@@ -21,6 +21,7 @@ var _loaded_view: Dictionary = {}  # the camera of the save just loaded
 @onready var floor_layer: FloorLayer = $FloorLayer
 @onready var shadow_layer: ShadowLayer = $ShadowLayer
 @onready var smoke_layer: SmokeLayer = $SmokeLayer
+@onready var death_layer: DeathLayer = $DeathLayer
 @onready var cloud_shadows: CloudShadows = $CloudShadows
 @onready var weather: Weather = $Weather
 @onready var object_layer: ObjectLayer = $ObjectLayer
@@ -55,7 +56,7 @@ func _ready() -> void:
 	GameClock.day_changed.connect(_on_day_changed)
 	if _skips_title():
 		_begin_game()
-		_start_new_world(_pick_seed(), _launch_option("start"))
+		_start_new_world(_pick_seed(), _launch_option("start"), _launch_option("lifespan") if _launch_option("lifespan") != "" else "normal")
 		_apply_launch_options()
 	else:
 		_show_title()
@@ -133,6 +134,9 @@ func _unhandled_input(event: InputEvent) -> void:
 ## demohouse = build a small walled room with a door and a floor on the lot, using the real build commands,
 ## weather = clear, cloudy, rain or snow instead of the seeded weather (only changes the look),
 ## title = 1 to show the title screen even with other options given,
+## lifespan = how fast people age in a new game (an id from data/lifespans.json; normal if not given),
+## fall = minutes: the selected person fell that long ago and lies dying (to see Death come),
+## ghost = 1: a townsperson has died, and their ghost walks tonight,
 ## screen = a menu to open at the start: pause, save, load, settings, new or game_over.
 ## Handy for screenshots and testing.
 func _launch_option(name: String) -> String:
@@ -180,6 +184,18 @@ func _apply_launch_options() -> void:
 		var doomed := sim.household.selected()
 		doomed.needs["hunger"] = 0.0
 		doomed.deprivation["hunger"] = int(Needs.fatal_after_hours("hunger") * 60.0) - 4
+	if _launch_option("fall") != "" and sim != null and sim.household.selected() != null:
+		var fallen := sim.household.selected()
+		Mortality.fall(sim, fallen, "starved")
+		fallen.dying_since -= int(_launch_option("fall"))
+	if _launch_option("ghost") != "" and sim != null and not sim.town.pawns.is_empty():
+		var departed: Pawn = sim.town.pawns[0]
+		sim.die(departed, "died of a fever")
+		for spirit in world.spirits:
+			if spirit["name"] == departed.display_name:
+				spirit["restless"] = true
+				spirit["haunt_until"] = GameClock.tick + 600
+				camera.position = (Vector2(int(spirit["grave"][0]), int(spirit["grave"][1])) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE
 	if _launch_option("demohouse") != "" and sim != null:
 		_build_demo_house()
 	if _launch_option("build") != "" and sim != null:
@@ -233,7 +249,7 @@ func _show_title() -> void:
 	_in_game = false
 	build.set_active(false)
 	hud.close_action_menu()
-	_start_new_world(randi(), "bought")
+	_start_new_world(randi(), "bought", "normal")
 	GameClock.set_time(randi() % 60, 20)
 	GameClock.set_speed(1)
 	hud.visible = false
@@ -296,9 +312,9 @@ func _on_menus_closed() -> void:
 		GameClock.set_speed(_speed_before_menu)
 
 
-func _on_new_game_requested(world_seed: int, start_id: String) -> void:
+func _on_new_game_requested(world_seed: int, start_id: String, lifespan: String) -> void:
 	_begin_game()
-	_start_new_world(world_seed, start_id)
+	_start_new_world(world_seed, start_id, lifespan)
 	menus.close()
 	GameClock.set_speed(1)
 	hud.show_message("A new life begins. The world's seed is %d." % world.world_seed, 4.0)
@@ -365,9 +381,10 @@ func _describe_newest_save() -> String:
 	return "Your last save"
 
 
-func _start_new_world(world_seed: int, start_id: String = "") -> void:
+func _start_new_world(world_seed: int, start_id: String = "", lifespan: String = "normal") -> void:
 	GameClock.reset()
 	var new_world := MapGenerator.generate(world_seed, MAP_WIDTH, MAP_HEIGHT)
+	new_world.lifespan = lifespan if DataRegistry.has_def("lifespans", lifespan) else "normal"
 	TownGenerator.generate(new_world)  # roads, the player's lot and the buildings
 	if new_world.lot.size == Vector2i.ZERO:  # no town described in the data
 		new_world.lot = WorldState.centered_lot(new_world.width, new_world.height)
@@ -394,6 +411,7 @@ func _show_world(new_world: WorldState, household: Household, town: Household = 
 	weather.bind(world)
 	object_layer.bind(sim)
 	pawn_layer.bind(sim)
+	death_layer.bind(sim)
 	build.bind(sim)
 	hud.close_action_menu()
 	hud.set_household(household)

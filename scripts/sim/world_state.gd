@@ -37,6 +37,12 @@ var home_lost := false
 ## Floors laid on the ground (Vector2i -> floor id from data/floors.json). They sit under
 ## objects, so a bed can stand on planks.
 var floors: Dictionary = {}
+## How fast people age: an id from data/lifespans.json (see Life). A world from an older save
+## goes by the calendar, as it always did.
+var lifespan := "calendar"
+## One entry for each of the dead who lies in a grave (see Mortality): { "name", "look", "grave":
+## [x, y], "restless": bool, "haunt_until": tick }.
+var spirits: Array[Dictionary] = []
 
 var _next_object_id := 1
 var _object_at_tile := {}  # Vector2i -> PlacedObject
@@ -271,6 +277,8 @@ func to_dict() -> Dictionary:
 			saved["rect"] = [rect.position.x, rect.position.y, rect.size.x, rect.size.y]
 			return saved),
 		"floors": floors.keys().map(func(cell: Vector2i) -> Array: return [cell.x, cell.y, floors[cell]]),
+		"lifespan": lifespan,
+		"spirits": spirits.duplicate(true),
 	}
 
 
@@ -312,4 +320,16 @@ static func from_dict(data: Dictionary) -> WorldState:
 	for saved in data.get("floors", []):
 		if saved is Array and saved.size() >= 3 and DataRegistry.has_def("floors", str(saved[2])):
 			world.floors[Vector2i(int(saved[0]), int(saved[1]))] = str(saved[2])
+	var saved_lifespan := str(data.get("lifespan", "calendar"))
+	world.lifespan = saved_lifespan if DataRegistry.has_def("lifespans", saved_lifespan) else "calendar"
+	for saved in data.get("spirits", []):
+		if saved is Dictionary and saved.get("grave") is Array and saved["grave"].size() >= 2:
+			var look: Variant = saved.get("look", {})
+			world.spirits.append({
+				"name": str(saved.get("name", "")),
+				"look": look.duplicate() if look is Dictionary else {},
+				"grave": [int(saved["grave"][0]), int(saved["grave"][1])],
+				"restless": bool(saved.get("restless", false)),
+				"haunt_until": int(saved.get("haunt_until", -1)),
+			})
 	return world

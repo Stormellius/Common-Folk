@@ -59,6 +59,7 @@ var _help_panel: PanelContainer
 
 var _needs_panel: PanelContainer
 var _needs_name: Label
+var _needs_age: Label
 var _needs_traits: Label
 var _needs_activity: Label
 var _needs_job: Label
@@ -180,10 +181,12 @@ func update_household_status(household: Household) -> void:
 			if float(pawn.needs[need_id]) < worst_value and need_id in Needs.active_ids():
 				worst_value = float(pawn.needs[need_id])
 				worst_need = str(need_id)
-		var band := Needs.band(worst_value)
+		var band := "critical" if pawn.is_dying() else Needs.band(worst_value)
 		_chip_marks[pawn.id].color = BAND_COLORS[band]
 		var tip := pawn.display_name
-		if band != "good":
+		if pawn.is_dying():
+			tip += "  -  dying"
+		elif band != "good":
 			tip += "  -  %s %s" % [str(DataRegistry.get_def("needs", worst_need).get("name", worst_need)), "is critical" if band == "critical" else "is low"]
 		_chips[pawn.id].tooltip_text = tip
 
@@ -194,6 +197,7 @@ func show_pawn(pawn: Pawn, activity: String, job: String = "", relations: Array[
 	if pawn == null:
 		return
 	_needs_name.text = pawn.display_name
+	_needs_age.text = Life.describe_age(pawn)
 	var trait_names: Array[String] = []
 	for trait_id in pawn.traits:
 		trait_names.append(str(DataRegistry.get_def("traits", trait_id).get("name", trait_id)))
@@ -439,6 +443,9 @@ func _build_needs_panel() -> void:
 	_needs_name = _make_label("", "HeaderLabel")
 	_needs_name.add_theme_font_size_override("font_size", 22)
 	box.add_child(_needs_name)
+	_needs_age = _make_label("", "")
+	_needs_age.add_theme_font_size_override("font_size", 14)
+	box.add_child(_needs_age)
 	_needs_traits = _make_label("", "DimLabel")
 	box.add_child(_needs_traits)
 	_needs_activity = _make_label("", "")

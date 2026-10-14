@@ -33,6 +33,7 @@ func _ready() -> void:
 	_test_conflict()
 	_test_pregnancy()
 	_test_death()
+	_test_life_and_death()
 	_test_mood()
 	_test_save_and_load()
 	print("")
@@ -250,13 +251,13 @@ func _test_menus() -> void:
 	menus.show_title("")
 	_check(menus._continue_button.disabled, "and cannot continue when there is no save")
 	var begun: Array = []
-	menus.new_game_requested.connect(func(world_seed: int, start_id: String) -> void: begun.append([world_seed, start_id]))
+	menus.new_game_requested.connect(func(world_seed: int, start_id: String, lifespan: String) -> void: begun.append([world_seed, start_id, lifespan]))
 	menus.open_new_game_from_title()
 	_check(menus.current() == "new" and menus._start_buttons.size() == 3, "New Game shows a button for each way of beginning")
 	menus._start_buttons["arrived"].pressed.emit()
 	menus._seed_field.text = "1234"
 	menus._begin_button.pressed.emit()
-	_check(begun == [[1234, "arrived"]], "Begin reports the start and the seed")
+	_check(begun == [[1234, "arrived", "normal"]], "Begin reports the start, the seed and the lifespan (normal unless chosen)")
 	_check(Menus.seed_from_text("77") == 77 and Menus.seed_from_text("Thornbury") == Menus.seed_from_text("Thornbury") and Menus.seed_from_text("Thornbury") >= 0, "a typed seed is a number, or any word always makes the same one")
 	var back := InputEventKey.new()
 	back.keycode = KEY_ESCAPE
@@ -1947,11 +1948,11 @@ func _test_pregnancy() -> void:
 
 	# Growing up.
 	GameClock.set_time(45 + 60, 0)
-	Pregnancy.new_day(sim, rng)
+	Life.new_day(sim, rng)
 	_check(baby.age == 1 and baby.is_infant(), "a year later the baby is one")
 	GameClock.set_time(45 + 120, 0)
 	changes[0] = 0
-	heard = Pregnancy.new_day(sim, rng)
+	heard = Life.new_day(sim, rng)
 	_check(baby.age == 2 and not baby.is_infant() and changes[0] == 1 and household.select(baby.id), "at two it runs about and can be controlled (%s)" % str(heard))
 	var teen := Pawn.new()
 	teen.display_name = "Teen Brook"
@@ -1960,7 +1961,7 @@ func _test_pregnancy() -> void:
 	teen.traits = ["lazy"] as Array[String]
 	household.add_pawn(teen)
 	GameClock.set_time(240 + Pregnancy.birthday_of(teen), 0)
-	heard = Pregnancy.new_day(sim, rng)
+	heard = Life.new_day(sim, rng)
 	var orientation_found := false
 	for trait_id in teen.traits:
 		orientation_found = orientation_found or str(DataRegistry.get_def("traits", trait_id).get("group", "")) == "orientation"
@@ -2154,8 +2155,12 @@ func _test_faith_and_illness() -> void:
 	var buried := [0]
 	sim.town_death.connect(func(_name: String, cause: String) -> void: buried[0] += 1 if "fever" in cause else 0)
 	sim._roll_illness(doomed)
-	var still_ill := doomed.filter(func(p: Pawn) -> bool: return p.illness != "" and sim.town.get_pawn(p.id) != null)
-	_check(still_ill.is_empty() and buried[0] > 12 and buried[0] < 40, "a fever that has dragged on too long either breaks or kills (%d of 40 died)" % buried[0])
+	var still_ill := doomed.filter(func(p: Pawn) -> bool: return p.illness != "" and not p.is_dying())
+	var fallen := doomed.filter(func(p: Pawn) -> bool: return p.is_dying() and "fever" in p.dying_cause)
+	_check(still_ill.is_empty() and fallen.size() > 12 and fallen.size() < 40, "a fever that has dragged on too long either breaks or lays them low (%d of 40 dying)" % fallen.size())
+	GameClock.advance_ticks(int(Mortality.config()["takes_after_minutes"]))
+	Mortality.step(sim)
+	_check(buried[0] == fallen.size() and sim.town.pawns.filter(func(p: Pawn) -> bool: return p.is_dying()).is_empty(), "and when Death comes for them they are buried (%d)" % buried[0])
 	var carrier := Pawn.new()
 	carrier.illness = "fever"
 	carrier.ill_since = 777
@@ -2466,11 +2471,25 @@ func _test_death() -> void:
 	first.needs["hunger"] = 0.0
 	first.deprivation["hunger"] = int(Needs.fatal_after_hours("hunger") * 60.0) - 2
 	household.select(first.id)
+	var notices: Array[String] = []
+	sim.health_notice.connect(func(text: String) -> void: notices.append(text))
 	var ticks := 0
-	while household.pawns.size() == 3 and ticks < 10:
+	while not first.is_dying() and ticks < 10:
 		sim.step()
 		ticks += 1
-	_check(household.pawns.size() == 2 and household.get_pawn(first.id) == null, "after three days empty, a person dies and leaves the household")
+	_check(first.is_dying() and first.dying_cause == "starved" and first.pose == "fallen" and household.pawns.size() == 3, "after three days empty, a person falls and lies dying, still one of the household")
+	_check(not notices.is_empty() and "dying" in notices[0] and "plead" in notices[0], "you are told, and that you can plead with Death")
+	_check(not sim.order_move(first, Vector2i(2, 2))["ok"] and first.needs["hunger"] == 0.0, "the dying cannot be sent anywhere")
+	var hunger_while_dying := float(first.needs["rest"])
+	for i in int(Mortality.config()["arrives_after_minutes"]):
+		GameClock.advance_one_tick()
+		sim.step()
+	_check(Mortality.death_has_come(first) and float(first.needs["rest"]) == hunger_while_dying and "Death has come" in notices.back(), "Death comes and waits beside them")
+	_check(sim.describe_activity(first).begins_with("Dying"), "the panel says so")
+	for i in int(Mortality.config()["takes_after_minutes"]) - int(Mortality.config()["arrives_after_minutes"]):
+		GameClock.advance_one_tick()
+		sim.step()
+	_check(household.pawns.size() == 2 and household.get_pawn(first.id) == null, "then he takes them, and they leave the household")
 	_check(announced.size() == 1 and announced[0][0] == "Builder One" and announced[0][1] == "starved" and announced[0][2] == "Builder Two", "the death is announced with the cause and who you control now")
 	_check(household.selected_id == second.id, "control passes to the next person")
 	_check(household.dead.size() == 1 and household.dead[0]["name"] == "Builder One", "the dead are remembered")
@@ -2479,6 +2498,7 @@ func _test_death() -> void:
 		graves += 1 if placed.def_id == "grave" else 0
 	_check(graves == 1, "a grave is left behind")
 	_check(not sim.is_game_over(), "the others carry on")
+	_check(sim.departures.size() == 1 and sim.departures[0]["death_at"] is Vector2, "and the view is told where Death led the soul away")
 
 	# Dying in the middle of something lets go of it.
 	var bed := world.add_object("bed", Vector2i(8, 8))
@@ -2533,6 +2553,156 @@ func _test_death() -> void:
 	menus.close()
 	_check(not menus.is_open(), "and goes away")
 	menus.queue_free()
+
+
+## A small village for the tests of growing old and dying: a chapel lot to bury people in and
+## three people who know each other.
+func _mortality_setup() -> Dictionary:
+	GameClock.set_time(4, 12)
+	var world := WorldState.new(40, 20, 3, "grass")
+	world.lot = Rect2i(2, 2, 12, 8)
+	world.lots = [{ "id": "lot_1", "kind": "chapel", "name": "Chapel", "template": "chapel", "facing": "south", "rect": Rect2i(24, 2, 9, 9), "public": true }]
+	world.lifespan = "normal"
+	var household := Household.new()
+	var people: Array[Pawn] = []
+	for spec in [["Ada Marsh", 30], ["Ben Marsh", 59], ["Cole Marsh", 34]]:
+		var person := Pawn.new()
+		person.display_name = spec[0]
+		person.age = spec[1]
+		person.tile = Vector2i(5 + people.size(), 5)
+		person.step_to = person.tile
+		for need_id in Needs.active_ids():
+			person.needs[need_id] = 90.0
+		household.add_pawn(person)
+		people.append(person)
+	Relations.make_family(people)
+	return { "world": world, "household": household, "people": people, "sim": Simulation.new(world, household) }
+
+
+func _test_life_and_death() -> void:
+	print("Growing old, Death and the dead")
+	var setup := _mortality_setup()
+	var world: WorldState = setup["world"]
+	var household: Household = setup["household"]
+	var sim: Simulation = setup["sim"]
+	var ada: Pawn = setup["people"][0]
+	var ben: Pawn = setup["people"][1]
+	var cole: Pawn = setup["people"][2]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+
+	# Ages and stages.
+	_check(Life.days_per_year(world) == 4 and Life.days_per_year(WorldState.new(4, 4)) == 60, "a year of life is four days on Normal, and a whole calendar year in an older world")
+	_check(Life.stage_at(0)["id"] == "baby" and Life.stage_at(3)["id"] == "toddler" and Life.stage_at(10)["id"] == "child" and Life.stage_at(15)["id"] == "youth" and Life.stage_at(40)["id"] == "adult" and Life.stage_at(70)["id"] == "elder", "the stages run from baby to elder")
+	_check(Life.describe_age(ada) == "Adult, 30", "the panel shows the stage and the age")
+	var fated := Life.death_age(ben)
+	_check(fated >= 62 and fated <= 80 and fated == Life.death_age(ben), "everyone has a fixed age to die of old age, between 62 and 80 (Ben: %d)" % fated)
+	ben.birthday = GameClock.get_day_number() % 4
+	GameClock.set_time(GameClock.get_day_number() + 4, 0)
+	var heard := Life.new_day(sim, rng)
+	_check(ben.age == 60 and Life.is_elder(ben) and "growing old" in " ".join(heard) and ben.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "grew_old"), "at sixty a person grows old, and feels it")
+	_check(Life.walk_multiplier(ben) > 1.0 and float(Life.drain_multipliers(ben, {})["rest"]) > 1.0 and not Life.may_do_heavy_work(ben) and Life.may_do_heavy_work(ada), "an elder walks slower, tires sooner and keeps clear of heavy work")
+
+	# Old age.
+	ben.age = fated
+	GameClock.set_time(GameClock.get_day_number() + 1, 0)
+	Life.new_day(sim, rng)
+	_check(ben.is_dying() and ben.dying_cause == "died of old age", "when their time comes, an elder lies down for the last time")
+	_check("time" in Mortality.plead_blocker(sim, ada, ben), "and Death will not hear a plea for the old")
+	var pleads := PawnActions.list_for(sim, ada, ben.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with(PawnActions.PLEAD_PREFIX))
+	_check(pleads.size() == 1 and not pleads[0]["enabled"], "the right-click menu offers the plea, switched off with the reason")
+	var departures_before := sim.departures.size()
+	sim.die(ben, ben.dying_cause)
+	var ben_grave := Vector2i(-1, -1)
+	for spirit in world.spirits:
+		if spirit["name"] == "Ben Marsh":
+			ben_grave = Vector2i(int(spirit["grave"][0]), int(spirit["grave"][1]))
+	_check(Rect2i(24, 2, 9, 9).has_point(ben_grave) and world.object_at(ben_grave) != null and world.object_at(ben_grave).def_id == "grave", "the dead are buried in the chapel yard")
+	_check(sim.departures.size() == departures_before + 1, "and the view is told of their going")
+	_check(ada.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "lost_loved_one" and t["about"] == "Ben Marsh"), "family mourn the loss by name")
+
+	# Pleading with Death.
+	ada.set_opinion(cole.id, 100.0)
+	Mortality.fall(sim, cole, "starved")
+	_check(cole.is_dying() and Mortality.plead_blocker(sim, ada, cole) == "" and is_equal_approx(Mortality.plead_chance(ada, cole), 0.6), "a loved one can plead, and love makes Death likelier to listen (%.2f)" % Mortality.plead_chance(ada, cole))
+	var asked := sim.order_plead(ada, cole)
+	_check(asked["ok"] and ada.job_kind == "plead", "the one who pleads goes to kneel beside them")
+	var steps := 0
+	while not cole.pleaded and steps < 200:
+		GameClock.advance_one_tick()
+		sim.step()
+		steps += 1
+	_check(cole.pleaded and (not cole.is_dying()) == ada.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "pleaded_won"), "after a while Death gives his answer (%s)" % ("spared" if not cole.is_dying() else "refused"))
+	if not cole.is_dying():
+		_check(float(cole.needs["hunger"]) >= 35.0 and cole.deprivation.is_empty() and cole.pose == "" and cole.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "spared"), "the spared get up, weak but alive")
+	else:
+		_check("already" in Mortality.plead_blocker(sim, ada, cole), "and he hears only one plea")
+	var lucky := Pawn.new()
+	lucky.display_name = "Lucky Marsh"
+	for need_id in Needs.active_ids():
+		lucky.needs[need_id] = 0.0
+	lucky.dying_cause = "starved"
+	lucky.deprivation = { "hunger": 4000 }
+	var always := RandomNumberGenerator.new()
+	always.seed = 1
+	var roll := always.randf()
+	always.seed = 1
+	var odds := Mortality.plead_chance(ada, lucky)
+	var said := Mortality.resolve_plea(sim, ada, lucky, always)
+	_check(is_equal_approx(odds, 0.2) and (roll < odds) == ("spared" in said) and (roll < odds) == (not lucky.is_dying()), "a plea for a stranger is a long shot, won or lost on the chance (%.2f against %.2f: %s)" % [roll, odds, said])
+
+	# Rivals.
+	var rival := Pawn.new()
+	rival.display_name = "Old Foe"
+	household.add_pawn(rival)
+	ada.set_opinion(rival.id, -80.0)
+	Mortality.mourn(sim, rival, true)
+	_check(ada.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "rival_died" and t["about"] == "Old Foe"), "a rival's death is no loss")
+
+	# Ghosts.
+	var spirit := Mortality.spirit_at(world, ben_grave)
+	_check(not spirit.is_empty() and spirit["name"] == "Ben Marsh", "the grave remembers whose it is")
+	var prayer := PawnActions.list_for(sim, ada, ben_grave).filter(func(e: Dictionary) -> bool: return "Ben Marsh's soul" in str(e["label"]))
+	_check(prayer.size() == 1, "and offers a prayer for that soul")
+	spirit["restless"] = true
+	var night := (GameClock.get_day_number() + 1) * GameClock.MINUTES_PER_DAY + 23 * 60
+	GameClock.set_time(GameClock.get_day_number() + 1, 23)
+	spirit["haunt_until"] = night + 300
+	_check(Mortality.haunting(world, night).size() == 1, "a restless spirit walks at night")
+	var where := Mortality.ghost_position(spirit, float(night + 10))
+	_check(where.distance_to(Vector2(ben_grave) + Vector2(0.5, 0.5)) < 2.5, "never far from its grave")
+	ada.path.clear()
+	ada.job_kind = ""
+	ada.pose = ""
+	ada.tile = Vector2i(roundi(where.x), roundi(where.y))
+	ada.step_to = ada.tile
+	Mortality._haunt(sim, night + 10)
+	_check(ada.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "saw_ghost" and t["about"] == "Ben Marsh"), "anyone awake nearby sees the ghost, and is frightened")
+	var grave_object := world.object_at(ben_grave)
+	_check(not bool(grave_object.def().get("autonomous", true)), "nobody prays at a grave unless told to")
+	var notices: Array[String] = []
+	sim.health_notice.connect(func(text: String) -> void: notices.append(text))
+	_check(sim.order_use(ada, grave_object)["ok"], "one of your folk can be sent to pray at the grave")
+	steps = 0
+	while ada.job_kind == "use" and steps < 300:
+		GameClock.advance_one_tick()
+		sim.step()
+		steps += 1
+	_check(not bool(spirit["restless"]) and int(spirit["haunt_until"]) == -1 and ada.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "laid_to_rest"), "praying there lays the soul to rest")
+	_check(notices.any(func(text: String) -> bool: return "rest" in text), "and you are told")
+
+	# Saving it all.
+	Mortality.fall(sim, ada, "froze to death")
+	var pawn_copy := Pawn.from_dict(JSON.parse_string(JSON.stringify(ada.to_dict())))
+	_check(pawn_copy.dying_cause == "froze to death" and pawn_copy.dying_since == ada.dying_since and pawn_copy.death_from == ada.death_from and pawn_copy.pose == "fallen", "someone dying is still dying after a save")
+	var world_copy := WorldState.from_dict(JSON.parse_string(JSON.stringify(world.to_dict())))
+	_check(world_copy.lifespan == "normal" and world_copy.spirits.size() == world.spirits.size() and Mortality.spirit_at(world_copy, ben_grave)["name"] == "Ben Marsh", "the lifespan and the dead in their graves survive a save")
+	var old_world := world.to_dict()
+	old_world.erase("lifespan")
+	old_world.erase("spirits")
+	var from_old := WorldState.from_dict(JSON.parse_string(JSON.stringify(old_world)))
+	_check(from_old.lifespan == "calendar" and from_old.spirits.is_empty(), "a world from an older save ages by the calendar")
+	GameClock.reset()
 
 
 func _mood_person(traits: Array[String] = []) -> Pawn:
@@ -2660,8 +2830,10 @@ func _test_mood() -> void:
 	sim.die(other, "of a fever")
 	var grieving := false
 	for thought in pawn.thoughts:
-		grieving = grieving or thought["id"] == "grief"
-	_check(grieving, "a death in the household is a bad thought for the people who are left")
+		grieving = grieving or (thought["id"] in ["lost_loved_one", "mourning"] and thought.get("about") == "Mood Two")
+	_check(grieving, "the people who are left mourn the dead by name")
+	var mourned: Array = Mood.evaluate(pawn, household, GameClock.tick)["parts"].filter(func(part: Dictionary) -> bool: return "Mood Two" in str(part["text"]))
+	_check(mourned.size() == 1 and float(mourned[0]["mood"]) < 0.0, "and it weighs on their mood (%s)" % str(mourned))
 	var copy := Pawn.from_dict(JSON.parse_string(JSON.stringify(pawn.to_dict())))
 	_check(copy.thoughts == pawn.thoughts, "thoughts survive a save")
 

@@ -1,0 +1,7 @@
+[
+  { "id": "short",    "name": "Short",            "days_per_year": 2,  "text": "Two days to a year of life: a newborn is an elder in about four game years." },
+  { "id": "normal",   "name": "Normal",           "days_per_year": 4,  "text": "Four days to a year of life: a whole life fits a long game." },
+  { "id": "long",     "name": "Long",             "days_per_year": 8,  "text": "Eight days to a year of life." },
+  { "id": "epic",     "name": "Epic",             "days_per_year": 16, "text": "Sixteen days to a year of life: a lifetime is a long story." },
+  { "id": "calendar", "name": "By the calendar",  "days_per_year": 60, "text": "A year of life is a year of the calendar. Nobody grows old in a normal game." }
+]

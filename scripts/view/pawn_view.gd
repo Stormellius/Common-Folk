@@ -86,8 +86,13 @@ func _draw() -> void:
 			ring.append(Vector2(cos(a) * 17.0, 7.0 + sin(a) * 10.0) * u)
 		draw_polyline(ring, Color(1.0, 0.95, 0.6, 0.95), 2.0)
 	var asleep := pawn.pose == "lie"
+	var fallen := pawn.pose == "fallen"
 	var breath := Time.get_ticks_msec() / 1000.0 * 1.6 + pawn.id * 2.3
-	PawnArt.draw(self, pawn.look, pawn.facing, u, _phase, asleep, PawnArt.outfit_for(pawn), breath)
+	self_modulate = Color(0.72, 0.72, 0.78) if fallen else Color.WHITE  # the dying grow grey
+	if fallen:  # lying on the ground where they fell, a little askew
+		draw_set_transform(Vector2(0.0, 4.0) * u, -0.35 if pawn.id % 2 == 0 else 0.35, Vector2.ONE)
+	PawnArt.draw(self, pawn.look, pawn.facing, u, _phase, asleep or fallen, PawnArt.outfit_for(pawn), breath)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	if asleep:
 		_draw_blanket_and_zzz(u)
 	elif pawn.pose == "close":
@@ -97,8 +102,9 @@ func _draw() -> void:
 	if show_name and not pawn.is_infant():
 		var font := ThemeDB.fallback_font
 		draw_set_transform(Vector2(0.0, 27.0 * u + label_drop * label_scale), 0.0, Vector2(label_scale, label_scale))
-		draw_string_outline(font, Vector2(-70.0, 0.0), pawn.display_name, HORIZONTAL_ALIGNMENT_CENTER, 140.0, 13, 4, Color(0, 0, 0, 0.85))
-		draw_string(font, Vector2(-70.0, 0.0), pawn.display_name, HORIZONTAL_ALIGNMENT_CENTER, 140.0, 13, Color(0.78, 0.77, 0.72) if townsfolk else Color(0.97, 0.96, 0.92))
+		var label := pawn.display_name + (" (dying)" if fallen else "")
+		draw_string_outline(font, Vector2(-90.0, 0.0), label, HORIZONTAL_ALIGNMENT_CENTER, 180.0, 13, 4, Color(0, 0, 0, 0.85))
+		draw_string(font, Vector2(-90.0, 0.0), label, HORIZONTAL_ALIGNMENT_CENTER, 180.0, 13, Color(0.78, 0.77, 0.72) if townsfolk else Color(0.97, 0.96, 0.92))
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 

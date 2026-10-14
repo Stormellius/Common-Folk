@@ -20,6 +20,7 @@ const QUIT_JOB := "quit_job"
 const LOT_PREFIX := "lot:"           # "lot:<lease|buy|buyout>:<lot id>"
 const GUILD_PREFIX := "guild:"       # "guild:<guild id>"
 const FUND_PREFIX := "fund:"         # "fund:<amount>"
+const PLEAD_PREFIX := "plead:"       # "plead:<dying person's id>"
 const FUND_STEPS := [10, 50]
 
 
@@ -33,10 +34,14 @@ static func list_for(sim: Simulation, pawn: Pawn, tile: Vector2i) -> Array[Dicti
 	var actions: Array[Dictionary] = []
 	if not sim.world.in_bounds(tile.x, tile.y):
 		return actions
+	if pawn.is_dying():
+		actions.append(_entry("none", "%s is dying" % pawn.display_name.get_slice(" ", 0), false, "nothing to be done but plead with Death"))
+		return actions
 	var placed := sim.world.object_at(tile)
 	if placed != null and placed.def().has("action"):  # walls and doors offer nothing to use
 		var blocker := sim.use_blocker(pawn, placed)
-		var label := str(placed.def().get("action", "Use"))
+		var spirit := Mortality.spirit_at(sim.world, placed.tile)
+		var label := str(placed.def().get("action", "Use")).replace("{name}", str(spirit.get("name", "the dead")))
 		var price := sim.price_of(placed.def_id)
 		if price > 0:
 			label += " (%s)" % Economy.format(price)
@@ -54,6 +59,10 @@ static func list_for(sim: Simulation, pawn: Pawn, tile: Vector2i) -> Array[Dicti
 		actions.append(_entry(STOP, "Stop"))
 	for other in sim.people():
 		if other.id == pawn.id or other.tile != tile or other.is_infant():
+			continue
+		if other.is_dying():
+			var plead_blocker := Mortality.plead_blocker(sim, pawn, other)
+			actions.append(_entry(PLEAD_PREFIX + str(other.id), "Plead with Death for %s" % other.display_name.get_slice(" ", 0), plead_blocker == "", plead_blocker))
 			continue
 		for interaction in DataRegistry.get_list("interactions"):
 			var blocker := sim.interaction_blocker(pawn, other, str(interaction["id"]))
@@ -153,6 +162,11 @@ static func _perform(sim: Simulation, pawn: Pawn, action_id: String, tile: Vecto
 		if placed == null:
 			return { "ok": false, "message": "That is gone" }
 		return sim.order_use(pawn, placed)
+	if action_id.begins_with(PLEAD_PREFIX):
+		var dying := sim.person(int(action_id.trim_prefix(PLEAD_PREFIX)))
+		if dying == null:
+			return { "ok": false, "message": "Death has already taken them" }
+		return sim.order_plead(pawn, dying)
 	if action_id.begins_with(INTERACT_PREFIX):
 		var parts := action_id.trim_prefix(INTERACT_PREFIX).split(":")
 		var other := sim.person(int(parts[1])) if parts.size() == 2 else null

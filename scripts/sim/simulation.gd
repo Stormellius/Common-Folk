@@ -20,6 +20,8 @@ const ROAM_FROM_MINUTE := 7 * 60
 const ROAM_UNTIL_MINUTE := 20 * 60
 const RICH_COINS := 100           # someone with this much does not mind paying for a meal out
 const ROAM_RADIUS := 14           # how far from the crossroads they wander along the roads
+const GRAVEYARD_REACH := 4        # the chapel yard runs this many tiles round the chapel's lot
+const GRAVE_SEARCH := 10          # how far from where someone fell to look for open ground
 
 var world: WorldState
 var household: Household
@@ -46,6 +48,9 @@ signal health_notice(text: String)
 signal household_changed
 ## Ids of the needs in play; see Needs.
 var active_needs: Array[String] = []
+## The dead Death has just led away, for the view to show their going: { "tile", "tick", "name",
+## "death_at" (where Death stood, in tiles, or null) }. Kept an hour or so, never saved.
+var departures: Array[Dictionary] = []
 
 
 var _rng := RandomNumberGenerator.new()  # for townspeople's wandering (not part of the world seed's output)
@@ -75,9 +80,12 @@ func step() -> void:
 	var season_multipliers := _season_multipliers()
 	var minute := GameClock.get_minute_of_day()
 	Pregnancy.carry_infants(self)
+	Mortality.step(self)
 	var everyone := people()
 	if minute == 0:
 		Relations.drift(everyone)
+		for notice in Life.new_day(self, _rng):
+			health_notice.emit(notice)
 		for notice in Pregnancy.new_day(self, _rng):
 			health_notice.emit(notice)
 		for notice in realm.new_day(self):
@@ -86,11 +94,11 @@ func step() -> void:
 	if minute % EVENT_EVERY == 0:
 		_apply_events(everyone)
 	for pawn in everyone:
-		if pawn.is_infant():
-			continue  # carried by the household: needs no seeing to
-		var cause := _drain_needs(pawn, Pregnancy.drain_multipliers(pawn, Illness.drain_multipliers(pawn, season_multipliers)))
+		if pawn.is_infant() or pawn.is_dying():
+			continue  # carried by the household, or lying still until Death comes
+		var cause := _drain_needs(pawn, Life.drain_multipliers(pawn, Pregnancy.drain_multipliers(pawn, Illness.drain_multipliers(pawn, season_multipliers))))
 		if cause != "":
-			die(pawn, cause)
+			Mortality.fall(self, pawn, cause)
 			continue
 		if household.get_pawn(pawn.id) != null or (GameClock.tick + pawn.id) % MOOD_EVERY == 0:
 			_update_mood(pawn, everyone)  # the town's mood changes slowly, so it is looked at less often
@@ -118,9 +126,16 @@ func person(id: int) -> Pawn:
 
 # --- orders ----------------------------------------------------------------------
 
+## The random numbers for things that need not follow from the world seed (wandering, pleas).
+func rng() -> RandomNumberGenerator:
+	return _rng
+
+
 ## Sends a pawn to a tile. Returns { "ok": bool, "message": String }; the message
 ## says why not when the order cannot be carried out.
 func order_move(pawn: Pawn, target: Vector2i) -> Dictionary:
+	if pawn.is_dying():
+		return { "ok": false, "message": "%s is dying" % _first_name(pawn) }
 	if not world.in_bounds(target.x, target.y):
 		return { "ok": false, "message": "That is outside the map" }
 	if not world.is_walkable(target.x, target.y):
@@ -142,6 +157,8 @@ func order_stop(pawn: Pawn) -> void:
 
 ## Why `pawn` cannot use `placed` right now, or "" if it can.
 func use_blocker(pawn: Pawn, placed: PlacedObject) -> String:
+	if pawn.is_dying():
+		return "%s is dying" % _first_name(pawn)
 	if placed.user_id != 0 and placed.user_id != pawn.id:
 		var other := person(placed.user_id)
 		return "%s is using it" % (_first_name(other) if other != null else "someone")
@@ -183,6 +200,8 @@ func interaction_blocker(pawn: Pawn, other: Pawn, interaction_id: String) -> Str
 	var other_name := _first_name(other)
 	if pawn.is_infant() or other.is_infant():
 		return "a baby cannot"
+	if pawn.is_dying() or other.is_dying():
+		return "%s is dying" % (_first_name(pawn) if pawn.is_dying() else other_name)
 	if bool(interaction.get("adults_only", false)) and not (pawn.adult and other.adult):
 		return "only adults can"
 	if other.is_busy():
@@ -246,6 +265,46 @@ func order_interact(pawn: Pawn, other: Pawn, interaction_id: String) -> Dictiona
 	other.job_partner = pawn.id
 	other.job_interaction = interaction_id
 	return { "ok": true, "message": "" }
+
+
+## Sends `pawn` to kneel beside someone who is dying and plead with Death for them (see Mortality).
+func order_plead(pawn: Pawn, dying: Pawn) -> Dictionary:
+	var blocker := Mortality.plead_blocker(self, pawn, dying)
+	if blocker != "":
+		return { "ok": false, "message": "Can't plead now: %s" % blocker }
+	var plan := _plan_beside(pawn, dying.tile)
+	_end_job(pawn)
+	pawn.path = plan["route"]
+	pawn.job_kind = "plead"
+	pawn.job_stage = "walking"
+	pawn.job_tile = plan["tile"]
+	pawn.job_partner = dying.id
+	pawn.job_minutes = 0
+	return { "ok": true, "message": "" }
+
+
+func _step_plead(pawn: Pawn) -> void:
+	var dying := person(pawn.job_partner)
+	if dying == null or not dying.is_dying():
+		_end_job(pawn)
+		return
+	if pawn.job_stage == "walking":
+		if pawn.is_moving() or not pawn.path.is_empty():
+			return
+		if _distance(pawn.tile, dying.tile) != 1:
+			_end_job(pawn)  # the route was blocked or cancelled
+			return
+		pawn.job_stage = "using"
+		pawn.job_minutes = 0
+		pawn.pose = "talk"
+		pawn.facing = dying.tile - pawn.tile
+		return
+	pawn.job_minutes += 1
+	if pawn.job_minutes >= int(Mortality.config().get("plead_minutes", 30)):
+		var message := Mortality.resolve_plea(self, pawn, dying, _rng)
+		_end_job(pawn)
+		if message != "" and (household.get_pawn(pawn.id) != null or household.get_pawn(dying.id) != null):
+			health_notice.emit(message)
 
 
 # --- coin and work -----------------------------------------------------------------
@@ -312,6 +371,8 @@ func hire_blocker(pawn: Pawn, lot_id: String, job_id: String) -> String:
 		return "already works there"
 	if pawn.age < int(job.get("min_age", 16)):
 		return "must be %d or older" % int(job.get("min_age", 16))
+	if bool(job.get("heavy", false)) and not Life.may_do_heavy_work(pawn):
+		return "too old for heavy work"
 	if pawn.class_id in job.get("not_for", []):
 		return "beneath a %s" % Realm.class_name_of(pawn.class_id).to_lower()
 	if staff_count(lot_id, job_id) >= int(job.get("positions", 1)):
@@ -579,10 +640,16 @@ func describe_activity(pawn: Pawn) -> String:
 		text = str(placed.def().get("doing", "Busy"))
 	elif placed != null:
 		text = "Heading to the %s" % placed.display_name().to_lower()
+	elif pawn.job_kind == "plead":
+		var dying := person(pawn.job_partner)
+		var dying_name := _first_name(dying) if dying != null else "someone"
+		text = "Pleading with Death for %s" % dying_name if pawn.job_stage == "using" else "Hurrying to %s" % dying_name
 	elif pawn.has_orders():
 		text = "Walking"
 	if pawn.is_infant():
 		return "Being carried"
+	if pawn.is_dying():
+		return "Dying. Death is here" if Mortality.death_has_come(pawn) else "Dying"
 	if pawn.slowed:
 		text += " (exhausted)"
 	if Pregnancy.is_known(pawn):
@@ -674,23 +741,25 @@ func _drain_needs(pawn: Pawn, season_multipliers: Dictionary) -> String:
 	return cause
 
 
-## Someone dies: whatever they were doing stops, a grave is left where they fell, and control
-## passes to the next person in the household. With nobody left the playthrough is over.
+## Someone dies (Death takes them; see Mortality): whatever they were doing stops, a grave is dug
+## in the chapel yard (or where they fell), those who knew them mourn, and control passes to the
+## next person in the household. With nobody left the playthrough is over.
 func die(pawn: Pawn, cause: String) -> void:
 	_end_job(pawn)
 	pawn.path.clear()
 	var spot := pawn.committed_tile()
+	var figure := Mortality.death_figure(pawn)
+	departures.append({ "tile": spot, "tick": GameClock.tick, "name": pawn.display_name, "death_at": figure.get("to") if figure["visible"] else null })
+	var grave := _place_grave(spot)
 	if household.get_pawn(pawn.id) == null:  # someone from the town
 		town.dead.append({ "name": pawn.display_name, "cause": cause, "day": GameClock.get_day_number() })
 		town.remove_pawn(pawn.id)
-		_place_grave(spot)
+		Mortality.after_death(self, pawn, cause, grave, _rng, false)
 		town_death.emit(pawn.display_name, cause)
 		return
 	household.dead.append({ "name": pawn.display_name, "cause": cause, "day": GameClock.get_day_number() })
 	household.remove_pawn(pawn.id)
-	for survivor in household.pawns:
-		Mood.add_event(survivor, "death", GameClock.tick)
-	_place_grave(spot)
+	Mortality.after_death(self, pawn, cause, grave, _rng, true)
 	var successor := household.selected()
 	pawn_died.emit(pawn.display_name, cause, successor.display_name if successor != null else "")
 	for notice in realm.on_death(self, pawn):
@@ -719,19 +788,64 @@ func seize(placed: PlacedObject) -> void:
 	_reroute_blocked_walks()
 
 
-func _place_grave(spot: Vector2i) -> void:
+## Digs a grave: in the chapel yard if there is room, otherwise on the nearest open grass to where
+## the person fell (never inside a house). Returns its tile, or (-1, -1) if none could be dug.
+func _place_grave(spot: Vector2i) -> Vector2i:
 	if not DataRegistry.has_def("objects", "grave"):
-		return
-	for radius in 3:
+		return Vector2i(-1, -1)
+	var yard := _graveyard_plot()
+	if yard.x >= 0 and world.add_object("grave", yard) != null:
+		return yard
+	for radius in GRAVE_SEARCH:
 		for dy in range(-radius, radius + 1):
 			for dx in range(-radius, radius + 1):
-				if maxi(absi(dx), absi(dy)) == radius and world.add_object("grave", spot + Vector2i(dx, dy)) != null:
-					return
+				var plot := spot + Vector2i(dx, dy)
+				if maxi(absi(dx), absi(dy)) == radius and _grave_ground(plot) and world.add_object("grave", plot) != null:
+					return plot
+	return Vector2i(-1, -1)
+
+
+## The next free plot of the chapel yard: open grass on the chapel's own lot first, then round
+## about it, in rows with a gap between graves. (-1, -1) if there is no chapel or no room left.
+func _graveyard_plot() -> Vector2i:
+	for entry in world.lots:
+		if str(entry["kind"]) != "chapel":
+			continue
+		for reach in [0, GRAVEYARD_REACH]:
+			var rect: Rect2i = (entry["rect"] as Rect2i).grow(reach)
+			for y in range(rect.position.y, rect.end.y, 2):
+				for x in range(rect.position.x, rect.end.x, 2):
+					var plot := Vector2i(x, y)
+					var lot := world.lot_at(plot)
+					if (lot.is_empty() or lot["id"] == entry["id"]) and _grave_ground(plot):
+						return plot
+	return Vector2i(-1, -1)
+
+
+## Open grass with nothing on it and no wall or floor beside it: somewhere a grave can be dug.
+func _grave_ground(plot: Vector2i) -> bool:
+	if not world.in_bounds(plot.x, plot.y) or world.object_at(plot) != null or world.floor_at(plot) != "":
+		return false
+	var ground := DataRegistry.get_def("tiles", world.get_tile_id(plot.x, plot.y))
+	return world.is_ground_walkable(plot.x, plot.y) and str(ground.get("style", "")) == "grass" and _open_around(plot)
+
+
+## No wall or building right next to `tile`, so a grave there stands in the open.
+func _open_around(tile: Vector2i) -> bool:
+	for dy in range(-1, 2):
+		for dx in range(-1, 2):
+			var near := world.object_at(tile + Vector2i(dx, dy))
+			if (near != null and near.blocks_walking()) or world.floor_at(tile + Vector2i(dx, dy)) != "":
+				return false
+	return true
 
 
 func _step_job(pawn: Pawn) -> void:
 	if pawn.job_kind == "interact":
 		_step_interaction(pawn)
+		return
+	if pawn.job_kind == "plead":
+		_step_plead(pawn)
 		return
 	if pawn.job_kind == "work":
 		_step_work(pawn)
@@ -776,6 +890,10 @@ func _step_job(pawn: Pawn) -> void:
 		Mood.add_event(pawn, "treated", GameClock.tick)
 	if all_full or pawn.job_minutes >= int(object_def.get("max_use_minutes", 60)):
 		Mood.add_event(pawn, "used:%s" % placed.def_id, GameClock.tick)
+		if placed.def_id == "grave":
+			var rested := Mortality.lay_to_rest(self, placed.tile, pawn)
+			if rested != "" and household.get_pawn(pawn.id) != null:
+				health_notice.emit(rested)
 		_end_job(pawn)
 
 
@@ -881,6 +999,10 @@ func _plan_use(pawn: Pawn, placed: PlacedObject) -> Dictionary:
 
 
 ## Where to stand next to a person (or any tile), and how to get there. { "tile", "route" }, or empty.
+func plan_beside(pawn: Pawn, target: Vector2i) -> Dictionary:
+	return _plan_beside(pawn, target)
+
+
 func _plan_beside(pawn: Pawn, target: Vector2i) -> Dictionary:
 	var candidates: Array[Vector2i] = []
 	for step in [Vector2i(0, 1), Vector2i(1, 0), Vector2i(0, -1), Vector2i(-1, 0)]:
@@ -928,7 +1050,7 @@ func _think(pawn: Pawn, minute: int) -> bool:
 		var options: Array[PlacedObject] = []
 		for placed in world.objects:
 			if placed.user_id == 0 and placed.def().get("satisfies", {}).has(want[1]) and _may_use(pawn, placed) \
-					and price_of(placed.def_id) <= coins_of(pawn):
+					and price_of(placed.def_id) <= coins_of(pawn) and bool(placed.def().get("autonomous", true)):
 				options.append(placed)
 		options.sort_custom(func(a: PlacedObject, b: PlacedObject) -> bool:
 			return _effort(pawn, a) < _effort(pawn, b))
@@ -965,10 +1087,12 @@ func _roll_illness(everyone: Array[Pawn]) -> void:
 		if pawn.illness != "":
 			var current := Illness.def(pawn.illness)
 			var days_ill := (GameClock.tick - pawn.ill_since) / GameClock.MINUTES_PER_DAY
+			if pawn.is_dying():
+				continue
 			if current.is_empty() or _rng.randf() < Illness.recovery_chance(current, pawn):
 				_recover(pawn)
 			elif days_ill >= int(current.get("fatal_after_days", 9999)):
-				die(pawn, str(current.get("death_cause", "died")))
+				Mortality.fall(self, pawn, str(current.get("death_cause", "died")))
 			continue
 		for illness in DataRegistry.get_list("illness"):
 			if _rng.randf() < Illness.catch_chance(illness, pawn, season_id, event_factor):

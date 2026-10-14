@@ -33,6 +33,13 @@ var recovered_on := 0
 var birthday := -1
 ## An infant is carried by someone from the household and cannot be controlled (see Pregnancy).
 var carried_by := 0
+## Someone whose time has come lies dying until Death takes them (see Mortality): what is killing
+## them ("" while alive and well), the tick they fell, where Death comes from, and whether anyone
+## has pleaded for them yet.
+var dying_cause := ""
+var dying_since := 0
+var death_from := Vector2i.ZERO
+var pleaded := false
 ## Colors as hex strings plus a hair style number; see PawnArt.
 var look: Dictionary = {}
 
@@ -102,6 +109,10 @@ func is_pregnant() -> bool:
 	return pregnant_since >= 0
 
 
+func is_dying() -> bool:
+	return dying_cause != ""
+
+
 func opinion_of(other_id: int) -> float:
 	return float(relations.get(other_id, 0.0))
 
@@ -122,9 +133,9 @@ func has_orders() -> bool:
 	return is_moving() or not path.is_empty()
 
 
-## True while walking somewhere or busy with an object.
+## True while walking somewhere, busy with an object, or lying dying.
 func is_busy() -> bool:
-	return has_orders() or job_kind != ""
+	return has_orders() or job_kind != "" or is_dying()
 
 
 ## 0 to 1 progress through the step in progress.
@@ -161,6 +172,7 @@ func tick(world: WorldState) -> void:
 			cost *= 1.41421
 		if slowed:
 			cost *= 1.5
+		cost *= Life.walk_multiplier(self)  # elders take their time
 		step_to = next
 		step_ticks_total = maxi(1, roundi(cost))
 		step_ticks_done = 0
@@ -193,6 +205,10 @@ func to_dict() -> Dictionary:
 		"recovered_on": recovered_on,
 		"birthday": birthday,
 		"carried_by": carried_by,
+		"dying_cause": dying_cause,
+		"dying_since": dying_since,
+		"death_from": _vec_to_array(death_from),
+		"pleaded": pleaded,
 		"coins": coins,
 		"pay_carry": snappedf(pay_carry, 0.001),
 		"work_lot": work_lot,
@@ -239,6 +255,10 @@ static func from_dict(data: Dictionary) -> Pawn:
 	pawn.recovered_on = int(data.get("recovered_on", 0))
 	pawn.birthday = int(data.get("birthday", -1))
 	pawn.carried_by = int(data.get("carried_by", 0))
+	pawn.dying_cause = str(data.get("dying_cause", ""))
+	pawn.dying_since = int(data.get("dying_since", 0))
+	pawn.death_from = _array_to_vec(data.get("death_from", [0, 0]))
+	pawn.pleaded = bool(data.get("pleaded", false))
 	pawn.coins = int(data.get("coins", 0))
 	pawn.pay_carry = float(data.get("pay_carry", 0.0))
 	pawn.work_lot = str(data.get("work_lot", ""))
@@ -268,7 +288,10 @@ static func from_dict(data: Dictionary) -> Pawn:
 	pawn.slowed = bool(data.get("slowed", false))
 	for saved_thought in data.get("thoughts", []):
 		if saved_thought is Dictionary and saved_thought.has("id"):
-			pawn.thoughts.append({ "id": str(saved_thought["id"]), "until": int(saved_thought.get("until", 0)) })
+			var thought := { "id": str(saved_thought["id"]), "until": int(saved_thought.get("until", 0)) }
+			if saved_thought.has("about"):
+				thought["about"] = str(saved_thought["about"])
+			pawn.thoughts.append(thought)
 	var saved_deprivation: Variant = data.get("deprivation", {})
 	if saved_deprivation is Dictionary:
 		for need_id in saved_deprivation:

@@ -4,7 +4,7 @@ extends RefCounted
 ## pregnancy ("conception_chance" on the interaction). It stays a private matter for a while, then
 ## she is known to be expecting: she eats and tires more, and in the last weeks stays off work. At
 ## the end a baby is born into the household. Babies are carried by the household, cannot be
-## controlled, and grow up a year at a time (a year is `year_days` days). Townspeople never
+## controlled, and grow up a year at a time (see Life for how many days that is). Townspeople never
 ## conceive: only the player's household grows.
 
 
@@ -12,8 +12,9 @@ static func config() -> Dictionary:
 	return DataRegistry.get_def("pregnancy", "pregnancy")
 
 
+## Babies are carried until they are toddlers (data/life_stages.json).
 static func infant_age() -> int:
-	return int(config().get("infant_until_age", 2))
+	return Life.stage_start("toddler", int(config().get("infant_until_age", 2)))
 
 
 static func days_pregnant(pawn: Pawn) -> int:
@@ -66,8 +67,9 @@ static func needs_rest_from_work(pawn: Pawn) -> bool:
 	return bool(config().get("heavy_work_break", true)) and is_heavy(pawn)
 
 
+## The person's birthday, by the calendar (see Life.birthday_of for the game's own lifespan).
 static func birthday_of(pawn: Pawn) -> int:
-	return pawn.birthday if pawn.birthday >= 0 else pawn.id % int(config().get("year_days", 60))
+	return Life.birthday_of(pawn, null)
 
 
 ## Keeps every infant on the arms of someone in the household, moving with them.
@@ -76,10 +78,10 @@ static func carry_infants(sim: Simulation) -> void:
 		if not baby.is_infant():
 			continue
 		var carer := sim.household.get_pawn(baby.carried_by)
-		if carer == null or carer.is_infant():
+		if carer == null or carer.is_infant() or carer.is_dying():
 			carer = null
 			for candidate in sim.household.pawns:
-				if not candidate.is_infant() and (carer == null or (candidate.adult and not carer.adult)):
+				if not candidate.is_infant() and not candidate.is_dying() and (carer == null or (candidate.adult and not carer.adult)):
 					carer = candidate
 			baby.carried_by = carer.id if carer != null else 0
 		if carer == null:
@@ -92,26 +94,15 @@ static func carry_infants(sim: Simulation) -> void:
 		baby.path.clear()
 
 
-## Midnight: birthdays, announcements and births. Returns messages for the player. Anything that
-## changes who is in the household is reported by `sim.household_changed`.
-static func new_day(sim: Simulation, rng: RandomNumberGenerator) -> Array[String]:
+## Midnight: announcements and births (birthdays are Life's). Returns messages for the player.
+## Anything that changes who is in the household is reported by `sim.household_changed`.
+static func new_day(sim: Simulation, _rng: RandomNumberGenerator) -> Array[String]:
 	var messages: Array[String] = []
-	var day := GameClock.get_day_number()
 	var settings := config()
 	var changed := false
 	for pawn in sim.people():
 		var yours := sim.household.get_pawn(pawn.id) != null
-		if day > 0 and day % int(settings.get("year_days", 60)) == birthday_of(pawn):
-			pawn.age += 1
-			if not pawn.adult and pawn.age >= 18:
-				pawn.adult = true
-				PersonFactory.give_orientation(pawn, rng)
-				if yours:
-					messages.append("%s has come of age." % pawn.display_name)
-			elif yours and pawn.age == infant_age():
-				messages.append("%s is old enough to run about on their own." % pawn.display_name)
-				changed = true
-		if not yours or not pawn.is_pregnant():
+		if not yours or not pawn.is_pregnant() or pawn.is_dying():
 			continue
 		var days := days_pregnant(pawn)
 		if days == int(settings.get("announce_after_days", 12)):
@@ -141,7 +132,7 @@ static func _give_birth(sim: Simulation, mother: Pawn) -> String:
 		baby.look["skin"] = parent_skins[rng.randi() % parent_skins.size()]
 	baby.home_lot = mother.home_lot
 	baby.class_id = mother.class_id
-	baby.birthday = day % int(config().get("year_days", 60))
+	baby.birthday = posmod(day, Life.days_per_year(sim.world))
 	baby.carried_by = mother.id
 	baby.tile = mother.committed_tile()
 	baby.step_to = baby.tile

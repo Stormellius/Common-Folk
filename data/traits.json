@@ -3,7 +3,7 @@
   { "id": "lazy",    "name": "Lazy",     "description": "Tires quickly and avoids work.",                    "thought_multipliers": { "slept_in_bed": 1.5, "tired": 1.3 }, "need_drain_multipliers": { "rest": 1.4 } },
   { "id": "glutton", "name": "Glutton",  "description": "Always hungry.",                                   "thought_multipliers": { "ate_meal": 1.5, "hungry": 1.3 }, "need_drain_multipliers": { "hunger": 1.5 } },
   { "id": "loner",   "name": "Loner",    "description": "Needs company less than most.",                     "need_drain_multipliers": { "social": 0.5 } },
-  { "id": "pious",   "name": "Pious",    "description": "Faith matters; the need drains faster.",           "need_drain_multipliers": { "faith": 1.5 } },
+  { "id": "pious",   "name": "Pious",    "description": "Faith matters; the need drains faster.",           "thought_multipliers": { "saw_ghost": 0.5, "saw_death": 0.5 }, "need_drain_multipliers": { "faith": 1.5 } },
   { "id": "greedy",  "name": "Greedy",   "description": "Wants coin more than comfort.",                    "thought_multipliers": { "slept_in_bed": 0.5, "warmed_up": 0.5, "played_music": 0.5 }, "need_drain_multipliers": { "fun": 1.2 } },
   { "id": "straight","name": "Straight", "description": "Is attracted to the opposite gender.",                    "group": "orientation", "attracted_to": "opposite", "need_drain_multipliers": { "libido": 0.5 } },
   { "id": "gay",     "name": "Gay",      "description": "Is attracted to the same gender.",                    "group": "orientation", "attracted_to": "same", "need_drain_multipliers": { "libido": 0.5 } },

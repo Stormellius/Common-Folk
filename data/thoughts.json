@@ -63,5 +63,15 @@
   { "id": "new_baby",    "text": "A new baby in the house", "mood": 12, "hours": 144, "on": "birth" },
   { "id": "evicted",      "text": "Turned out of their home", "mood": -12, "hours": 96, "on": "evicted" },
   { "id": "closeness",    "text": "Time with someone close", "mood": 10, "hours": 24, "on": "interaction:intimacy" },
-  { "id": "grief",        "text": "Someone in the household died", "mood": -15, "hours": 72, "on": "death" }
+  { "id": "lost_loved_one", "text": "Lost {name}",            "mood": -16, "hours": 96, "on": "lost_loved_one" },
+  { "id": "mourning",     "text": "Mourning {name}",          "mood": -8,  "hours": 48, "on": "mourning" },
+  { "id": "rival_died",   "text": "{name} is dead, and good riddance", "mood": 3, "hours": 24, "on": "rival_died" },
+  { "id": "saw_death",    "text": "Saw Death come for {name}", "mood": -6, "hours": 12, "on": "saw_death" },
+  { "id": "spared",       "text": "Came back from death's door", "mood": 4, "hours": 48, "on": "spared" },
+  { "id": "pleaded_won",  "text": "Talked Death out of taking {name}", "mood": 10, "hours": 24, "on": "pleaded_won" },
+  { "id": "pleaded_lost", "text": "Death would not listen",   "mood": -6,  "hours": 24, "on": "pleaded_lost" },
+  { "id": "saw_ghost",    "text": "Saw the ghost of {name}",  "mood": -8,  "hours": 8,  "on": "saw_ghost" },
+  { "id": "laid_to_rest", "text": "Laid {name} to rest",      "mood": 6,   "hours": 24, "on": "laid_to_rest" },
+  { "id": "came_of_age",  "text": "Came of age",              "mood": 6,   "hours": 24, "on": "came_of_age" },
+  { "id": "grew_old",     "text": "Growing old",              "mood": -3,  "hours": 24, "on": "grew_old" }
 ]
