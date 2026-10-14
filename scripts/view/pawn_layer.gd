@@ -19,6 +19,7 @@ var sim: Simulation
 
 var _views: Dictionary = {}  # pawn id -> PawnView
 var _animal_views: Dictionary = {}  # animal id -> AnimalView
+var _caravan_views: Dictionary = {}  # caravan id -> CaravanView
 var _overlay_was_drawn := false
 
 
@@ -34,6 +35,9 @@ func bind(new_sim: Simulation) -> void:
 	for view in _animal_views.values():
 		view.queue_free()
 	_animal_views.clear()
+	for view in _caravan_views.values():
+		view.queue_free()
+	_caravan_views.clear()
 	_sync_views()
 	queue_redraw()
 
@@ -54,8 +58,13 @@ func _process(_delta: float) -> void:
 	if _views.size() != sim.household.pawns.size() + sim.town.pawns.size():
 		_sync_views()
 	_sync_animal_views()
+	_sync_caravan_views()
 	var camera := get_viewport().get_camera_2d()
 	var names_visible := camera == null or camera.zoom.x >= HIDE_NAMES_BELOW
+	for caravan_id in _caravan_views:
+		var caravan_view: CaravanView = _caravan_views[caravan_id]
+		caravan_view.show_name = names_visible
+		caravan_view.label_scale = 1.0 / camera.zoom.x if camera != null else 1.0
 	for animal_id in _animal_views:
 		var animal_view: AnimalView = _animal_views[animal_id]
 		animal_view.show_name = names_visible and animal_view.animal.owner == "household"
@@ -66,6 +75,7 @@ func _process(_delta: float) -> void:
 		view.show_name = names_visible
 		view.label_scale = 1.0 / camera.zoom.x if camera != null else 1.0
 		view.townsfolk = sim.household.get_pawn(id) == null
+		view.visible = view.pawn.caravan == 0  # a rider is drawn on the cart
 	if names_visible:
 		_stack_labels(camera.zoom.x if camera != null else 1.0)
 	var chosen := sim.household.selected()
@@ -115,6 +125,23 @@ func _sync_animal_views() -> void:
 			if not seen.has(id):
 				_animal_views[id].queue_free()
 				_animal_views.erase(id)
+
+
+## Keeps one picture for every caravan on the roads.
+func _sync_caravan_views() -> void:
+	var seen := {}
+	for caravan in sim.world.caravans:
+		seen[caravan.id] = true
+		if not _caravan_views.has(caravan.id):
+			var view := CaravanView.new()
+			add_child(view)
+			view.setup(caravan, sim)
+			_caravan_views[caravan.id] = view
+	if _caravan_views.size() != seen.size():
+		for id in _caravan_views.keys():
+			if not seen.has(id):
+				_caravan_views[id].queue_free()
+				_caravan_views.erase(id)
 
 
 func _sync_views() -> void:

@@ -38,6 +38,7 @@ func _ready() -> void:
 	_section("marriage", _test_marriage)
 	_section("animals", _test_animals)
 	_section("construction", _test_construction)
+	_section("trade", _test_trade)
 	_section("events", _test_events)
 	_section("realm", _test_realm)
 	_section("faith_and_illness", _test_faith_and_illness)
@@ -1011,7 +1012,17 @@ func _test_region() -> void:
 				got[lot["kind"]] = int(got.get(lot["kind"], 0)) + 1
 		for kind in wanted:
 			every_building = every_building and int(got.get(kind, 0)) == int(wanted[kind])
-	_check(every_building, "every town has all the buildings its kind calls for")
+	var missing_text := ""
+	for town in world.towns:
+		var wanted_kinds: Dictionary = DataRegistry.get_def("worldgen", town["profile"])["buildings"]
+		var placed_kinds := {}
+		for lot in world.lots:
+			if lot.get("town", "") == town["id"]:
+				placed_kinds[lot["kind"]] = int(placed_kinds.get(lot["kind"], 0)) + 1
+		for kind in wanted_kinds:
+			if int(placed_kinds.get(kind, 0)) != int(wanted_kinds[kind]):
+				missing_text += " %s:%s %d/%d" % [town["name"], kind, int(placed_kinds.get(kind, 0)), int(wanted_kinds[kind])]
+	_check(every_building, "every town has all the buildings its kind calls for%s" % missing_text)
 	_check(home["rect"].has_point(world.lot.get_center()) and world.lot_at(world.lot.get_center())["id"] == WorldState.HOME_LOT, "the player's lot is in their town")
 	var kinds := {}
 	for town in world.towns:
@@ -1348,7 +1359,7 @@ func _interaction_entries(sim: Simulation, from: Pawn, to: Pawn) -> Dictionary:
 func _test_work_sites() -> void:
 	print("Work sites, resources and materials")
 	var ids := Economy.resource_ids()
-	_check(str(ids) == str(["wood", "stone", "grain", "fish", "herbs", "ring", "meat", "hide"]), "there are five resources to gather, and rings, meat and hides (%s)" % str(ids))
+	_check(str(ids.slice(0, 8)) == str(["wood", "stone", "grain", "fish", "herbs", "ring", "meat", "hide"]) and ids.size() == 17, "there are five resources to gather, rings, meat, hides, five made goods and four traded (%d)" % ids.size())
 	_check(Economy.resource_price("wood") == 2 and Economy.sell_price("wood", 10) == 14 and Economy.sell_price("wood", 10, 1.3) == 18, "the shop pays a share of the price, and more on a market day")
 
 	# The region has sites at every town's edge.
@@ -1992,19 +2003,22 @@ func _test_social() -> void:
 	var big_sim := Simulation.new(big, family, town)
 	GameClock.set_time(0, 6)
 	var lowest_social := 100.0
+	var lowest_who := ""
 	var strangers_met := 0
 	for minute in 2 * GameClock.MINUTES_PER_DAY:
 		GameClock.advance_one_tick()
 		big_sim.step(GameClock.SUBSTEPS_PER_MINUTE)  # as in the live game, where walking is quick
 		if minute % 60 == 0:
 			for villager in town.pawns:
-				lowest_social = minf(lowest_social, float(villager.needs["social"]))
+				if float(villager.needs["social"]) < lowest_social:
+					lowest_social = float(villager.needs["social"])
+					lowest_who = "%s (%s, %s, %s, at %s)" % [villager.display_name, villager.work_job, villager.job_kind, villager.age, str(villager.tile)]
 	for villager in town.pawns:
 		for other in town.pawns:
 			if other.home_lot != villager.home_lot and villager.opinion_of(other.id) > 0.0:
 				strangers_met += 1
 	_check(strangers_met > 0, "over two days the townspeople get to know people from other households (%d acquaintances)" % strangers_met)
-	_check(lowest_social > 0.0, "and nobody in town goes completely without company (lowest %.0f)" % lowest_social)
+	_check(lowest_social > 0.0, "and nobody in town goes completely without company (lowest %.0f: %s)" % [lowest_social, lowest_who])
 	GameClock.reset()
 
 
@@ -3040,6 +3054,145 @@ func _test_construction() -> void:
 	var old_sim := Simulation.new(old_world, Household.new(), Household.new(NpcGenerator.FIRST_ID))
 	_check(not old_world.needs_roofing and old_world.roofs.size() * 100 >= region.roofs.size() * 95, "but its buildings are roofed on loading (%d of %d)" % [old_world.roofs.size(), region.roofs.size()])
 	old_sim.free() if old_sim is Object and false else null
+
+
+func _region_game(world_seed: int, start_id: String = "bought") -> Dictionary:
+	GameClock.reset()
+	GameClock.set_time(2, 9)
+	var world := RegionGenerator.generate(world_seed)
+	var begun := Starts.begin(world, start_id)
+	var household: Household = begun["household"]
+	var sim := Simulation.new(world, household, NpcGenerator.create(world), begun["realm"])
+	return { "world": world, "household": household, "sim": sim }
+
+
+func _test_trade() -> void:
+	print("Goods, regional prices and caravans")
+	var rules := DataRegistry.get_def("caravans", "caravan")
+	var ware_ok := true
+	for ware in rules.get("wares", []):
+		ware_ok = ware_ok and Economy.resource_ids().has(str(ware["good"])) and bool(DataRegistry.get_def("resources", str(ware["good"])).get("trade", false)) or str(ware["good"]) in ["iron", "leather"]
+	for good in rules.get("wanted_pool", []):
+		ware_ok = ware_ok and Economy.resource_ids().has(str(good))
+	_check(ware_ok and int(rules.get("fare", 0)) > 0, "the caravans' wares and wants are real goods")
+	for station in ["quern", "oven", "brew_vat", "tanning_rack"]:
+		_check(bool(DataRegistry.get_def("objects", station).get("recipes", false)) and not Skills.recipes_for(station).is_empty(), "the %s has something to make" % station)
+	var chain := Skills.recipes_for("oven")[0]
+	_check(chain["inputs"].has("flour") and chain["outputs"].has("bread") and DataRegistry.get_def("recipes", "grind_flour")["outputs"].has("flour") and DataRegistry.get_def("recipes", "forge_ring")["inputs"].has("iron"), "grain becomes flour becomes bread, and a ring takes iron")
+
+	var game := _region_game(42)
+	var world: WorldState = game["world"]
+	var household: Household = game["household"]
+	var sim: Simulation = game["sim"]
+	var anna: Pawn = household.selected()
+	var counts := {}
+	for lot in world.lots:
+		counts[lot["kind"]] = int(counts.get(lot["kind"], 0)) + 1
+	var vats := 0
+	var racks := 0
+	var ovens := 0
+	for placed in world.objects:
+		vats += 1 if placed.def_id == "brew_vat" else 0
+		racks += 1 if placed.def_id == "tanning_rack" else 0
+		ovens += 1 if placed.def_id == "oven" else 0
+	var bakers := 0
+	for person in sim.town.pawns:
+		bakers += 1 if person.work_job == "baker" else 0
+	_check(int(counts.get("bakery", 0)) >= 3 and ovens >= 6 and vats >= 3 and racks >= 3 and bakers >= 2, "the towns have bakeries, brewing vats and tanning racks (%d bakeries, %d ovens, %d vats, %d racks, %d bakers)" % [int(counts.get("bakery", 0)), ovens, vats, racks, bakers])
+
+	# Prices differ from place to place.
+	var home := world.home_town()
+	var fishing: Dictionary = {}
+	var market: Dictionary = {}
+	for town in world.towns:
+		if str(town.get("profile", "")) == "fishing_village":
+			fishing = town
+		if str(town.get("profile", "")) == "market_town":
+			market = town
+	_check(Economy.region_multiplier(world, fishing["center"], "fish") < 0.7 and Economy.region_multiplier(world, market["center"], "fish") > Economy.region_multiplier(world, fishing["center"], "fish") and Economy.region_multiplier(world, Vector2i(2, 2), "fish") == 1.0, "fish are cheap where they are caught and dear where they are not")
+	household.stock = { "fish": 10 }
+	anna.tile = fishing["center"]
+	var cheap := sim.sale_price("fish", anna)
+	anna.tile = market["center"]
+	var dear := sim.sale_price("fish", anna)
+	anna.skills["trading"] = Skills.xp_for_level(8)
+	var skilled := sim.sale_price("fish", anna)
+	_check(dear > cheap * 1.4 and skilled > dear, "the same fish fetch %s at the lake, %s at the market, and a practised trader gets more (%s)" % [Economy.format(cheap), Economy.format(dear), Economy.format(skilled)])
+	anna.skills.clear()
+	var label := PawnActions._sell_entries(sim, anna)
+	anna.tile = fishing["center"]
+	label = PawnActions._sell_entries(sim, anna)
+	_check(label.any(func(e: Dictionary) -> bool: return "fish" in str(e["label"]) and "low" in str(e["label"])), "and the counter says when prices are low (%s)" % str(label[0]["label"]))
+	household.stock = {}
+
+	# A caravan sets out, travels, camps and opens its wares.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	var cart := Caravans.spawn(sim, rng, str(home["id"]))
+	_check(cart != null and cart.state == "travelling" and not cart.path.is_empty() and cart.to_town == str(home["id"]) and cart.from_town != cart.to_town, "a caravan sets out for the home town (%s, %d tiles to go)" % [cart.name if cart != null else "none", cart.path.size() if cart != null else 0])
+	var road_tiles := 0
+	for step in cart.path:
+		road_tiles += 1 if world.get_tile_id(step.x, step.y) in ["dirt", "cobble", "bridge", "bridge_h"] else 0
+	_check(road_tiles * 100 >= cart.path.size() * 60, "it keeps to the roads (%d of %d tiles)" % [road_tiles, cart.path.size()])
+	var notices: Array[String] = []
+	sim.health_notice.connect(func(text: String) -> void: notices.append(text))
+	_minutes(sim, 400, func() -> bool: return cart.state == "camped")
+	_check(cart.state == "camped" and cart.at_town == str(home["id"]) and cart.tile == cart.goal, "it arrives and camps on the square")
+	_check(cart.stock.size() == 3 and cart.wants.size() == 3 and cart.demand.size() == Economy.resource_ids().size() and cart.leaves_tick > GameClock.tick + GameClock.MINUTES_PER_DAY and cart.next_town != "" and cart.next_town != cart.at_town, "it has three wares, three wants and a next stop (%s; wants %s; on to %s)" % [str(cart.stock), str(cart.wants), cart.next_town])
+	_check(notices.any(func(t: String) -> bool: return "camped on the square" in t), "the household is told it has come (%s)" % str(notices))
+	_check(Caravans.camp_tile(world, home, [cart.tile]) != cart.tile, "a second would camp elsewhere")
+
+	# Buying, selling.
+	anna.tile = cart.tile + Vector2i(1, 1)
+	anna.step_to = anna.tile
+	household.coins = 200
+	var menu := PawnActions.list_for(sim, anna, cart.tile)
+	var good := str(cart.stock.keys()[0])
+	_check(menu.any(func(e: Dictionary) -> bool: return str(e["id"]) == "cbuy:%d:%s" % [cart.id, good]) and menu.any(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("cride:")), "right-clicking the cart offers its wares and a ride (%d entries)" % menu.size())
+	var price := Caravans.buy_price(sim, cart, good)
+	var stock_before := int(cart.stock[good])
+	var bought := PawnActions.perform(sim, anna, "cbuy:%d:%s" % [cart.id, good], cart.tile)
+	_check(bought["ok"] and household.stock_of(good) == 1 and household.coins == 200 - price and int(cart.stock[good]) == stock_before - 1, "buying a unit costs its price (%s for one %s)" % [Economy.format(price), good])
+	var wanted := str(cart.wants[0])
+	household.stock = { wanted: 30 }
+	var shop_rate := Economy.sell_price(wanted, 30, 1.0)
+	var caravan_offer := Caravans.sell_price(sim, cart, anna, wanted, int(cart.demand[wanted]))
+	var sold := PawnActions.perform(sim, anna, "csell:%d:%s" % [cart.id, wanted], cart.tile)
+	_check(sold["ok"] and household.stock_of(wanted) == 30 - 12 and int(cart.demand[wanted]) == 0 and caravan_offer * 30 > shop_rate * 12 * 1.5, "they pay well for what they are looking for, up to what they need (%s for 12 %s)" % [Economy.format(caravan_offer), wanted])
+	_check(not PawnActions.perform(sim, anna, "csell:%d:%s" % [cart.id, wanted], cart.tile)["ok"], "and then want no more of it")
+	household.stock = {}
+	household.coins = 3
+	_check(not PawnActions.perform(sim, anna, "cbuy:%d:%s" % [cart.id, good], cart.tile)["ok"], "an empty purse buys nothing")
+	household.coins = 200
+
+	# Riding along.
+	var destination := world.get_town(cart.next_town)
+	var coins_ride := household.coins
+	var ride := PawnActions.perform(sim, anna, "cride:%d" % cart.id, cart.tile)
+	_check(ride["ok"] and anna.caravan == cart.id and anna.job_kind == "cart" and household.coins == coins_ride - int(rules["fare"]) and cart.passengers.size() == 1 and cart.passengers[0] == anna.id, "she pays the fare and climbs on")
+	_check(cart.leaves_tick <= GameClock.tick + 61 and "Waiting on the cart" in sim.describe_activity(anna), "the caravan will leave within the hour (%s)" % sim.describe_activity(anna))
+	_check(PawnActions.list_for(sim, anna, Vector2i(5, 5)).size() == 1 and not PawnActions.list_for(sim, anna, Vector2i(5, 5))[0]["enabled"] or Caravans.get_off_blocker(sim, anna) == "", "while it waits she may get off, and a rider has nothing else to do")
+	_minutes(sim, 90, func() -> bool: return cart.state == "travelling")
+	_check(cart.state == "travelling" and cart.to_town == str(destination["id"]) and anna.tile == cart.tile, "it sets out, and she goes with it")
+	_check("Riding with the caravan" in sim.describe_activity(anna) and Caravans.get_off_blocker(sim, anna) != "", "she cannot get off on the road (%s)" % sim.describe_activity(anna))
+	_minutes(sim, 400, func() -> bool: return cart.state == "camped" and anna.caravan == 0)
+	_check(cart.state == "camped" and cart.at_town == str(destination["id"]) and anna.caravan == 0 and anna.job_kind == "" and absi(anna.tile.x - cart.tile.x) <= 3 and absi(anna.tile.y - cart.tile.y) <= 3, "at the next stop she climbs down beside the cart (in %s)" % str(destination["name"]))
+	_check(notices.any(func(t: String) -> bool: return "arrived in %s with the caravan" % str(destination["name"]) in t), "and the household hears of it")
+	_check(Skills.xp(anna, "trading") > 0.8, "buying and selling has taught her something (%.1f xp)" % Skills.xp(anna, "trading"))
+
+	# Saved and loaded.
+	anna.caravan = 0
+	var again := WorldState.from_dict(world.to_dict())
+	var copy := again.get_caravan(cart.id)
+	_check(copy != null and copy.state == "camped" and copy.stock == cart.stock and copy.demand == cart.demand and copy.wants == cart.wants and copy.looks.size() == 2 and copy.leaves_tick == cart.leaves_tick, "a caravan is saved with the world, wares and all")
+
+	# They keep coming, but not too many.
+	var many := 0
+	for day in 60:
+		GameClock.set_time(10 + day, 0)
+		Caravans.new_day(sim, rng)
+		many = maxi(many, world.caravans.size())
+	_check(many >= 2 and many <= int(rules["max_active"]), "new caravans set out from time to time, never more than %d (%d)" % [int(rules["max_active"]), many])
 
 
 func _test_events() -> void:

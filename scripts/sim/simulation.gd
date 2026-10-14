@@ -88,6 +88,7 @@ func step_motion() -> void:
 	if _has_infants:
 		Pregnancy.carry_infants(self)
 	Fauna.step_motion(self)
+	Caravans.step_motion(self)
 
 
 ## One game minute passes. Called from the clock's `ticked` signal. `motion_steps` is how many
@@ -119,6 +120,7 @@ func step(motion_steps: int = 1) -> void:
 	for notice in Fire.step(self, _rng):
 		health_notice.emit(notice)
 	Fauna.step(self, _rng)
+	Caravans.step(self, _rng)
 	if minute % 10 == 0:
 		for caught in Illness.spread(self, _rng, 10):
 			_announce_illness(caught)
@@ -137,6 +139,7 @@ func step(motion_steps: int = 1) -> void:
 		Skills.find_work(self, _rng)
 		for notice in Fauna.new_day(self, _rng):
 			health_notice.emit(notice)
+		Caravans.new_day(self, _rng)
 		for notice in realm.new_day(self):
 			realm_notice.emit(notice)
 		_roll_illness(everyone)
@@ -1026,6 +1029,10 @@ func describe_activity(pawn: Pawn) -> String:
 		var date_partner := person(pawn.job_partner)
 		var date_name := _first_name(date_partner) if date_partner != null else "someone"
 		text = "On a date with %s" % date_name if pawn.job_stage == "using" else "Going on a date with %s" % date_name
+	elif pawn.job_kind == "cart":
+		var cart := world.get_caravan(pawn.caravan)
+		var destination := str(world.get_town(cart.to_town if cart != null and cart.to_town != "" else (cart.next_town if cart != null else "")).get("name", "the next town"))
+		text = "Riding with the caravan to %s" % destination if cart != null and cart.state == "travelling" else "Waiting on the cart for the caravan to leave"
 	elif pawn.job_kind == "build":
 		var plan := world.get_site(pawn.job_site)
 		var plan_name := Construction.site_name(plan) if plan != null else "the building work"
@@ -1283,6 +1290,9 @@ func _step_job(pawn: Pawn) -> void:
 	if pawn.job_kind == "date":
 		_step_date(pawn)
 		return
+	if pawn.job_kind == "cart":
+		Caravans.step_ride(self, pawn)
+		return
 	if pawn.job_kind == "build":
 		Construction.step_build(self, pawn, _rng)
 		return
@@ -1471,18 +1481,28 @@ func treat(nurse: Pawn, patient: Pawn) -> Dictionary:
 
 
 ## What the shop would pay for all of one resource in the stockpile (0 if there is none).
-func sale_price(resource_id: String) -> int:
-	return Economy.sell_price(resource_id, household.stock_of(resource_id), events.sell_multiplier())
+func sale_price(resource_id: String, seller: Pawn = null) -> int:
+	return Economy.sell_price(resource_id, household.stock_of(resource_id), events.sell_multiplier() * _haggling(resource_id, seller))
+
+
+## What the place and the seller's way with a bargain do to the price of a good: dearer where it is
+## scarce, and a practised trader gets a little more.
+func _haggling(resource_id: String, seller: Pawn) -> float:
+	if seller == null:
+		return 1.0
+	return Economy.region_multiplier(world, seller.tile, resource_id) * (1.0 + Skills.effect(seller, "trading", "price"))
 
 
 ## Sells everything of a resource at the shop counter. Returns { "ok", "message" }.
-func sell_stock(resource_id: String) -> Dictionary:
+func sell_stock(resource_id: String, seller: Pawn = null) -> Dictionary:
 	var amount := household.stock_of(resource_id)
 	if amount <= 0:
 		return { "ok": false, "message": "You have no %s to sell" % Economy.resource_name(resource_id).to_lower() }
-	var earned := sale_price(resource_id)
+	var earned := sale_price(resource_id, seller)
 	household.add_stock(resource_id, -amount)
 	household.coins += earned
+	if seller != null:
+		Skills.practice(self, seller, "trading", 10.0)
 	return { "ok": true, "message": "Sold %d %s for %s" % [amount, Economy.resource_name(resource_id).to_lower(), Economy.format(earned)] }
 
 
@@ -1703,6 +1723,8 @@ func _end_job(pawn: Pawn) -> void:
 	pawn.job_recipe = ""
 	if pawn.job_kind == "build":
 		Construction.release(self, pawn)
+	if pawn.caravan != 0:
+		Caravans.leave(self, pawn)
 	if pawn.job_animal != 0:
 		pawn.job_animal = 0
 		Fauna.refresh_pace(self, pawn)  # no more creeping after game

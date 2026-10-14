@@ -229,6 +229,8 @@ func _apply_launch_options() -> void:
 		GameClock.set_time(int(_launch_option("day")), hour)
 	if _launch_option("fire") != "" and sim != null and sim.household.selected() != null:
 		_start_demo_fire()
+	if _launch_option("caravan") != "" and sim != null:
+		_start_demo_caravan()
 	if _launch_option("plans") != "" and sim != null:
 		_start_demo_plans(int(_launch_option("plans")))
 	if _launch_option("wedding") != "" and sim != null and sim.household.selected() != null:
@@ -348,6 +350,22 @@ func _start_demo_plans(minutes: int) -> void:
 		GameClock.advance_one_tick()
 		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
 	camera.position = (Vector2(origin) + Vector2(4.5, 3.5)) * MapView.TILE_SIZE
+
+
+## For looking at a caravan: one sets out for the home town and the time runs on until it has made
+## camp on the square; the camera goes to it.
+func _start_demo_caravan() -> void:
+	var cart := Caravans.spawn(sim, sim.rng(), str(world.home_town().get("id", "")))
+	if cart == null:
+		return
+	for minute in 3000:
+		if cart.state == "camped":
+			break
+		GameClock.advance_one_tick()
+		for step in GameClock.SUBSTEPS_PER_MINUTE:
+			Caravans.step_motion(sim)
+		Caravans.step(sim, sim.rng())
+	camera.position = (Vector2(cart.tile) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE
 
 
 # --- the title screen and the menus ----------------------------------------------

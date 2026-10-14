@@ -147,6 +147,8 @@ var pace := 1.0
 ## hired to build on the player's land (0 when not).
 var carrying: Dictionary = {}
 var contract_until := 0
+## The caravan a person is riding with (0 for none): see Caravans.
+var caravan := 0
 ## Ticks to wait before looking for something to do about a need again.
 var think_cooldown := 0
 
@@ -346,6 +348,7 @@ func to_dict() -> Dictionary:
 		"job_site": job_site,
 		"carrying": carrying.duplicate(),
 		"contract_until": contract_until,
+		"caravan": caravan,
 		"mount": mount,
 		"job_minutes": job_minutes,
 		"pose": pose,
@@ -464,6 +467,7 @@ static func from_dict(data: Dictionary) -> Pawn:
 	pawn.job_animal = int(data.get("job_animal", 0))
 	pawn.job_site = int(data.get("job_site", 0))
 	pawn.contract_until = int(data.get("contract_until", 0))
+	pawn.caravan = int(data.get("caravan", 0))
 	var saved_carrying: Variant = data.get("carrying", {})
 	if saved_carrying is Dictionary:
 		for resource_id in saved_carrying:

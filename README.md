@@ -2,7 +2,7 @@
 
 A medieval life sim sandbox with a RimWorld look, made in Godot 4.4. You play one of your **folk** at a time in a generated region of towns that carries on without you. They work, court, raise children, grow old and die, and the family goes on.
 
-Milestones 1 to 21 are done; the plan from here is in [ROADMAP.md](ROADMAP.md). The data files and how to mod them are in [docs/DATA.md](docs/DATA.md).
+Milestones 1 to 22 are done; the plan from here is in [ROADMAP.md](ROADMAP.md). The data files and how to mod them are in [docs/DATA.md](docs/DATA.md).
 
 ## Run it
 
@@ -48,6 +48,8 @@ You control one of your folk. Left-click a person (or their portrait, or press T
 **Skills and tools.** Eleven skills (woodcutting, mining, farming, fishing, herbalism, cooking, healing, carpentry, smithing, music, trading) grow with practice, to ten levels, and make a person better at the work: bigger hauls, fewer accidents, faster crafting. The young learn quickly, folk with a talent quicker, and an apprentice beside a master twice as fast. Trades pass down families (children inherit talents and the family's trade) and anyone can ask a better hand for a lesson. Work needs the right tool in hand: an axe, a pickaxe, a sickle, a fishing rod and so on, taken from the household's stockpile, worn by use and put back after. Buy them at a shop's tool rack, or forge and carve them at a smithy or workshop's forge and bench.
 
 **Animals.** Rabbits, deer, boar and wolves live in the forest and run from people. With a bow, right-click one to hunt it: the hunter creeps up and shoots, and brings home meat and hides to sell, but a wounded boar turns on its hunter and wolves come for people out alone at night. Buy horses, donkeys, oxen, dogs and cats at a stable's hitching post, or take in a stray. Ride a horse across the map in a third of the time, lead a donkey or ox to a work site to bring home a bigger load, take a dog hunting, and make a fuss of your pets. Your animals eat from the stockpile and wander off if they go hungry.
+
+**Trade.** Goods can be made as well as gathered: a quern grinds grain to flour, a bread oven bakes it (bakeries in the towns), a vat brews ale, a tanning rack makes leather from hides and a forge smelts iron (rings take iron now). What a good fetches depends on where you sell it: fish are cheap at the lake and dear at the market, a hamlet pays well for iron and wine, and a practised trader gets a little more everywhere. **Caravans** travel the roads between the towns with a driver on each side of the ox, camp on the market square for two days, and trade: buy cloth, salt, wine and spice from them, sell them what they are looking for at far better than the shop pays (up to what they need), or pay a fare to ride along to their next stop.
 
 **Town life.** Festivals, market days, cold snaps and services; the chapel and faith; raids worked out off-screen against the town's defence. People chat and quarrel and remember it.
 

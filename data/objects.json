@@ -40,5 +40,9 @@
   {"id": "workbench", "cost": 24, "name": "Workbench", "category": "workshop", "blocks_walking": true, "use_position": "beside", "skill": "carpentry", "tool": "hammer", "recipes": true, "drains": {"rest": 5.0, "hygiene": 2.0}, "price": 1, "materials": {"wood": 4}, "flammable": 0.7},
   {"id": "tool_rack", "cost": 14, "name": "Tool rack", "category": "business", "blocks_walking": true, "sells_tools": true, "materials": {"wood": 2}, "flammable": 0.6},
   {"id": "hitching_post", "cost": 16, "name": "Hitching post", "category": "business", "blocks_walking": true, "sells_animals": true, "materials": {"wood": 2}, "flammable": 0.6},
-  {"id": "storage", "cost": 12, "name": "Storage crates", "category": "furniture", "blocks_walking": true, "pile": true, "materials": {"wood": 2}, "flammable": 0.7}
+  {"id": "storage", "cost": 12, "name": "Storage crates", "category": "furniture", "blocks_walking": true, "pile": true, "materials": {"wood": 2}, "flammable": 0.7},
+  {"id": "quern", "cost": 22, "name": "Quern", "category": "workshop", "blocks_walking": true, "use_position": "beside", "skill": "farming", "recipes": true, "drains": {"rest": 6.0, "hygiene": 3.0}, "price": 1, "materials": {"stone": 4}},
+  {"id": "oven", "cost": 40, "name": "Bread oven", "category": "workshop", "blocks_walking": true, "use_position": "beside", "skill": "cooking", "recipes": true, "drains": {"hygiene": 4.0}, "price": 2, "light": {"color": "#ff8a3c", "radius": 2.6, "energy": 0.7}, "smoke": true, "materials": {"stone": 6}},
+  {"id": "brew_vat", "cost": 28, "name": "Brewing vat", "category": "workshop", "blocks_walking": true, "use_position": "beside", "skill": "cooking", "recipes": true, "price": 1, "materials": {"wood": 4}, "flammable": 0.6},
+  {"id": "tanning_rack", "cost": 16, "name": "Tanning rack", "category": "workshop", "blocks_walking": true, "use_position": "beside", "skill": "herbalism", "recipes": true, "drains": {"hygiene": 8.0}, "price": 1, "materials": {"wood": 3}, "flammable": 0.7}
 ]

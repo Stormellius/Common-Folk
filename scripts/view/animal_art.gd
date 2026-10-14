@@ -13,7 +13,7 @@ const BASKET := Color(0.70, 0.55, 0.30)
 const SADDLE := Color(0.42, 0.26, 0.16)
 
 
-static func draw(ci: CanvasItem, kind: String, coat: int, facing: Vector2i, u: float, phase: float, clock: float = 0.0) -> void:
+static func draw(ci: CanvasItem, kind: String, coat: int, facing: Vector2i, u: float, phase: float, clock: float = 0.0, origin: Vector2 = Vector2.ZERO) -> void:
 	var art: Dictionary = DataRegistry.get_def("animals", kind).get("art", {})
 	var body: Array = art.get("body", [20, 10])
 	var length := float(body[0])
@@ -28,10 +28,10 @@ static func draw(ci: CanvasItem, kind: String, coat: int, facing: Vector2i, u: f
 	var swing := sin(phase)
 
 	# The shadow is the same whichever way it faces.
-	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	ci.draw_set_transform(origin, 0.0, Vector2.ONE)
 	ci.draw_colored_polygon(PawnArt._ellipse_points(Vector2(2.0, 3.0) * u, Vector2(length * 0.62, width * 0.62) * u), Color(0, 0, 0, 0.20))
 
-	ci.draw_set_transform(Vector2.ZERO, angle, Vector2.ONE)
+	ci.draw_set_transform(origin, angle, Vector2.ONE)
 	# Legs, front pair and hind pair, swinging in step.
 	for i in 4:
 		var forward := 1.0 if i < 2 else -1.0

@@ -44,6 +44,10 @@ const BUILD_PREFIX := "build:"       # "build:<site id>" or "build:all": work on
 const UNPLAN_PREFIX := "unplan:"     # "unplan:<site id>": call a plan off
 const ROOF_PREFIX := "roof:"         # "roof:<roof id>": roof the room that was clicked in
 const HIRE_CREW := "hire_crew"
+const CBUY_PREFIX := "cbuy:"         # "cbuy:<caravan id>:<good>"
+const CSELL_PREFIX := "csell:"       # "csell:<caravan id>:<good>"
+const CRIDE_PREFIX := "cride:"       # "cride:<caravan id>"
+const CGET_OFF := "cget_off"
 const DISMOUNT := "dismount"
 const WED_PREFIX := "wed:"           # "wed:<fiancé(e)'s id>"
 const FUND_STEPS := [10, 50]
@@ -64,6 +68,10 @@ static func list_for(sim: Simulation, pawn: Pawn, tile: Vector2i) -> Array[Dicti
 		return actions
 	if Pregnancy.in_labour(pawn):
 		actions.append(_entry("none", "%s is in labour" % pawn.display_name.get_slice(" ", 0), false, "the baby is coming"))
+		return actions
+	if pawn.caravan != 0:  # a rider can only wait or get down
+		var cart_blocker := Caravans.get_off_blocker(sim, pawn)
+		actions.append(_entry(CGET_OFF, "Get off the cart", cart_blocker == "", cart_blocker))
 		return actions
 	var placed := sim.world.object_at(tile)
 	if placed != null and placed.def().has("action"):  # walls and doors offer nothing to use
@@ -97,6 +105,9 @@ static func list_for(sim: Simulation, pawn: Pawn, tile: Vector2i) -> Array[Dicti
 		actions.append_array(_animal_market_entries(sim, pawn, placed))
 	for animal in sim.world.animals_at(tile):
 		actions.append_array(_animal_entries(sim, pawn, animal))
+	for cart in sim.world.caravans:
+		if cart.tile == tile or (cart.is_moving() and cart.step_to == tile):
+			actions.append_array(_caravan_entries(sim, pawn, cart))
 	if pawn.mount != 0:
 		var steed := sim.world.get_animal(pawn.mount)
 		actions.append(_entry(DISMOUNT, "Get down from %s" % steed.title() if steed != null else "Get down"))
@@ -176,7 +187,9 @@ static func _sell_entries(sim: Simulation, pawn: Pawn) -> Array[Dictionary]:
 	for resource_id in Economy.resource_ids():
 		var amount := sim.household.stock_of(resource_id)
 		if amount > 0:
-			entries.append(_entry(SELL_PREFIX + resource_id, "Sell your %d %s (%s)" % [amount, Economy.resource_name(resource_id).to_lower(), Economy.format(sim.sale_price(resource_id))]))
+			var here := Economy.region_multiplier(sim.world, pawn.tile, resource_id)
+			var note := "" if absf(here - 1.0) < 0.05 else " (prices here: %s)" % ("high" if here > 1.0 else "low")
+			entries.append(_entry(SELL_PREFIX + resource_id, "Sell your %d %s (%s)%s" % [amount, Economy.resource_name(resource_id).to_lower(), Economy.format(sim.sale_price(resource_id, pawn)), note]))
 	if entries.is_empty():
 		entries.append(_entry("none", "Sell goods", false, "you have nothing gathered to sell"))
 	for item_id in Economy.stocked_ids():
@@ -212,6 +225,31 @@ static func _building_entries(sim: Simulation, pawn: Pawn, tile: Vector2i) -> Ar
 			var label := "Roof this room: %s (%d tiles: %s)" % [str(roof_def.get("name", roof_id)).to_lower(), (plan["tiles"] as Array).size(), cost]
 			var short := int(price["coins"]) > sim.household.coins
 			entries.append(_entry(ROOF_PREFIX + roof_id, label, not short, "you need %s more coin" % Economy.format(int(price["coins"]) - sim.household.coins) if short else ""))
+	return entries
+
+
+## Buying from the caravan, selling to it, and riding with it.
+static func _caravan_entries(sim: Simulation, pawn: Pawn, cart: Caravan) -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	var blocker := Caravans.trade_blocker(sim, pawn, cart)
+	if cart.state != "camped":
+		entries.append(_entry("none", "%s are on the road to %s" % [cart.name, str(sim.world.get_town(cart.to_town).get("name", "town"))], false, "they are not trading"))
+		return entries
+	for good in cart.stock:
+		if int(cart.stock[good]) > 0:
+			var price := Caravans.buy_price(sim, cart, str(good))
+			entries.append(_entry(CBUY_PREFIX + "%d:%s" % [cart.id, good], "Buy %s (%s, %d left)" % [Economy.item_phrase(str(good)), Economy.format(price), int(cart.stock[good])], blocker == "" and price <= sim.coins_of(pawn), blocker if blocker != "" else "can't afford it"))
+	var selling := 0
+	for good in Economy.resource_ids():
+		var amount := mini(sim.household.stock_of(good), int(cart.demand.get(good, 0)))
+		if amount > 0:
+			selling += 1
+			var wanted := " (they are looking for it)" if good in cart.wants else ""
+			entries.append(_entry(CSELL_PREFIX + "%d:%s" % [cart.id, good], "Sell them %d %s (%s)%s" % [amount, Economy.resource_name(good).to_lower(), Economy.format(Caravans.sell_price(sim, cart, pawn, good, amount)), wanted], blocker == "", blocker))
+	if selling == 0:
+		entries.append(_entry("none", "Sell them goods", false, "you have nothing they want"))
+	var ride_blocker := Caravans.ride_blocker(sim, pawn, cart)
+	entries.append(_entry(CRIDE_PREFIX + str(cart.id), "Ride with them to %s (%s)" % [str(sim.world.get_town(cart.next_town).get("name", "the next town")), Economy.format(int(Caravans.config().get("fare", 12)))], ride_blocker == "", ride_blocker))
 	return entries
 
 
@@ -386,7 +424,7 @@ static func _perform(sim: Simulation, pawn: Pawn, action_id: String, tile: Vecto
 			sim.health_notice.emit(str(nursed["message"]))
 		return nursed
 	if action_id.begins_with(SELL_PREFIX):
-		return sim.sell_stock(action_id.trim_prefix(SELL_PREFIX))
+		return sim.sell_stock(action_id.trim_prefix(SELL_PREFIX), pawn)
 	if action_id.begins_with(BUY_PREFIX):
 		return sim.buy_item(pawn, action_id.trim_prefix(BUY_PREFIX))
 	if action_id.begins_with(CRAFT_PREFIX):
@@ -401,6 +439,27 @@ static func _perform(sim: Simulation, pawn: Pawn, action_id: String, tile: Vecto
 			return { "ok": false, "message": "Can't move back: %s" % home_blocker }
 		sim.health_notice.emit(Romance.move_home(sim, pawn))
 		return { "ok": true, "message": "" }
+	if action_id == CGET_OFF:
+		var off_blocker := Caravans.get_off_blocker(sim, pawn)
+		if off_blocker != "":
+			return { "ok": false, "message": "Can't get off: %s" % off_blocker }
+		Caravans.get_off(sim, pawn)
+		return { "ok": true, "message": "" }
+	if action_id.begins_with(CBUY_PREFIX) or action_id.begins_with(CSELL_PREFIX):
+		var trade_parts := action_id.get_slice(":", 1) + ":" + action_id.get_slice(":", 2)
+		var cart := sim.world.get_caravan(int(trade_parts.get_slice(":", 0)))
+		if cart == null:
+			return { "ok": false, "message": "The caravan has gone" }
+		var traded := Caravans.buy(sim, pawn, cart, trade_parts.get_slice(":", 1)) if action_id.begins_with(CBUY_PREFIX) else Caravans.sell(sim, pawn, cart, trade_parts.get_slice(":", 1))
+		return traded
+	if action_id.begins_with(CRIDE_PREFIX):
+		var ride_cart := sim.world.get_caravan(int(action_id.trim_prefix(CRIDE_PREFIX)))
+		if ride_cart == null:
+			return { "ok": false, "message": "The caravan has gone" }
+		var boarded := Caravans.board(sim, pawn, ride_cart)
+		if boarded["ok"]:
+			sim.health_notice.emit(str(boarded["message"]))
+		return { "ok": boarded["ok"], "message": "" if boarded["ok"] else boarded["message"] }
 	if action_id == HIRE_CREW:
 		var hired := Construction.hire(sim, pawn)
 		if hired["ok"]:

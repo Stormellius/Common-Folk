@@ -8,7 +8,7 @@ extends RefCounted
 ## `t` is the time in seconds, for flames and steam; `occupied` is true while someone sleeps in it.
 
 const OUTLINE := Color(0.06, 0.05, 0.05, 0.85)
-const ANIMATED := ["hearth", "cooking_pot", "watch_post", "altar", "forge"]
+const ANIMATED := ["hearth", "cooking_pot", "watch_post", "altar", "forge", "oven"]
 ## How tall the south face of a wall looks, in units. Light comes from the top-left, as in the
 ## terrain shader, so a wall shows a lit top and a shaded face to the south.
 const WALL_FACE := 12.0
@@ -117,6 +117,14 @@ static func draw(ci: CanvasItem, def_id: String, u: float, t: float, occupied: b
 			_workbench(ci, u)
 		"tool_rack":
 			_tool_rack(ci, u)
+		"quern":
+			_quern(ci, u)
+		"oven":
+			_oven(ci, u, t)
+		"brew_vat":
+			_brew_vat(ci, u)
+		"tanning_rack":
+			_tanning_rack(ci, u)
 		_:
 			_crate(ci, u)
 
@@ -767,6 +775,57 @@ static func _tool_rack(ci: CanvasItem, u: float) -> void:
 	ci.draw_line(Vector2(16, -9) * u, Vector2(16, 7) * u, Color(0.30, 0.20, 0.12), maxf(1.5, 2.2 * u))
 	_rect(ci, u, 12, -10, 8, 5, Color(0.50, 0.52, 0.56), 0.8)
 	_rect(ci, u, -22, 9, 44, 4, Color(0.28, 0.19, 0.11), 0.0)
+
+
+## A hand mill: a round stone with a wooden handle, and a little flour about it.
+static func _quern(ci: CanvasItem, u: float) -> void:
+	_shadow(ci, u, 17.0)
+	ci.draw_circle(Vector2.ZERO, 17.0 * u, OUTLINE)
+	ci.draw_circle(Vector2.ZERO, 15.5 * u, Color(0.50, 0.50, 0.52))
+	ci.draw_circle(Vector2(-1, -1) * u, 12.0 * u, Color(0.64, 0.64, 0.66))
+	ci.draw_circle(Vector2.ZERO, 3.0 * u, Color(0.30, 0.30, 0.32))
+	ci.draw_line(Vector2(0, 0) * u, Vector2(9, -9) * u, Color(0.30, 0.20, 0.12), maxf(1.5, 2.8 * u))
+	for dust in [Vector2(-14, 8), Vector2(-10, 13), Vector2(12, 11), Vector2(15, 6)]:
+		ci.draw_circle(dust * u, 2.0 * u, Color(0.95, 0.93, 0.85, 0.85))
+
+
+## A brick bread oven: a dome with a glowing mouth.
+static func _oven(ci: CanvasItem, u: float, t: float) -> void:
+	_shadow(ci, u, 21.0)
+	ci.draw_circle(Vector2(0, 2) * u, 26.0 * u, Color(1.0, 0.5, 0.15, 0.08))
+	_ellipse(ci, u, Vector2.ZERO, Vector2(20, 18), Color(0.55, 0.36, 0.28), 1.3)
+	_ellipse(ci, u, Vector2(-1, -2), Vector2(16, 13), Color(0.66, 0.44, 0.34), 0.0)
+	for row in 3:
+		ci.draw_arc(Vector2(0, 2) * u, (6.0 + row * 5.0) * u, PI * 1.1, PI * 1.9, 10, Color(0.42, 0.26, 0.20), maxf(1.0, 0.9 * u))
+	_rect(ci, u, -7, 5, 14, 9, Color(0.10, 0.07, 0.06), 1.0)
+	var glow := 0.8 + 0.2 * sin(t * 5.0)
+	_ellipse(ci, u, Vector2(0, 10), Vector2(5.5, 2.8), Color(1.0, 0.55, 0.15) * glow, 0.0)
+	_flame(ci, u, Vector2(-2, 11), 5.0 + 1.5 * sin(t * 8.0), 4.0)
+
+
+## A wooden vat with a head of foam.
+static func _brew_vat(ci: CanvasItem, u: float) -> void:
+	_shadow(ci, u, 17.0)
+	ci.draw_circle(Vector2.ZERO, 17.0 * u, OUTLINE)
+	ci.draw_circle(Vector2.ZERO, 15.5 * u, Color(0.46, 0.32, 0.18))
+	for hoop in [14.0, 9.0]:
+		ci.draw_arc(Vector2.ZERO, hoop * u, 0.0, TAU, 20, Color(0.30, 0.30, 0.34), maxf(1.0, 1.4 * u))
+	ci.draw_circle(Vector2(0, -1) * u, 11.0 * u, Color(0.76, 0.52, 0.18))
+	for foam in [Vector2(-4, -3), Vector2(3, -4), Vector2(-1, 3), Vector2(5, 2), Vector2(-6, 2)]:
+		ci.draw_circle(foam * u, 3.2 * u, Color(0.96, 0.92, 0.80))
+	ci.draw_line(Vector2(4, 4) * u, Vector2(16, 14) * u, Color(0.30, 0.20, 0.12), maxf(1.5, 2.4 * u))  # a paddle
+
+
+## A frame with a hide stretched across it.
+static func _tanning_rack(ci: CanvasItem, u: float) -> void:
+	_shadow(ci, u, 20.0)
+	_rect(ci, u, -20, -14, 40, 28, Color(0.40, 0.28, 0.17), 1.3)
+	var hide := PackedVector2Array([Vector2(-16, -10), Vector2(15, -11), Vector2(17, -2), Vector2(14, 10), Vector2(-14, 11), Vector2(-17, 1)])
+	ci.draw_colored_polygon(_scaled(hide, u), Color(0.66, 0.46, 0.28))
+	ci.draw_polyline(_scaled(hide + PackedVector2Array([hide[0]]), u), OUTLINE, maxf(1.0, u))
+	for lace in [Vector2(-16, -10), Vector2(15, -11), Vector2(17, -2), Vector2(14, 10), Vector2(-14, 11), Vector2(-17, 1)]:
+		ci.draw_line(lace * u, (lace * 1.25) * u, Color(0.85, 0.80, 0.65), maxf(1.0, 0.9 * u))
+	ci.draw_circle(Vector2(-4, -2) * u, 4.0 * u, Color(0.58, 0.40, 0.24))
 
 
 # --- little shapes -----------------------------------------------------------------

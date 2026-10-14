@@ -63,6 +63,10 @@ var reserved: Dictionary = {}
 ## True for a world loaded from a save that had no roofs: the buildings need roofing (see Rooms).
 var needs_roofing := false
 
+## The trading caravans on the roads (see Caravans).
+var caravans: Array[Caravan] = []
+
+var _next_caravan_id := 1
 var _next_site_id := 1
 var _site_by_id := {}  # site id -> BuildSite
 
@@ -122,6 +126,20 @@ func is_ground_walkable(x: int, y: int) -> bool:
 
 func object_at(tile: Vector2i) -> PlacedObject:
 	return _object_at_tile.get(tile)
+
+
+func add_caravan(caravan: Caravan) -> Caravan:
+	caravan.id = _next_caravan_id
+	_next_caravan_id += 1
+	caravans.append(caravan)
+	return caravan
+
+
+func get_caravan(id: int) -> Caravan:
+	for caravan in caravans:
+		if caravan.id == id:
+			return caravan
+	return null
 
 
 func roof_at(tile: Vector2i) -> String:
@@ -455,6 +473,8 @@ func to_dict() -> Dictionary:
 		"sites": sites.map(func(site: BuildSite) -> Dictionary: return site.to_dict()),
 		"reserved": reserved.duplicate(),
 		"next_site_id": _next_site_id,
+		"caravans": caravans.map(func(caravan: Caravan) -> Dictionary: return caravan.to_dict()),
+		"next_caravan_id": _next_caravan_id,
 		"animals": animals.map(func(animal: Animal) -> Dictionary: return animal.to_dict()),
 		"next_animal_id": _next_animal_id,
 		"fauna_seeded": fauna_seeded,
@@ -530,6 +550,12 @@ static func from_dict(data: Dictionary) -> WorldState:
 	if saved_reserved is Dictionary:
 		for resource_id in saved_reserved:
 			world.reserved[str(resource_id)] = int(saved_reserved[resource_id])
+	for saved in data.get("caravans", []):
+		if saved is Dictionary:
+			var caravan := Caravan.from_dict(saved)
+			world.caravans.append(caravan)
+			world._next_caravan_id = maxi(world._next_caravan_id, caravan.id + 1)
+	world._next_caravan_id = maxi(world._next_caravan_id, int(data.get("next_caravan_id", 1)))
 	for saved in data.get("animals", []):
 		if saved is Dictionary:
 			var animal := Animal.from_dict(saved)

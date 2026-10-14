@@ -1,6 +1,6 @@
 # Common Folk: roadmap
 
-Milestones 1 to 21 are done. This file keeps the plan for 12 to 21 as it was built, and what comes next (22 to 25). Each milestone ended with the game playable, the smoke test passing and older saves still loading.
+Milestones 1 to 22 are done. This file keeps the plan for 12 to 22 as it was built, and what comes next (23 to 25). Each milestone ended with the game playable, the smoke test passing and older saves still loading.
 
 ## What the people are called
 
@@ -101,12 +101,19 @@ Folk are born, grow up, grow old and die, as in the Sims, with a medieval face o
 - **Rooms and roofs**: walls and doors close in rooms; right-click inside a closed room (or use the Roofs tab) to plan a thatched or tiled roof over all of it. The towns' own buildings are roofed when generated, and an older save's buildings are roofed on loading. Zoomed in the roofs fade so you can see inside; zoomed out they make a town. R cycles them
 - **Shelter**: indoors, under a roof, warmth drains far more slowly; a bed in the open gives less rest and a bad night's sleep (the tent camp is a start, a house is better)
 
+## Milestone 22: Traders, caravans and goods (done)
+
+- **More goods to make**: a quern (grain to flour), a bread oven (flour to bread), a brewing vat (ale), a tanning rack (hides to leather) and iron smelted at the forge. Bakeries in the towns, a brewing vat in the taverns and a tanning rack at the stables; a baker's job. Rings are forged from iron now
+- **Regional prices**: each kind of settlement pays more or less for each good (`prices` in the worldgen profiles): fish are cheap at the lake, iron dear in the hamlet. The counter says when prices are high or low; a practised trader gets more
+- **Caravans**: every few days a caravan (an ox cart with two drivers) sets out along the roads from one town to another, camps on the market square for two days and moves on. It follows the roads, and is drawn on the map
+- **Trading with a caravan**: it sells cloth, salt, wine, spice and a little iron and leather; it buys what the region makes, paying far better than the shop for the three goods it is looking for (up to what it needs)
+- **Riding along**: pay a fare and climb on; the caravan leaves within the hour and you step down at its next stop
+
 ## The plan from here
 
-Four milestones, in the order that lets each one build on the last. Each ends with the game playable, the smoke test passing and older saves still loading.
+Three milestones, in the order that lets each one build on the last. Each ends with the game playable, the smoke test passing and older saves still loading.
 
 - **21 Builders and rooms**: building as a job, with materials hauled to the site; rooms, roofs and the indoor/outdoor difference
-- **22 Traders and goods**: caravans on the roads, a wider list of goods made at workshops (flour and bread, planks, tools, cloth, iron) and sold
 - **23 Ambitions**: a lifetime aspiration for each of your folk and small wishes that come and go
 - **24 Other families**: play any family in the town, inheritance of land and goods, the town's families carrying on without you, moving between towns
 - **25 Sound and music**: ambient sound, music, instruments to play
