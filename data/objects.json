@@ -1,7 +1,7 @@
 [
   { "id": "bed", "cost": 18,         "name": "Straw bed",    "action": "Sleep",                "doing": "Sleeping",               "blocks_walking": false, "use_position": "on",     "pose": "lie", "satisfies": { "rest": 14.0 },    "max_use_minutes": 600 },
-  { "id": "cooking_pot", "cost": 12, "name": "Cooking pot",  "action": "Eat a meal",           "doing": "Eating",                 "blocks_walking": true,  "use_position": "beside", "satisfies": { "hunger": 150.0 }, "max_use_minutes": 45 },
-  { "id": "hearth", "cost": 15,      "name": "Hearth",       "action": "Warm up by the fire",  "doing": "Warming up",             "blocks_walking": true,  "use_position": "beside", "satisfies": { "warmth": 40.0 },  "max_use_minutes": 120 },
+  { "id": "cooking_pot", "cost": 12, "name": "Cooking pot",  "action": "Eat a meal",           "doing": "Eating",                 "blocks_walking": true,  "use_position": "beside", "satisfies": { "hunger": 150.0 }, "max_use_minutes": 45, "light": { "color": "#ff8a3c", "radius": 3.0, "energy": 0.8 } },
+  { "id": "hearth", "cost": 15,      "name": "Hearth",       "action": "Warm up by the fire",  "doing": "Warming up",             "blocks_walking": true,  "use_position": "beside", "satisfies": { "warmth": 40.0 },  "max_use_minutes": 120, "light": { "color": "#ff9040", "radius": 4.5, "energy": 1.0 }, "smoke": true },
   { "id": "wash_basin", "cost": 6,  "name": "Wash basin",   "action": "Wash",                 "doing": "Washing",                "blocks_walking": true,  "use_position": "beside", "satisfies": { "hygiene": 120.0 }, "max_use_minutes": 45 },
   { "id": "chamber_pot", "cost": 4, "name": "Chamber pot",  "action": "Use the chamber pot",  "doing": "Using the chamber pot",  "blocks_walking": true,  "use_position": "beside", "satisfies": { "toilet": 300.0 }, "max_use_minutes": 10 },
   { "id": "lute", "cost": 20,        "name": "Lute",         "action": "Play the lute",        "doing": "Playing the lute",       "blocks_walking": true,  "use_position": "beside", "satisfies": { "fun": 30.0 },     "max_use_minutes": 120 },
@@ -20,7 +20,7 @@
   { "id": "notice_board", "name": "Notice board",  "buildable": false, "blocks_walking": true, "offers_work": "town" },
   { "id": "well",       "name": "Well",         "category": "structure", "blocks_walking": true, "buildable": false },
   { "id": "pew",      "cost": 15, "name": "Pew",      "action": "Pray",              "doing": "Praying",             "blocks_walking": false, "use_position": "on",     "satisfies": { "faith": 70.0 },  "max_use_minutes": 45 },
-  { "id": "altar",    "cost": 40, "name": "Altar",    "action": "Pray at the altar", "doing": "Praying at the altar", "blocks_walking": true,  "use_position": "beside", "satisfies": { "faith": 110.0 }, "max_use_minutes": 30 },
+  { "id": "altar",    "cost": 40, "name": "Altar",    "action": "Pray at the altar", "doing": "Praying at the altar", "blocks_walking": true,  "use_position": "beside", "satisfies": { "faith": 110.0 }, "max_use_minutes": 30, "light": { "color": "#ffd590", "radius": 2.5, "energy": 0.7 } },
   { "id": "sickbed",  "cost": 20, "name": "Sickbed",  "action": "Rest and be treated", "doing": "Being treated",    "blocks_walking": false, "use_position": "on",     "pose": "lie", "satisfies": { "rest": 20.0 }, "max_use_minutes": 300, "price": 10, "cures": ["fever"], "cure_minutes": 90 },
-  { "id": "watch_post", "cost": 30, "name": "Watch post", "category": "structure", "blocks_walking": true, "defense": 3 }
+  { "id": "watch_post", "cost": 30, "name": "Watch post", "category": "structure", "blocks_walking": true, "defense": 3, "light": { "color": "#ffd27a", "radius": 4.0, "energy": 0.9 } }
 ]

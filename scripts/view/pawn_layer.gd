@@ -56,11 +56,37 @@ func _process(_delta: float) -> void:
 		view.selected = (id == sim.household.selected_id)
 		view.show_name = names_visible
 		view.label_scale = 1.0 / camera.zoom.x if camera != null else 1.0
+		view.townsfolk = sim.household.get_pawn(id) == null
+	if names_visible:
+		_stack_labels(camera.zoom.x if camera != null else 1.0)
 	var chosen := sim.household.selected()
 	var overlay_needed := chosen != null and chosen.has_orders()
 	if overlay_needed or _overlay_was_drawn:
 		queue_redraw()
 	_overlay_was_drawn = overlay_needed
+
+
+## Where two names would overlap, pushes the lower one down under the other, so a crowd at
+## the tavern stays readable. Works in screen pixels, since names keep their size on screen.
+func _stack_labels(zoom: float) -> void:
+	var font := ThemeDB.fallback_font
+	var named: Array = _views.values().filter(func(view: PawnView) -> bool: return not view.pawn.is_infant())
+	named.sort_custom(func(a: PawnView, b: PawnView) -> bool: return a.label_anchor().y < b.label_anchor().y)
+	var taken: Array[Rect2] = []
+	for view: PawnView in named:
+		var width := font.get_string_size(view.pawn.display_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x + 4.0
+		var rect := Rect2(view.label_anchor() * zoom + Vector2(-width * 0.5, -12.0), Vector2(width, 16.0))
+		var drop := 0.0
+		var moved := true
+		while moved:
+			moved = false
+			for other in taken:
+				if other.intersects(rect):
+					drop += other.end.y - rect.position.y
+					rect.position.y = other.end.y
+					moved = true
+		taken.append(rect)
+		view.label_drop = drop
 
 
 func _sync_views() -> void:

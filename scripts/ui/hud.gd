@@ -159,6 +159,7 @@ func set_household(household: Household) -> void:
 		_style_button(chip)
 		var portrait := PawnPortrait.new()
 		portrait.look = pawn.look
+		portrait.outfit = PawnArt.outfit_for(pawn)
 		portrait.position = Vector2(22, 2)
 		chip.add_child(portrait)
 		var label := Label.new()

@@ -8,7 +8,12 @@ extends RefCounted
 ## `t` is the time in seconds, for flames and steam; `occupied` is true while someone sleeps in it.
 
 const OUTLINE := Color(0.06, 0.05, 0.05, 0.85)
-const ANIMATED := ["hearth", "cooking_pot"]
+const ANIMATED := ["hearth", "cooking_pot", "watch_post", "altar"]
+## How tall the south face of a wall looks, in units. Light comes from the top-left, as in the
+## terrain shader, so a wall shows a lit top and a shaded face to the south.
+const WALL_FACE := 12.0
+const TIMBER := Color(0.50, 0.36, 0.23)
+const STONE := Color(0.57, 0.57, 0.56)
 
 
 static func is_animated(def_id: String) -> bool:
@@ -16,15 +21,16 @@ static func is_animated(def_id: String) -> bool:
 
 
 ## `connections` is a bitmask of neighbors that a wall or door should join up with
-## (1 north, 2 east, 4 south, 8 west; see WorldState.connection_mask).
-static func draw(ci: CanvasItem, def_id: String, u: float, t: float, occupied: bool = false, connections: int = 0) -> void:
+## (1 north, 2 east, 4 south, 8 west; see WorldState.connection_mask). `cell` is the tile it
+## stands on; it only varies the stonework and planks so neighbors do not look stamped.
+static func draw(ci: CanvasItem, def_id: String, u: float, t: float, occupied: bool = false, connections: int = 0, cell: Vector2i = Vector2i.ZERO) -> void:
 	match def_id:
 		"wall":
-			_wall(ci, u, connections, Color(0.47, 0.34, 0.22), Color(0.33, 0.23, 0.14))
+			_wall(ci, u, connections, cell, false)
 		"stone_wall":
-			_wall(ci, u, connections, Color(0.56, 0.57, 0.58), Color(0.39, 0.40, 0.41))
+			_wall(ci, u, connections, cell, true)
 		"door":
-			_door(ci, u, connections)
+			_door(ci, u, connections, cell)
 		"grave":
 			_grave(ci, u)
 		"bed":
@@ -56,9 +62,9 @@ static func draw(ci: CanvasItem, def_id: String, u: float, t: float, occupied: b
 		"pew":
 			_pew(ci, u)
 		"watch_post":
-			_watch_post(ci, u)
+			_watch_post(ci, u, t)
 		"altar":
-			_altar(ci, u)
+			_altar(ci, u, t)
 		"sickbed":
 			_sickbed(ci, u, occupied)
 		_:
@@ -66,6 +72,7 @@ static func draw(ci: CanvasItem, def_id: String, u: float, t: float, occupied: b
 
 
 static func _bed(ci: CanvasItem, u: float, occupied: bool) -> void:
+	_shadow(ci, u, 20.0)
 	_rect(ci, u, -18, -22, 36, 44, Color(0.40, 0.29, 0.18), 1.2)
 	_rect(ci, u, -14, -18, 28, 36, Color(0.81, 0.71, 0.49), 0.0)
 	for stroke in [[-9, -6, -3, -4], [4, -1, 9, 1], [-8, 4, -2, 6], [3, -11, 8, -9], [-3, 10, 4, 9]]:
@@ -147,72 +154,167 @@ static func _lute(ci: CanvasItem, u: float) -> void:
 	ci.draw_circle(Vector2(-3, 2) * u, 2.8 * u, Color(0.18, 0.11, 0.07))
 
 
-## A wall seen from above: a post with a beam running to each connected neighbor, so a row of
-## them reads as one wall and corners and crossings join up.
-static func _wall_pieces(connections: int) -> Array[Rect2]:
-	var half := 16.0
-	var pieces: Array[Rect2] = [Rect2(-half, -half, half * 2.0, half * 2.0)]
-	if connections & 1:
-		pieces.append(Rect2(-half, -24.0, half * 2.0, 24.0 - half))
-	if connections & 2:
-		pieces.append(Rect2(half, -half, 24.0 - half, half * 2.0))
-	if connections & 4:
-		pieces.append(Rect2(-half, half, half * 2.0, 24.0 - half))
-	if connections & 8:
-		pieces.append(Rect2(-24.0, -half, 24.0 - half, half * 2.0))
-	return pieces
-
-
-## Outlines first, grown only sideways at the ends that meet a neighbor, so there is no seam.
-static func _wall_outline(ci: CanvasItem, u: float, pieces: Array[Rect2], connections: int) -> void:
-	for piece in pieces:
-		var grown := piece.grow(1.5)
-		if connections & 1 and piece.position.y <= -24.0:
-			grown = Rect2(grown.position.x, -24.0, grown.size.x, grown.end.y + 24.0)
-		if connections & 2 and piece.end.x >= 24.0:
-			grown = Rect2(grown.position.x, grown.position.y, 24.0 - grown.position.x, grown.size.y)
-		if connections & 4 and piece.end.y >= 24.0:
-			grown = Rect2(grown.position.x, grown.position.y, grown.size.x, 24.0 - grown.position.y)
-		if connections & 8 and piece.position.x <= -24.0:
-			grown = Rect2(-24.0, grown.position.y, grown.end.x + 24.0, grown.size.y)
-		ci.draw_rect(Rect2(grown.position * u, grown.size * u), OUTLINE)
-
-
-static func _wall(ci: CanvasItem, u: float, connections: int, fill: Color, line: Color) -> void:
-	var pieces := _wall_pieces(connections)
-	_wall_outline(ci, u, pieces, connections)
-	for piece in pieces:
-		ci.draw_rect(Rect2(piece.position * u, piece.size * u), fill)
-	# a lighter cap on the post and a dark line along each beam
-	ci.draw_rect(Rect2(Vector2(-10, -10) * u, Vector2(20, 20) * u), fill.lightened(0.14))
-	ci.draw_rect(Rect2(Vector2(-10, -10) * u, Vector2(20, 20) * u), line, false, maxf(1.0, u))
-	for piece in pieces.slice(1):
-		var middle: Vector2 = piece.get_center()
-		if piece.size.x > piece.size.y:
-			ci.draw_line(Vector2(piece.position.x, middle.y) * u, Vector2(piece.end.x, middle.y) * u, line, maxf(1.0, u))
-		else:
-			ci.draw_line(Vector2(middle.x, piece.position.y) * u, Vector2(middle.x, piece.end.y) * u, line, maxf(1.0, u))
-
-
-## A door is a gap in the wall with a plank slab; people walk straight through it.
-static func _door(ci: CanvasItem, u: float, connections: int) -> void:
-	var timber := Color(0.47, 0.34, 0.22)
-	var line := Color(0.33, 0.23, 0.14)
-	var vertical := (connections & 5) != 0 and (connections & 10) == 0
-	var along_wall := connections & ~(5 if not vertical else 10)
-	var pieces := _wall_pieces(along_wall)
-	_wall_outline(ci, u, pieces, along_wall)
-	for piece in pieces:
-		ci.draw_rect(Rect2(piece.position * u, piece.size * u), timber)
-	var slab := Rect2(-6, -19, 12, 38) if vertical else Rect2(-19, -6, 38, 12)
-	ci.draw_rect(Rect2(slab.grow(1.5).position * u, slab.grow(1.5).size * u), OUTLINE)
-	ci.draw_rect(Rect2(slab.position * u, slab.size * u), Color(0.64, 0.47, 0.29))
-	if vertical:
-		ci.draw_line(Vector2(0, -19) * u, Vector2(0, 19) * u, line, maxf(1.0, u))
-		ci.draw_circle(Vector2(2.5, 11) * u, 1.6 * u, Color(0.16, 0.12, 0.08))
+## A wall fills its whole tile, so a run of them reads as one solid wall and corners and
+## crossings join up. Its top is laid in courses (planks or stone blocks) that carry on from
+## tile to tile, and where no wall continues to the south it shows a shaded front face.
+static func _wall(ci: CanvasItem, u: float, connections: int, cell: Vector2i, stone: bool) -> void:
+	var base := STONE if stone else TIMBER
+	var face_south := connections & 4 == 0
+	var top := Rect2(-24, -24, 48, 48.0 - (WALL_FACE if face_south else 0.0))
+	var along_x := (connections & 10) != 0
+	var along_y := (connections & 5) != 0
+	if along_x and along_y:  # a corner or crossing
+		if stone:  # big quoin stones
+			_courses(ci, u, top, true, 2, 24.0, base.lightened(0.05), cell, 0.18, 1.5, true, 11)
+		else:  # a squared post where the timbers meet, bevelled, with a hint of end grain
+			var post := top.grow(-4.0)
+			ci.draw_rect(_scaled_rect(top, u), base.darkened(0.06))
+			ci.draw_rect(_scaled_rect(post, u), base.darkened(0.14))
+			ci.draw_line(post.position * u, Vector2(post.end.x, post.position.y) * u, base.lightened(0.12), maxf(1.0, u))
+			ci.draw_line(post.position * u, Vector2(post.position.x, post.end.y) * u, base.lightened(0.08), maxf(1.0, u))
+			ci.draw_line(Vector2(post.position.x, post.end.y) * u, post.end * u, base.darkened(0.34), maxf(1.0, u))
+			ci.draw_line(Vector2(post.end.x, post.position.y) * u, post.end * u, base.darkened(0.30), maxf(1.0, u))
+			ci.draw_arc(post.get_center() * u, 6.0 * u, 0.0, TAU, 16, base.darkened(0.22), maxf(1.0, 0.8 * u))
+	elif stone:
+		_courses(ci, u, top, along_x or not along_y, 3, 18.0, base, cell, 0.16, 1.5, true, 3)
 	else:
-		ci.draw_line(Vector2(-19, 0) * u, Vector2(19, 0) * u, line, maxf(1.0, u))
-		ci.draw_circle(Vector2(11, 2.5) * u, 1.6 * u, Color(0.16, 0.12, 0.08))
+		_courses(ci, u, top, along_x or not along_y, 3, 70.0, base, cell, 0.12, 1.0, false, 5)
+
+	if face_south:
+		var face := Rect2(-24, 24.0 - WALL_FACE, 48, WALL_FACE)
+		var shaded := base.darkened(0.42)
+		if stone:
+			_courses(ci, u, face, true, 2, 15.0, shaded, cell, 0.20, 1.2, true, 9)
+		else:  # upright boards
+			ci.draw_rect(_scaled_rect(face, u), shaded)
+			var start := -24.0 + 7.0 * hash01(cell.x, cell.y, 2)
+			for i in 8:
+				var x := start + i * 7.0
+				if x > -24.0 and x < 24.0:
+					ci.draw_line(Vector2(x, face.position.y) * u, Vector2(x, 24) * u, shaded.darkened(0.30), maxf(1.0, 0.8 * u))
+		ci.draw_rect(Rect2(Vector2(-24, face.end.y - 2.5) * u, Vector2(48, 2.5) * u), Color(0, 0, 0, 0.25))  # dirt at the foot
+		ci.draw_line(Vector2(-24, face.position.y) * u, Vector2(24, face.position.y) * u, base.lightened(0.28), maxf(1.0, 1.2 * u))  # the lit edge
+		ci.draw_line(Vector2(-24, 24) * u, Vector2(24, 24) * u, OUTLINE, maxf(1.0, 1.5 * u))
+	_wall_edges(ci, u, connections, base, top.end.y)
+
+
+## Dark outlines along the sides that do not join another wall, with a lit rim on the sides
+## that face the light (north and west) and a shaded one on the east.
+static func _wall_edges(ci: CanvasItem, u: float, connections: int, base: Color, top_end: float) -> void:
+	var outline := maxf(1.0, 1.5 * u)
+	var rim := maxf(1.0, u)
+	if connections & 1 == 0:
+		ci.draw_line(Vector2(-24, -24) * u, Vector2(24, -24) * u, OUTLINE, outline)
+		ci.draw_line(Vector2(-24, -22.5) * u, Vector2(24, -22.5) * u, base.lightened(0.25), rim)
+	if connections & 8 == 0:
+		ci.draw_line(Vector2(-22.5, -24) * u, Vector2(-22.5, top_end) * u, base.lightened(0.18), rim)
+		ci.draw_line(Vector2(-24, -24) * u, Vector2(-24, 24) * u, OUTLINE, outline)
+	if connections & 2 == 0:
+		ci.draw_line(Vector2(22.5, -24) * u, Vector2(22.5, top_end) * u, base.darkened(0.25), rim)
+		ci.draw_line(Vector2(24, -24) * u, Vector2(24, 24) * u, OUTLINE, outline)
+
+
+## Fills `area` with rows of blocks or planks running along x (or along y), staggered, each a
+## little lighter or darker than the next. Positions count from the map's corner, so a course
+## carries on into the next tile of the same wall without a seam.
+static func _courses(ci: CanvasItem, u: float, area: Rect2, along_x: bool, rows: int, length: float,
+		base: Color, cell: Vector2i, variation: float, joint: float, stagger: bool, salt: int) -> void:
+	var mortar := base.darkened(0.40)  # or the gaps between planks
+	var width := maxf(1.0, joint * u)
+	var origin := float(cell.x if along_x else cell.y) * 48.0
+	var lane := cell.y if along_x else cell.x
+	var start := origin + (area.position.x if along_x else area.position.y)
+	var end := start + (area.size.x if along_x else area.size.y)
+	var across_start := area.position.y if along_x else area.position.x
+	var across := (area.size.y if along_x else area.size.x) / rows
+	# Blocks edge to edge, then the joints drawn over them as lines (cheaper than mortar under all).
+	for row in rows:
+		var shift := hash01(lane, 0 if stagger else row, salt) * length
+		if stagger and row % 2 == 1:
+			shift += length * 0.5
+		var c0 := across_start + row * across
+		var c1 := c0 + across
+		var k := floori((start - shift) / length)
+		while shift + k * length < end:
+			var block_start := shift + k * length
+			var a := maxf(start, block_start) - origin
+			var b := minf(end, block_start + length) - origin
+			var shade := 1.0 + variation * (hash01(lane * 13 + row, k, salt) - 0.5)
+			var color := Color(base.r * shade, base.g * shade, base.b * shade)
+			var rect := Rect2(a, c0, b - a, c1 - c0) if along_x else Rect2(c0, a, c1 - c0, b - a)
+			ci.draw_rect(_scaled_rect(rect, u), color)
+			var lit_from := Vector2(a, c0 + joint) if along_x else Vector2(c0 + joint, a)
+			var lit_to := Vector2(b, c0 + joint) if along_x else Vector2(c0 + joint, b)
+			ci.draw_line(lit_from * u, lit_to * u, color.lightened(0.14), maxf(1.0, 0.8 * u))  # a lit edge
+			if block_start > start:  # the joint where this block begins
+				var j0 := Vector2(a, c0) if along_x else Vector2(c0, a)
+				var j1 := Vector2(a, c1) if along_x else Vector2(c1, a)
+				ci.draw_line(j0 * u, j1 * u, mortar, width)
+			k += 1
+		var edge0 := Vector2(start - origin, c0) if along_x else Vector2(c0, start - origin)
+		var edge1 := Vector2(end - origin, c0) if along_x else Vector2(c0, end - origin)
+		ci.draw_line(edge0 * u, edge1 * u, mortar, width)  # the bed joint above the row
+	var last0 := Vector2(start - origin, across_start + rows * across) if along_x else Vector2(across_start + rows * across, start - origin)
+	var last1 := Vector2(end - origin, across_start + rows * across) if along_x else Vector2(across_start + rows * across, end - origin)
+	ci.draw_line(last0 * u, last1 * u, mortar, width)
+
+
+## A door stands in a gap in the wall: timber jambs at either end, a plank leaf with iron
+## straps between them and a worn threshold underneath. People walk straight through it.
+static func _door(ci: CanvasItem, u: float, connections: int, cell: Vector2i) -> void:
+	var vertical := (connections & 5) != 0 and (connections & 10) == 0
+	var sill := Color(0.33, 0.25, 0.17)
+	ci.draw_rect(Rect2(Vector2(-24, -24) * u, Vector2(48, 48) * u), sill)
+	for i in range(1, 6):  # threshold boards, laid across the way through
+		var p := -24.0 + i * 8.0
+		var from := Vector2(-24, p) if vertical else Vector2(p, -24)
+		var to := Vector2(24, p) if vertical else Vector2(p, 24)
+		ci.draw_line(from * u, to * u, sill.darkened(0.30), maxf(1.0, 0.8 * u))
+	var jamb := 7.0
+	var timber := TIMBER
+	var leaf := Color(0.63, 0.46, 0.29)
+	if vertical:
+		for y in [-24.0, 24.0 - jamb]:
+			ci.draw_rect(Rect2(Vector2(-24, y) * u, Vector2(48, jamb) * u), timber)
+		ci.draw_rect(Rect2(Vector2(-24, -24 + jamb - 3.0) * u, Vector2(48, 3.0) * u), timber.darkened(0.42))  # face of the top jamb
+		var slab := Rect2(-6, -24 + jamb, 12, 48 - 2.0 * jamb)
+		ci.draw_rect(_scaled_rect(slab.grow(1.2), u), OUTLINE)
+		ci.draw_rect(_scaled_rect(slab, u), leaf)
+		for i in range(1, 7):
+			var y := slab.position.y + slab.size.y * i / 7.0
+			ci.draw_line(Vector2(-6, y) * u, Vector2(6, y) * u, leaf.darkened(0.25), maxf(1.0, 0.8 * u))
+		for x in [-3.0, 3.0]:  # iron straps
+			ci.draw_line(Vector2(x, slab.position.y) * u, Vector2(x, slab.end.y) * u, Color(0.22, 0.21, 0.20), maxf(1.0, 1.3 * u))
+		ci.draw_circle(Vector2(2.5, 9) * u, 1.8 * u, Color(0.16, 0.12, 0.08))
+	else:
+		for x in [-24.0, 24.0 - jamb]:
+			ci.draw_rect(Rect2(Vector2(x, -24) * u, Vector2(jamb, 48) * u), timber)
+			if connections & 4 == 0:
+				ci.draw_rect(Rect2(Vector2(x, 24 - WALL_FACE) * u, Vector2(jamb, WALL_FACE) * u), timber.darkened(0.42))
+		var slab := Rect2(-24 + jamb, -7, 48 - 2.0 * jamb, 12)
+		ci.draw_rect(Rect2(Vector2(slab.position.x, slab.end.y) * u, Vector2(slab.size.x, 5) * u), Color(0, 0, 0, 0.30))  # its shadow
+		ci.draw_rect(_scaled_rect(slab.grow(1.2), u), OUTLINE)
+		ci.draw_rect(_scaled_rect(slab, u), leaf)
+		ci.draw_rect(Rect2(Vector2(slab.position.x, slab.end.y - 3.5) * u, Vector2(slab.size.x, 3.5) * u), leaf.darkened(0.35))
+		for i in range(1, 7):
+			var x := slab.position.x + slab.size.x * i / 7.0
+			ci.draw_line(Vector2(x, -7) * u, Vector2(x, 5 - 3.5) * u, leaf.darkened(0.25), maxf(1.0, 0.8 * u))
+		for y in [-4.0, 0.5]:  # iron straps
+			ci.draw_line(Vector2(slab.position.x, y) * u, Vector2(slab.end.x, y) * u, Color(0.22, 0.21, 0.20), maxf(1.0, 1.3 * u))
+		ci.draw_circle(Vector2(9, -1.5) * u, 1.8 * u, Color(0.16, 0.12, 0.08))
+	_wall_edges(ci, u, connections | (10 if vertical else 5), timber, 24.0)
+	# outline the jambs where they meet the opening
+	if vertical:
+		ci.draw_line(Vector2(-24, -24 + jamb) * u, Vector2(24, -24 + jamb) * u, OUTLINE, maxf(1.0, 1.2 * u))
+		ci.draw_line(Vector2(-24, 24 - jamb) * u, Vector2(24, 24 - jamb) * u, OUTLINE, maxf(1.0, 1.2 * u))
+	else:
+		ci.draw_line(Vector2(-24 + jamb, -24) * u, Vector2(-24 + jamb, 24) * u, OUTLINE, maxf(1.0, 1.2 * u))
+		ci.draw_line(Vector2(24 - jamb, -24) * u, Vector2(24 - jamb, 24) * u, OUTLINE, maxf(1.0, 1.2 * u))
+		ci.draw_line(Vector2(-24, -24) * u, Vector2(-24 + jamb, -24) * u, OUTLINE, maxf(1.0, 1.5 * u))
+		ci.draw_line(Vector2(24 - jamb, -24) * u, Vector2(24, -24) * u, OUTLINE, maxf(1.0, 1.5 * u))
+		if connections & 4 == 0:
+			ci.draw_line(Vector2(-24, 24) * u, Vector2(-24 + jamb, 24) * u, OUTLINE, maxf(1.0, 1.5 * u))
+			ci.draw_line(Vector2(24 - jamb, 24) * u, Vector2(24, 24) * u, OUTLINE, maxf(1.0, 1.5 * u))
 
 
 static func _grave(ci: CanvasItem, u: float) -> void:
@@ -235,6 +337,7 @@ static func _table(ci: CanvasItem, u: float) -> void:
 
 ## Runs the full width of the tile, so a row of counters reads as one long counter.
 static func _counter(ci: CanvasItem, u: float) -> void:
+	ci.draw_rect(Rect2(Vector2(-24, 13) * u, Vector2(48, 6) * u), Color(0, 0, 0, 0.18))
 	ci.draw_rect(Rect2(Vector2(-24, -15) * u, Vector2(48, 30) * u), OUTLINE)
 	ci.draw_rect(Rect2(Vector2(-24, -13.5) * u, Vector2(48, 27) * u), Color(0.45, 0.31, 0.19))
 	ci.draw_rect(Rect2(Vector2(-24, -13.5) * u, Vector2(48, 17) * u), Color(0.66, 0.50, 0.32))
@@ -271,14 +374,15 @@ static func _bench(ci: CanvasItem, u: float) -> void:
 
 
 ## A tall timber post with a lantern on a little platform.
-static func _watch_post(ci: CanvasItem, u: float) -> void:
+static func _watch_post(ci: CanvasItem, u: float, t: float) -> void:
 	_shadow(ci, u, 18.0)
 	_rect(ci, u, -16, -16, 32, 32, Color(0.40, 0.29, 0.18), 1.4)          # the platform seen from above
 	_rect(ci, u, -13, -13, 26, 26, Color(0.56, 0.42, 0.26), 0.0)
 	for plank in [-4, 4]:
 		ci.draw_line(Vector2(-13, plank) * u, Vector2(13, plank) * u, Color(0.42, 0.31, 0.19), maxf(1.0, u))
 	_rect(ci, u, -4, -4, 8, 8, Color(0.30, 0.21, 0.13), 1.0)               # the post
-	ci.draw_circle(Vector2(0, 0), 3.0 * u, Color(1.0, 0.82, 0.35))         # the lantern
+	ci.draw_circle(Vector2.ZERO, (6.0 + 0.8 * sin(t * 6.0)) * u, Color(1.0, 0.75, 0.30, 0.25))  # the lantern
+	ci.draw_circle(Vector2.ZERO, 3.0 * u, Color(1.0, 0.86, 0.45))
 	for corner in [Vector2(-14, -14), Vector2(14, -14), Vector2(-14, 14), Vector2(14, 14)]:
 		_rect(ci, u, corner.x - 2, corner.y - 2, 4, 4, Color(0.30, 0.21, 0.13), 0.8)
 
@@ -292,7 +396,7 @@ static func _pew(ci: CanvasItem, u: float) -> void:
 		_rect(ci, u, x, -9, 4, 18, Color(0.33, 0.22, 0.13), 0.8)
 
 
-static func _altar(ci: CanvasItem, u: float) -> void:
+static func _altar(ci: CanvasItem, u: float, t: float) -> void:
 	_shadow(ci, u, 20.0)
 	_rect(ci, u, -19, -14, 38, 28, Color(0.58, 0.58, 0.56), 1.4)
 	_rect(ci, u, -19, -14, 38, 6, Color(0.92, 0.90, 0.84), 0.0)   # the cloth
@@ -300,9 +404,11 @@ static func _altar(ci: CanvasItem, u: float) -> void:
 	_rect(ci, u, -7, -17, 14, 4, Color(0.88, 0.76, 0.35), 1.0)
 	for x in [-14, 10]:
 		_rect(ci, u, x, -8, 4, 8, Color(0.93, 0.89, 0.72), 0.8)  # candles
+		_flame(ci, u, Vector2(x + 2, -8), 5.0 + 0.8 * sin(t * 9.0 + x), 2.6)
 
 
 static func _sickbed(ci: CanvasItem, u: float, occupied: bool) -> void:
+	_shadow(ci, u, 20.0)
 	_rect(ci, u, -18, -22, 36, 44, Color(0.45, 0.45, 0.47), 1.2)
 	_rect(ci, u, -14, -18, 28, 36, Color(0.88, 0.89, 0.86), 0.0)
 	_rect(ci, u, -9, -16, 18, 9, Color(0.97, 0.97, 0.95), 1.0)
@@ -371,3 +477,16 @@ static func _ellipse(ci: CanvasItem, u: float, center: Vector2, radius: Vector2,
 	if outline_width > 0.0:
 		ci.draw_colored_polygon(PawnArt._ellipse_points(center * u, (radius + Vector2(outline_width, outline_width)) * u), OUTLINE)
 	ci.draw_colored_polygon(PawnArt._ellipse_points(center * u, radius * u), color)
+
+
+static func _scaled_rect(rect: Rect2, u: float) -> Rect2:
+	return Rect2(rect.position * u, rect.size * u)
+
+
+## A repeatable random number from 0 to 1 for three whole numbers, so patterns stay the same
+## from frame to frame and from one run to the next.
+static func hash01(a: int, b: int, c: int) -> float:
+	var h := a * 374761393 + b * 668265263 + c * 1274126177
+	h = (h ^ (h >> 13)) * 1103515245
+	h = h ^ (h >> 16)
+	return float(h & 0xFFFF) / 65535.0
