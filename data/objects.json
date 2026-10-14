@@ -14,6 +14,7 @@
   { "id": "counter", "cost": 8, "offers_work": "lot",    "name": "Counter",      "category": "furniture", "blocks_walking": true },
   { "id": "shelf", "cost": 8,      "name": "Shelf",        "category": "furniture", "blocks_walking": true },
   { "id": "barrel", "cost": 5,     "name": "Barrel",       "category": "furniture", "blocks_walking": true },
+  { "id": "cradle", "cost": 8,      "name": "Cradle",       "category": "furniture", "blocks_walking": true },
   { "id": "bench", "cost": 5,      "name": "Bench",        "category": "furniture", "blocks_walking": false },
   { "id": "meal_table", "cost": 14, "category": "business",   "name": "Tavern table",  "action": "Have a meal", "doing": "Eating a meal",   "blocks_walking": true, "use_position": "beside", "satisfies": { "hunger": 200.0, "fun": 20.0 }, "max_use_minutes": 30, "price": 4 },
   { "id": "ale_barrel", "cost": 10, "category": "business",   "name": "Ale barrel",    "action": "Drink ale",   "doing": "Drinking ale",    "blocks_walking": true, "use_position": "beside", "satisfies": { "fun": 120.0 }, "max_use_minutes": 30, "price": 2 },

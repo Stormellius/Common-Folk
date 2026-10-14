@@ -17,6 +17,8 @@ signal quit_requested
 signal save_screen_requested
 ## Every menu was closed: the game can carry on.
 signal closed
+## A newborn of your household was given a name.
+signal baby_named(baby_id: int, given: String)
 
 const CREDIT := "Type: IM Fell English by Igino Marini and Alegreya by Huerta Tipográfica, under the SIL Open Font License"
 
@@ -52,6 +54,13 @@ var _size_option: OptionButton
 var _scale_option: OptionButton
 var _vsync_box: CheckBox
 var _autosave_box: CheckBox
+var _name_intro: Label
+var _name_field: LineEdit
+var _name_button: Button
+var _name_portrait: PawnPortrait
+var _name_baby := 0
+var _name_gender := ""
+var _name_used: Array[String] = []
 
 
 func _ready() -> void:
@@ -71,6 +80,7 @@ func _ready() -> void:
 	_screens["settings"] = _build_settings()
 	_screens["confirm"] = _build_confirm()
 	_screens["game_over"] = _build_game_over()
+	_screens["name"] = _build_naming()
 	_show("")
 
 
@@ -154,6 +164,44 @@ func show_save_error(text: String) -> void:
 	_save_error.visible = true
 
 
+## Asks what to call a newborn: `intro` says who it is, `suggestion` fills the box, and Another
+## picks a different name for a `gender` baby that nobody in `used` already has.
+func open_naming(baby: Pawn, intro: String, suggestion: String, used: Array[String]) -> void:
+	_name_baby = baby.id
+	_name_gender = baby.gender
+	_name_used = used
+	_name_intro.text = intro
+	_name_field.text = suggestion
+	_name_button.text = "Name Her" if baby.gender == "female" else "Name Him"
+	_name_portrait.look = baby.look
+	_name_portrait.outfit = PawnArt.outfit_for(baby)
+	_name_portrait.queue_redraw()
+	_show("name")
+	_name_field.grab_focus()
+	_name_field.select_all()
+
+
+## Another name for the baby being named: one from the names list that nobody in the family has
+## and that is not the one in the box now.
+func _another_name() -> void:
+	var names: Array = DataRegistry.get_def("names", "given_%s" % _name_gender).get("list", [])
+	var choices: Array[String] = []
+	for given in names:
+		if not str(given) in _name_used and str(given) != _name_field.text.strip_edges():
+			choices.append(str(given))
+	if not choices.is_empty():
+		_name_field.text = choices[randi() % choices.size()]
+
+
+func _on_name_chosen() -> void:
+	var given := _name_field.text.strip_edges()
+	if given == "":
+		_another_name()
+		given = _name_field.text.strip_edges()
+	close()
+	baby_named.emit(_name_baby, given)
+
+
 func open_settings() -> void:
 	if _current == "":
 		_back_to = "pause"
@@ -184,6 +232,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	match _current:
 		"pause":
 			close()
+		"name":
+			_on_name_chosen()  # Esc keeps the name in the box
 		"confirm":
 			_show(_confirm_back)
 		"title", "game_over":
@@ -641,6 +691,39 @@ func _confirm(text: String, yes: String, action: Callable) -> void:
 	_confirm_yes.text = yes
 	_confirm_action = action
 	_show("confirm")
+
+
+func _build_naming() -> Control:
+	var parts := _card("A New Baby", 480.0)
+	var box: VBoxContainer = parts[1]
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14)
+	box.add_child(row)
+	var frame := Control.new()
+	frame.custom_minimum_size = Vector2(56, 56)
+	row.add_child(frame)
+	_name_portrait = PawnPortrait.new()
+	_name_portrait.scale_factor = 1.6
+	_name_portrait.position = Vector2(6, 4)
+	frame.add_child(_name_portrait)
+	_name_intro = _ink_label("", "InkLabel")
+	_name_intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_name_intro.custom_minimum_size = Vector2(360, 0)
+	_name_intro.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(_name_intro)
+	box.add_child(_ink_label("What will you call the child?", "InkDim"))
+	_name_field = LineEdit.new()
+	_name_field.max_length = 20
+	_name_field.text_submitted.connect(func(_text: String) -> void: _on_name_chosen())
+	box.add_child(_name_field)
+	var another := Button.new()
+	another.text = "Another Name"
+	another.pressed.connect(_another_name)
+	_name_button = Button.new()
+	_name_button.text = "Name Them"
+	_name_button.pressed.connect(_on_name_chosen)
+	box.add_child(_button_row([another, _name_button]))
+	return parts[0]
 
 
 func _build_game_over() -> Control:

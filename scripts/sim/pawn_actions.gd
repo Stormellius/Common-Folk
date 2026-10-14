@@ -9,7 +9,8 @@ extends RefCounted
 ## still listed, switched off, with the reason. Right-clicking another person lists the
 ## two-person interactions from data/interactions.json (one needs both to be willing). Something
 ## that costs coin shows its price. A notice board or a counter ("offers_work" in objects.json)
-## lists the jobs with a vacancy, and a way to quit the one you have.
+## lists the jobs with a vacancy, and a way to quit the one you have. A baby of your household
+## lists what it needs (feeding, soothing, washing), and a woman in labour lets you stay with her.
 
 const WALK := "walk"
 const STOP := "stop"
@@ -21,6 +22,8 @@ const LOT_PREFIX := "lot:"           # "lot:<lease|buy|buyout>:<lot id>"
 const GUILD_PREFIX := "guild:"       # "guild:<guild id>"
 const FUND_PREFIX := "fund:"         # "fund:<amount>"
 const PLEAD_PREFIX := "plead:"       # "plead:<dying person's id>"
+const TEND_PREFIX := "tend:"         # "tend:<care id>:<baby's id>"
+const ATTEND_PREFIX := "attend:"     # "attend:<mother's id>"
 const FUND_STEPS := [10, 50]
 
 
@@ -36,6 +39,9 @@ static func list_for(sim: Simulation, pawn: Pawn, tile: Vector2i) -> Array[Dicti
 		return actions
 	if pawn.is_dying():
 		actions.append(_entry("none", "%s is dying" % pawn.display_name.get_slice(" ", 0), false, "nothing to be done but plead with Death"))
+		return actions
+	if Pregnancy.in_labour(pawn):
+		actions.append(_entry("none", "%s is in labour" % pawn.display_name.get_slice(" ", 0), false, "the baby is coming"))
 		return actions
 	var placed := sim.world.object_at(tile)
 	if placed != null and placed.def().has("action"):  # walls and doors offer nothing to use
@@ -58,7 +64,14 @@ static func list_for(sim: Simulation, pawn: Pawn, tile: Vector2i) -> Array[Dicti
 	if pawn.is_busy():
 		actions.append(_entry(STOP, "Stop"))
 	for other in sim.people():
-		if other.id == pawn.id or other.tile != tile or other.is_infant():
+		if other.id == pawn.id or other.tile != tile:
+			continue
+		if other.is_infant():
+			actions.append_array(_baby_entries(sim, pawn, other))
+			continue
+		if Pregnancy.in_labour(other):
+			var attend_blocker := sim.attend_blocker(pawn, other)
+			actions.append(_entry(ATTEND_PREFIX + str(other.id), "Stay with %s for the birth" % other.display_name.get_slice(" ", 0), attend_blocker == "", attend_blocker))
 			continue
 		if other.is_dying():
 			var plead_blocker := Mortality.plead_blocker(sim, pawn, other)
@@ -69,6 +82,20 @@ static func list_for(sim: Simulation, pawn: Pawn, tile: Vector2i) -> Array[Dicti
 			var label := str(interaction.get("action", "Interact with {name}")).replace("{name}", other.display_name.get_slice(" ", 0))
 			actions.append(_entry(INTERACT_PREFIX + "%s:%d" % [interaction["id"], other.id], label, blocker == "", blocker))
 	return actions
+
+
+## Feeding, soothing and washing one of your household's babies, each with how it is now.
+static func _baby_entries(sim: Simulation, pawn: Pawn, baby: Pawn) -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	if sim.household.get_pawn(baby.id) == null:
+		return entries
+	var blocker := Babies.tend_blocker(sim, pawn, baby)
+	for def in Babies.care_defs():
+		var care_id := str(def["id"])
+		var label := str(def.get("action", "See to {name}")).replace("{name}", baby.display_name.get_slice(" ", 0))
+		label += " (%d%%)" % roundi(float(baby.care.get(care_id, Needs.FULL)) / Needs.FULL * 100.0)
+		entries.append(_entry(TEND_PREFIX + "%s:%d" % [care_id, baby.id], label, blocker == "", blocker))
+	return entries
 
 
 ## Joining a guild, from the notice board.
@@ -167,6 +194,17 @@ static func _perform(sim: Simulation, pawn: Pawn, action_id: String, tile: Vecto
 		if dying == null:
 			return { "ok": false, "message": "Death has already taken them" }
 		return sim.order_plead(pawn, dying)
+	if action_id.begins_with(TEND_PREFIX):
+		var tend_parts := action_id.trim_prefix(TEND_PREFIX).split(":")
+		var baby := sim.person(int(tend_parts[1])) if tend_parts.size() == 2 else null
+		if baby == null:
+			return { "ok": false, "message": "The baby is not here" }
+		return sim.order_tend(pawn, baby, tend_parts[0])
+	if action_id.begins_with(ATTEND_PREFIX):
+		var mother := sim.person(int(action_id.trim_prefix(ATTEND_PREFIX)))
+		if mother == null:
+			return { "ok": false, "message": "She is not here" }
+		return sim.order_attend(pawn, mother)
 	if action_id.begins_with(INTERACT_PREFIX):
 		var parts := action_id.trim_prefix(INTERACT_PREFIX).split(":")
 		var other := sim.person(int(parts[1])) if parts.size() == 2 else null

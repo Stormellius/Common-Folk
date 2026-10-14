@@ -46,6 +46,8 @@ signal realm_notice(text: String)
 signal health_notice(text: String)
 ## Who is in the household changed without a death: a baby was born, or grew old enough to be controlled.
 signal household_changed
+## Babies were born into your household (their ids): the view may ask what to call them.
+signal babies_born(ids: Array[int])
 ## Ids of the needs in play; see Needs.
 var active_needs: Array[String] = []
 ## The dead Death has just led away, for the view to show their going: { "tile", "tick", "name",
@@ -81,6 +83,10 @@ func step() -> void:
 	var minute := GameClock.get_minute_of_day()
 	Pregnancy.carry_infants(self)
 	Mortality.step(self)
+	for notice in Pregnancy.step(self, _rng):
+		health_notice.emit(notice)
+	for notice in Babies.step(self):
+		health_notice.emit(notice)
 	var everyone := people()
 	if minute == 0:
 		Relations.drift(everyone)
@@ -136,6 +142,8 @@ func rng() -> RandomNumberGenerator:
 func order_move(pawn: Pawn, target: Vector2i) -> Dictionary:
 	if pawn.is_dying():
 		return { "ok": false, "message": "%s is dying" % _first_name(pawn) }
+	if Pregnancy.in_labour(pawn):
+		return { "ok": false, "message": "%s is in labour" % _first_name(pawn) }
 	if not world.in_bounds(target.x, target.y):
 		return { "ok": false, "message": "That is outside the map" }
 	if not world.is_walkable(target.x, target.y):
@@ -159,6 +167,8 @@ func order_stop(pawn: Pawn) -> void:
 func use_blocker(pawn: Pawn, placed: PlacedObject) -> String:
 	if pawn.is_dying():
 		return "%s is dying" % _first_name(pawn)
+	if Pregnancy.in_labour(pawn):
+		return "%s is in labour" % _first_name(pawn)
 	if placed.user_id != 0 and placed.user_id != pawn.id:
 		var other := person(placed.user_id)
 		return "%s is using it" % (_first_name(other) if other != null else "someone")
@@ -202,6 +212,8 @@ func interaction_blocker(pawn: Pawn, other: Pawn, interaction_id: String) -> Str
 		return "a baby cannot"
 	if pawn.is_dying() or other.is_dying():
 		return "%s is dying" % (_first_name(pawn) if pawn.is_dying() else other_name)
+	if Pregnancy.in_labour(pawn) or Pregnancy.in_labour(other):
+		return "%s is in labour" % (_first_name(pawn) if Pregnancy.in_labour(pawn) else other_name)
 	if bool(interaction.get("adults_only", false)) and not (pawn.adult and other.adult):
 		return "only adults can"
 	if other.is_busy():
@@ -230,6 +242,10 @@ func interaction_blocker(pawn: Pawn, other: Pawn, interaction_id: String) -> Str
 
 ## Whether `person` is attracted to `other`, from an orientation trait ("attracted_to" in
 ## data/traits.json: opposite, same, both or none). Someone with no such trait is open to anyone.
+func attracted(person: Pawn, other: Pawn) -> bool:
+	return _attracted_to(person, other)
+
+
 func _attracted_to(person: Pawn, other: Pawn) -> bool:
 	for trait_id in person.traits:
 		match str(DataRegistry.get_def("traits", trait_id).get("attracted_to", "")):
@@ -305,6 +321,204 @@ func _step_plead(pawn: Pawn) -> void:
 		_end_job(pawn)
 		if message != "" and (household.get_pawn(pawn.id) != null or household.get_pawn(dying.id) != null):
 			health_notice.emit(message)
+
+
+# --- birth and babies ---------------------------------------------------------------
+
+## Labour has begun: she makes for the best bed she can, the clinic's sickbed if she can afford it
+## and it is not much further, otherwise one of her own. With no bed to reach she lies down where
+## she is. See Pregnancy.
+func begin_labour(mother: Pawn) -> void:
+	var choice: PlacedObject = null
+	var best := INF
+	for placed in world.objects:
+		if not placed.def_id in ["bed", "sickbed"] or (placed.user_id != 0 and placed.user_id != mother.id):
+			continue
+		if not _may_use(mother, placed) or price_of(placed.def_id) > coins_of(mother):
+			continue
+		var plan := _plan_use(mother, placed)
+		if plan.is_empty():
+			continue
+		var effort := float(plan["route"].size()) - (30.0 if placed.def_id == "sickbed" else 0.0)
+		if effort < best:
+			best = effort
+			choice = placed
+	order_labour(mother, choice)
+
+
+## Sends `mother` to lie down in `bed` for the birth (or, with no bed, right where she is).
+func order_labour(mother: Pawn, bed: PlacedObject) -> Dictionary:
+	_end_job(mother)
+	mother.path.clear()
+	mother.job_kind = "labour"
+	mother.job_minutes = 0
+	if bed == null or _plan_use(mother, bed).is_empty():
+		mother.job_stage = "using"
+		mother.job_object = 0
+		mother.pose = "lie"
+		return { "ok": true, "message": "" }
+	var plan := _plan_use(mother, bed)
+	mother.path = plan["route"]
+	mother.job_stage = "walking"
+	mother.job_object = bed.id
+	mother.job_tile = plan["tile"]
+	bed.user_id = mother.id
+	return { "ok": true, "message": "" }
+
+
+## The birth is over: she gets up and whoever stayed with her goes about their day.
+func end_labour(mother: Pawn) -> void:
+	if mother.job_kind == "labour":
+		_end_job(mother)
+	for other in people():
+		if other.job_kind == "attend" and other.job_partner == mother.id:
+			_end_job(other)
+
+
+func _step_labour(pawn: Pawn) -> void:
+	if pawn.job_stage != "walking":
+		return
+	if pawn.is_moving() or not pawn.path.is_empty():
+		return
+	var bed := world.get_object(pawn.job_object)
+	if bed != null and pawn.tile == pawn.job_tile:
+		var price := price_of(bed.def_id)
+		if price <= 0 or spend(pawn, price):
+			_credit_owner(pawn, bed, price)
+			pawn.job_stage = "using"
+			pawn.pose = "lie"
+			return
+	if bed != null and bed.user_id == pawn.id:
+		bed.user_id = 0
+	pawn.job_object = 0  # the bed could not be had: she lies down where she is
+	pawn.job_stage = "using"
+	pawn.pose = "lie"
+
+
+## Why `helper` cannot stay with `mother` through her labour, or "".
+func attend_blocker(helper: Pawn, mother: Pawn) -> String:
+	if not Pregnancy.in_labour(mother):
+		return "%s is not in labour" % _first_name(mother)
+	if helper.id == mother.id or helper.is_infant() or helper.is_dying() or not helper.adult:
+		return "only a grown-up can"
+	if _plan_beside(helper, mother.committed_tile()).is_empty():
+		return "can't get there"
+	return ""
+
+
+## Sends `helper` to stay at `mother`'s side until the baby comes: a midwife makes a birth safer.
+func order_attend(helper: Pawn, mother: Pawn) -> Dictionary:
+	var blocker := attend_blocker(helper, mother)
+	if blocker != "":
+		return { "ok": false, "message": "Can't stay with her: %s" % blocker }
+	var plan := _plan_beside(helper, mother.committed_tile())
+	_end_job(helper)
+	helper.path = plan["route"]
+	helper.job_kind = "attend"
+	helper.job_stage = "walking"
+	helper.job_tile = plan["tile"]
+	helper.job_partner = mother.id
+	helper.job_minutes = 0
+	return { "ok": true, "message": "" }
+
+
+func _step_attend(pawn: Pawn) -> void:
+	var mother := person(pawn.job_partner)
+	if mother == null or not Pregnancy.in_labour(mother):
+		_end_job(pawn)
+		return
+	if pawn.job_stage == "walking":
+		if pawn.is_moving() or not pawn.path.is_empty():
+			return
+		var spot := mother.committed_tile()
+		if _distance(pawn.tile, spot) > 1:
+			var plan := _plan_beside(pawn, spot)  # she has moved since: follow her
+			if plan.is_empty():
+				_end_job(pawn)
+				return
+			pawn.path = plan["route"]
+			return
+		pawn.job_stage = "using"
+		pawn.pose = "talk"
+		pawn.facing = spot - pawn.tile if spot != pawn.tile else pawn.facing
+		return
+	if _distance(pawn.tile, mother.committed_tile()) > 1:
+		pawn.job_stage = "walking"  # she moved: catch up
+		pawn.pose = ""
+
+
+## Sends `carer` to see to one of a baby's needs (an id from "baby_care": fed, comfort, clean).
+func order_tend(carer: Pawn, baby: Pawn, care_id: String) -> Dictionary:
+	var blocker := Babies.tend_blocker(self, carer, baby)
+	if blocker != "":
+		return { "ok": false, "message": "Can't now: %s" % blocker }
+	_end_job(carer)
+	carer.job_kind = "tend"
+	carer.job_partner = baby.id
+	carer.job_interaction = care_id
+	carer.job_minutes = 0
+	if carer.tile == baby.tile or _distance(carer.tile, baby.tile) == 1:
+		carer.path.clear()
+		carer.job_stage = "using"
+		carer.pose = "talk"
+		return { "ok": true, "message": "" }
+	var plan := _plan_beside(carer, baby.tile)
+	carer.path = plan["route"]
+	carer.job_stage = "walking"
+	carer.job_tile = plan["tile"]
+	return { "ok": true, "message": "" }
+
+
+func _step_tend(pawn: Pawn) -> void:
+	var baby := person(pawn.job_partner)
+	if baby == null or not baby.is_infant():
+		_end_job(pawn)
+		return
+	if pawn.job_stage == "walking":
+		if pawn.is_moving() or not pawn.path.is_empty():
+			return
+		if _distance(pawn.tile, baby.tile) > 1:
+			_end_job(pawn)  # the baby was carried off, or the way was blocked
+			return
+		pawn.job_stage = "using"
+		pawn.pose = "talk"
+		if baby.tile != pawn.tile:
+			pawn.facing = baby.tile - pawn.tile
+		return
+	pawn.job_minutes += 1
+	var care_id := pawn.job_interaction
+	baby.care[care_id] = minf(Needs.FULL, float(baby.care.get(care_id, 0.0)) + Needs.FULL / float(Pregnancy.config().get("tend_minutes", 25)))
+	if float(baby.care[care_id]) >= Needs.FULL:
+		Mood.add_event(pawn, "tended_baby", GameClock.tick)
+		_end_job(pawn)
+
+
+## One of your folk with nothing pressing goes to stay with a woman of the household in labour, if
+## nobody is with her yet.
+func _attend_births(pawn: Pawn) -> bool:
+	if household.get_pawn(pawn.id) == null or not pawn.adult:
+		return false
+	for mother in household.pawns:
+		if mother.id == pawn.id or not Pregnancy.in_labour(mother) or mother.is_dying():
+			continue
+		var attended := false
+		for other in people():
+			attended = attended or (other.job_kind == "attend" and other.job_partner == mother.id)
+		if not attended and order_attend(pawn, mother)["ok"]:
+			return true
+	return false
+
+
+## Changes a person's given name (a baby being named), keeping the family name. Returns
+## { "ok", "message" }.
+func rename(pawn: Pawn, given: String) -> Dictionary:
+	var clean := given.strip_edges().replace(" ", "")
+	if clean == "":
+		return { "ok": false, "message": "A name cannot be empty" }
+	clean = clean.substr(0, 1).to_upper() + clean.substr(1, 19)
+	var family := pawn.display_name.get_slice(" ", 1)
+	pawn.display_name = "%s %s" % [clean, family] if family != "" else clean
+	return { "ok": true, "message": "" }
 
 
 # --- coin and work -----------------------------------------------------------------
@@ -419,7 +633,11 @@ func _on_shift(job: Dictionary, minute: int) -> bool:
 	return minute >= int(job["from"]) * 60 and minute < int(job["to"]) * 60
 
 
-## True when some need is bad enough that work can wait.
+## True when some need is bad enough that work (or a baby) can wait.
+func needs_break(pawn: Pawn) -> bool:
+	return _needs_break(pawn)
+
+
 func _needs_break(pawn: Pawn) -> bool:
 	if pawn.illness != "" or Pregnancy.needs_rest_from_work(pawn):
 		return true
@@ -640,6 +858,13 @@ func describe_activity(pawn: Pawn) -> String:
 		text = str(placed.def().get("doing", "Busy"))
 	elif placed != null:
 		text = "Heading to the %s" % placed.display_name().to_lower()
+	elif pawn.job_kind == "labour":
+		text = "In labour" if pawn.job_stage == "using" else "In labour, making for a bed"
+	elif pawn.job_kind == "attend":
+		var labouring := person(pawn.job_partner)
+		text = "Staying with %s for the birth" % (_first_name(labouring) if labouring != null else "her")
+	elif pawn.job_kind == "tend":
+		text = str(Babies.care_def(pawn.job_interaction).get("doing", "Seeing to the baby")) if pawn.job_stage == "using" else "Going to the baby"
 	elif pawn.job_kind == "plead":
 		var dying := person(pawn.job_partner)
 		var dying_name := _first_name(dying) if dying != null else "someone"
@@ -652,8 +877,8 @@ func describe_activity(pawn: Pawn) -> String:
 		return "Dying. Death is here" if Mortality.death_has_come(pawn) else "Dying"
 	if pawn.slowed:
 		text += " (exhausted)"
-	if Pregnancy.is_known(pawn):
-		text += " (expecting)"
+	if Pregnancy.is_known(pawn) and not Pregnancy.in_labour(pawn):
+		text += " (expecting twins)" if pawn.babies_due == 2 and Pregnancy.trimester(pawn) == 3 else " (expecting)"
 	if pawn.illness != "":
 		text = "%s (%s)" % [text, str(Illness.def(pawn.illness).get("name", "ill")).to_lower()]
 	return text
@@ -847,6 +1072,15 @@ func _step_job(pawn: Pawn) -> void:
 	if pawn.job_kind == "plead":
 		_step_plead(pawn)
 		return
+	if pawn.job_kind == "labour":
+		_step_labour(pawn)
+		return
+	if pawn.job_kind == "attend":
+		_step_attend(pawn)
+		return
+	if pawn.job_kind == "tend":
+		_step_tend(pawn)
+		return
 	if pawn.job_kind == "work":
 		_step_work(pawn)
 		return
@@ -890,6 +1124,8 @@ func _step_job(pawn: Pawn) -> void:
 		Mood.add_event(pawn, "treated", GameClock.tick)
 	if all_full or pawn.job_minutes >= int(object_def.get("max_use_minutes", 60)):
 		Mood.add_event(pawn, "used:%s" % placed.def_id, GameClock.tick)
+		if satisfies.has("hunger"):
+			Pregnancy.after_eating(pawn)
 		if placed.def_id == "grave":
 			var rested := Mortality.lay_to_rest(self, placed.tile, pawn)
 			if rested != "" and household.get_pawn(pawn.id) != null:
@@ -1033,6 +1269,8 @@ func _first_name(pawn: Pawn) -> String:
 ## An idle person with a low need goes to the nearest free thing that fills it.
 func _think(pawn: Pawn, minute: int) -> bool:
 	if pawn.illness != "" and _seek_treatment(pawn):
+		return true
+	if not _needs_break(pawn) and _attend_births(pawn):
 		return true
 	var wants: Array = []
 	for need_id in active_needs:

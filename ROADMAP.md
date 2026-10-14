@@ -30,7 +30,7 @@ Folk are born, grow up, grow old and die, as in the Sims, with a medieval face o
 - **Ghosts**: some of the dead do not rest. On some nights a ghost walks near its grave, pale and drifting; anyone who sees one is frightened. Praying at the grave lays it to rest for good
 - All of it is data: `life_stages.json`, `lifespans.json` and the thoughts
 
-## Milestone 14: Pregnancy and babies
+## Milestone 14: Pregnancy and babies (done)
 
 - Pregnancy runs on the lifespan clock (three quarters of a year of life), in three trimesters
 - A belly that shows from the second trimester and grows; morning sickness in the first, cravings in the second (a meal satisfies one), heavy in the third

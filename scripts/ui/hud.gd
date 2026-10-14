@@ -76,6 +76,7 @@ var _household_row: HBoxContainer
 var _action_menu := ActionMenu.new()
 var _chips: Dictionary = {}  # pawn id -> Button
 var _chip_marks: Dictionary = {}  # pawn id -> ColorRect, the strip showing how they are doing
+var _baby_chips: Dictionary = {}  # baby's id -> its chip (babies are shown, not chosen)
 var _toast_serial := 0
 var _build_button: Button
 var _build_panel: PanelContainer
@@ -135,6 +136,7 @@ func set_household(household: Household) -> void:
 		chip.queue_free()
 	_chips.clear()
 	_chip_marks.clear()
+	_baby_chips.clear()
 	var group := ButtonGroup.new()
 	for pawn in household.playable():
 		var chip := Button.new()
@@ -166,7 +168,43 @@ func set_household(household: Household) -> void:
 		chip.pressed.connect(func() -> void: pawn_chosen.emit(id))
 		_household_row.add_child(chip)
 		_chips[pawn.id] = chip
+	for baby in household.pawns:
+		if baby.is_infant():
+			_household_row.add_child(_baby_chip(baby))
 	set_selected(household.selected_id)
+
+
+## A smaller chip for a baby: it cannot be controlled, but its strip shows how it is cared for and
+## its tooltip what it needs. Right-click the baby on the map to see to it.
+func _baby_chip(baby: Pawn) -> Control:
+	var chip := PanelContainer.new()
+	chip.custom_minimum_size = Vector2(58, 70)
+	chip.tooltip_text = baby.display_name
+	var holder := Control.new()
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	chip.add_child(holder)
+	var portrait := PawnPortrait.new()
+	portrait.look = baby.look
+	portrait.outfit = PawnArt.outfit_for(baby)
+	portrait.scale_factor = 1.0
+	portrait.position = Vector2(3, 8)
+	holder.add_child(portrait)
+	var label := Label.new()
+	label.text = baby.display_name.get_slice(" ", 0)
+	label.position = Vector2(-6, 42)
+	label.size = Vector2(62, 18)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_font_size_override("font_size", 12)
+	holder.add_child(label)
+	var mark := ColorRect.new()
+	mark.position = Vector2(2, 58)
+	mark.size = Vector2(46, 3)
+	mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(mark)
+	_chip_marks[baby.id] = mark
+	_baby_chips[baby.id] = chip
+	return chip
 
 
 ## Colors each chip by the worst need of that person, so you can see who is in trouble while you
@@ -174,6 +212,9 @@ func set_household(household: Household) -> void:
 func update_household_status(household: Household) -> void:
 	for pawn in household.pawns:
 		if not _chip_marks.has(pawn.id):
+			continue
+		if _baby_chips.has(pawn.id):
+			_update_baby_chip(pawn)
 			continue
 		var worst_value := Needs.FULL
 		var worst_need := ""
@@ -189,6 +230,17 @@ func update_household_status(household: Household) -> void:
 		elif band != "good":
 			tip += "  -  %s %s" % [str(DataRegistry.get_def("needs", worst_need).get("name", worst_need)), "is critical" if band == "critical" else "is low"]
 		_chips[pawn.id].tooltip_text = tip
+
+
+func _update_baby_chip(baby: Pawn) -> void:
+	var worst := Babies.worst_care(baby)
+	_chip_marks[baby.id].color = BAND_COLORS["critical" if Babies.is_crying(baby) else Needs.band(worst)]
+	var tip := "%s, a baby" % baby.display_name
+	for def in Babies.care_defs():
+		tip += "\n%s: %d%%" % [str(def.get("name", def["id"])), roundi(float(baby.care.get(str(def["id"]), Needs.FULL)) / Needs.FULL * 100.0)]
+	if Babies.is_crying(baby):
+		tip += "\nCrying! Right-click the baby to see to it."
+	_baby_chips[baby.id].tooltip_text = tip
 
 
 ## Shows the selected person's name, what they are doing and their need bars (hidden if null).

@@ -121,7 +121,9 @@ static func _holds(condition: Dictionary, pawn: Pawn, people: Array) -> bool:
 			return false
 	if condition.has("pregnant") and bool(condition["pregnant"]) != Pregnancy.is_known(pawn):
 		return false
-	if condition.has("pregnant_above") and not (Pregnancy.is_known(pawn) and Pregnancy.days_pregnant(pawn) >= int(condition["pregnant_above"])):
+	if condition.has("heavy") and bool(condition["heavy"]) != Pregnancy.is_heavy(pawn):
+		return false
+	if condition.has("in_labour") and bool(condition["in_labour"]) != Pregnancy.in_labour(pawn):
 		return false
 	if condition.has("ill") and bool(condition["ill"]) != (pawn.illness != ""):
 		return false

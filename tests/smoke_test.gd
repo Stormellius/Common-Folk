@@ -1891,38 +1891,96 @@ func _test_pregnancy() -> void:
 	var townswoman := false
 	for i in 50:
 		townswoman = townswoman or Pregnancy.try_conceive(men_sim, men["father"], stranger, 1.0, rng)
-	_check(not townswoman, "townswomen never conceive")
+	_check(not townswoman, "a woman who is not in the world cannot conceive")
 
-	# The months go by.
+	# The months go by (by the calendar a year is 60 days, so this pregnancy lasts 45).
 	var heard: Array[String] = []
 	var changes := [0]
+	var born: Array = []
 	sim.household_changed.connect(func() -> void: changes[0] += 1)
-	mother.pregnant_since = 0
+	sim.babies_born.connect(func(ids: Array[int]) -> void: born.append_array(ids))
+	GameClock.set_time(0, 0)
+	Pregnancy.begin(sim, mother, father, rng)
+	mother.babies_due = 1
+	_check(Pregnancy.length_minutes(sim.world) == 45 * GameClock.MINUTES_PER_DAY and mother.pregnancy_minutes == 45 * GameClock.MINUTES_PER_DAY, "a pregnancy lasts three quarters of a year of life")
+	var short := WorldState.new(10, 10, 1, "grass")
+	short.lifespan = "normal"
+	_check(Pregnancy.length_minutes(short) == roundi(0.75 * Life.days_per_year(short) * GameClock.MINUTES_PER_DAY), "and is shorter on a shorter lifespan")
 	GameClock.set_time(5, 0)
 	var feel := Mood.evaluate(mother, household, GameClock.tick)
-	_check(not Pregnancy.is_known(mother) and Pregnancy.new_day(sim, rng).is_empty() and not _has_part(feel, "expecting"), "early on nobody knows")
-	GameClock.set_time(12, 0)
-	heard = Pregnancy.new_day(sim, rng)
+	_check(Pregnancy.trimester(mother) == 1 and not Pregnancy.is_known(mother) and Pregnancy.bump(mother) == 0.0 and not _has_part(feel, "expecting"), "early on nobody knows, and nothing shows")
+	var sick := false
+	for day in range(1, 12):
+		GameClock.set_time(day, 7)
+		Pregnancy.step(sim, rng)
+		sick = sick or mother.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "morning_sick")
+	_check(sick, "some mornings early on are queasy")
+	GameClock.set_time(13, 0)
+	heard = Pregnancy.step(sim, rng)
 	_check(Pregnancy.is_known(mother) and heard.size() == 1 and "expecting" in heard[0], "after a while she is known to be expecting (%s)" % str(heard))
+	_check(Pregnancy.step(sim, rng).is_empty(), "which is only announced once")
 	_check(_has_part(Mood.evaluate(mother, household, GameClock.tick), "expecting"), "and it lifts her spirits")
 	_check(is_equal_approx(float(Pregnancy.drain_multipliers(mother, {})["hunger"]), 1.3) and Pregnancy.drain_multipliers(father, {}).is_empty(), "she gets hungrier and more tired")
-	_check(not sim._needs_break(mother), "and still works")
+	_check(not sim.needs_break(mother), "and still works")
+	GameClock.set_time(20, 0)
+	_check(Pregnancy.trimester(mother) == 2 and Pregnancy.bump(mother) > 0.0 and float(PawnArt.outfit_for(mother)["bump"]) > 0.0, "in the second trimester her belly shows")
+	var craving := false
+	for day in range(16, 30):
+		GameClock.set_time(day, 11)
+		Pregnancy.step(sim, rng)
+		craving = craving or mother.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "craving")
+	_check(craving, "she craves something sweet now and then")
+	Pregnancy.after_eating(mother)
+	_check(not mother.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "craving") and mother.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "craving_met"), "and a meal satisfies it")
 	GameClock.set_time(34, 0)
-	_check(Pregnancy.is_heavy(mother) and sim._needs_break(mother) and _has_part(Mood.evaluate(mother, household, GameClock.tick), "heavy") and not _has_part(Mood.evaluate(mother, household, GameClock.tick), "expecting"), "in the last weeks she is heavy, low and off work")
-	_check("expecting" in sim.describe_activity(mother), "and the panel says so")
+	var late := Mood.evaluate(mother, household, GameClock.tick)
+	_check(Pregnancy.trimester(mother) == 3 and Pregnancy.is_heavy(mother) and sim.needs_break(mother) and _has_part(late, "heavy") and not _has_part(late, "expecting"), "in the last weeks she is heavy, low and off work")
+	_check("expecting" in sim.describe_activity(mother) and Pregnancy.bump(mother) > 0.6, "the panel says so, and the belly is big")
+	_check(PawnArt.outfit_for(mother)["belt"] == false, "her belt has come off")
+
+	# Labour.
+	var bed := sim.world.add_object("bed", Vector2i(10, 3))
+	mother.tile = Vector2i(5, 6)
+	mother.step_to = mother.tile
+	father.tile = Vector2i(7, 7)
+	father.step_to = father.tile
+	GameClock.set_time(45, 6)
+	heard = Pregnancy.step(sim, rng)
+	_check(Pregnancy.in_labour(mother) and mother.job_kind == "labour" and heard.size() == 1 and "labour" in heard[0], "near the end her labour begins (%s)" % str(heard))
+	_check(mother.labour_minutes >= 3 * 60 and mother.labour_minutes <= 8 * 60, "and lasts a few hours")
+	_check(not sim.order_move(mother, Vector2i(3, 3))["ok"] and sim.use_blocker(mother, bed) != "", "a woman in labour cannot be sent off")
+	var her_menu := PawnActions.list_for(sim, mother, Vector2i(3, 3))
+	_check(her_menu.size() == 1 and not her_menu[0]["enabled"] and "labour" in str(her_menu[0]["label"]), "her menu only says she is in labour")
+	var attend_entry := PawnActions.list_for(sim, father, mother.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "attend:%d" % mother.id)
+	_check(attend_entry.size() == 1 and attend_entry[0]["enabled"], "someone else can stay with her for the birth")
+	_check(sim.attend_blocker(child, mother) != "", "but not a child")
+	mother.labour_minutes = 600
+	for i in 120:
+		GameClock.advance_one_tick()
+		sim.step()
+	_check(mother.job_stage == "using" and mother.pose == "lie" and Pregnancy.birth_bed(sim, mother) == bed, "she makes for a bed and lies down")
+	_check(father.job_kind == "attend" and father.job_stage == "using" and Pregnancy.midwife_present(sim, mother), "and John goes to stay with her of his own accord")
+	_check(Pregnancy.complication_chance(sim, mother) < 0.03, "a bed and a midwife make the birth much safer (%.3f)" % Pregnancy.complication_chance(sim, mother))
+	_check("labour" in sim.describe_activity(mother).to_lower() and "birth" in sim.describe_activity(father), "the panel says what they are doing")
+	_check(_has_part(Mood.evaluate(mother, household, GameClock.tick), "in_labour"), "labour is hard going")
 
 	# The birth.
-	GameClock.set_time(45, 0)
 	var before := household.pawns.size()
-	heard = Pregnancy.new_day(sim, rng)
+	changes[0] = 0
+	mother.labour_minutes = GameClock.tick - mother.labour_since
+	heard = Pregnancy.step(sim, rng)
 	_check(household.pawns.size() == before + 1 and not mother.is_pregnant() and heard.size() == 1 and "gave birth" in heard[0], "the baby is born into the household (%s)" % str(heard))
 	var baby: Pawn = household.pawns[household.pawns.size() - 1]
+	_check(born == [baby.id] and changes[0] == 1, "the household is told, and asked to name the baby")
+	_check(mother.job_kind == "" and father.job_kind == "" and bed.user_id == 0, "mother gets up and the midwife goes about their day")
 	_check(baby.age == 0 and baby.is_infant() and not baby.adult and baby.traits.size() == 2 and baby.home_lot == mother.home_lot and baby.display_name.ends_with("Brook"), "a newborn, with two traits and the family name")
 	_check(baby.opinion_of(mother.id) == Relations.FAMILY_START and mother.opinion_of(baby.id) == Relations.FAMILY_START and father.opinion_of(baby.id) == Relations.FAMILY_START, "the family loves it")
-	_check(changes[0] == 1 and mother.recovered_on == 45 + 15 and not Pregnancy.can_conceive(mother), "the household was told, and mother needs time to recover")
-	GameClock.set_time(60, 0)
+	var recovery := roundi(0.25 * 60 * GameClock.MINUTES_PER_DAY)
+	_check(mother.recovered_at >= GameClock.tick + recovery and not Pregnancy.can_conceive(mother), "mother needs time to recover")
+	GameClock.set_time(45 + 31, 0)
 	_check(Pregnancy.can_conceive(mother), "and may conceive again later")
-	_check(mother.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "new_baby"), "everyone is glad of the baby")
+	_check(mother.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "new_baby") and mother.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "gave_birth"), "everyone is glad of the baby")
+	_check(sim.rename(baby, "  wilfred ")["ok"] and baby.display_name == "Wilfred Brook" and not sim.rename(baby, "  ")["ok"], "the baby can be named")
 
 	# A baby is carried and cannot be controlled.
 	_check(not household.select(baby.id) and household.selected_id != baby.id, "a baby cannot be chosen")
@@ -1932,19 +1990,48 @@ func _test_pregnancy() -> void:
 		household.cycle_selection(1)
 		landed.append(household.selected_id)
 	_check(not (baby.id in landed) and household.playable().size() == before, "cycling through the household skips the baby")
+	GameClock.set_time(80, 12)
 	mother.tile = Vector2i(9, 9)
 	mother.step_to = mother.tile
 	Pregnancy.carry_infants(sim)
-	_check(baby.tile == mother.tile and baby.carried_by == mother.id, "the baby goes where its mother goes")
-	_check(sim.interaction_blocker(father, baby, "chat") != "" and PawnActions.list_for(sim, father, baby.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).ends_with(":%d" % baby.id)).is_empty(), "nobody chats with a baby")
+	_check(baby.tile == mother.tile and baby.carried_by == mother.id and baby.pose == "", "by day the baby goes where its mother goes")
+	_check(sim.interaction_blocker(father, baby, "chat") != "" and PawnActions.list_for(sim, father, baby.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("interact:") and str(e["id"]).ends_with(":%d" % baby.id)).is_empty(), "nobody chats with a baby")
 	var hunger_before := float(baby.needs["hunger"])
 	for i in 30:
 		GameClock.advance_one_tick()
 		sim.step()
-	_check(float(baby.needs["hunger"]) == hunger_before, "a baby does not go hungry or wander")
-	sim.die(mother, "fell ill")
+	_check(float(baby.needs["hunger"]) == hunger_before, "a baby has no needs of a grown-up's and does not wander")
+
+	# Babies need care.
+	_check(Babies.worst_care(baby) > 90.0 and not Babies.is_crying(baby), "a newborn is fed, comfortable and clean")
+	var cradle := sim.world.add_object("cradle", Vector2i(4, 3))
+	GameClock.set_time(81, 22)
 	Pregnancy.carry_infants(sim)
-	_check(household.get_pawn(baby.carried_by) != null and baby.carried_by != mother.id and not sim.is_game_over(), "if mother dies someone else carries the baby, and the household carries on")
+	_check(baby.tile == cradle.tile and baby.pose == "lie" and Babies.cradle_for(sim, baby) == cradle, "at night the baby sleeps in the cradle")
+	GameClock.set_time(82, 9)
+	Pregnancy.carry_infants(sim)
+	_check(baby.tile != cradle.tile and baby.pose == "", "and is picked up in the morning")
+	for person in household.pawns:
+		sim.order_stop(person)
+	baby.care["fed"] = 30.0
+	var care_menu := PawnActions.list_for(sim, father, baby.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "tend:fed:%d" % baby.id)
+	_check(care_menu.size() == 1 and care_menu[0]["enabled"] and "Feed Wilfred" in str(care_menu[0]["label"]), "right-click a baby to feed it (%s)" % str(care_menu))
+	_check(PawnActions.list_for(sim, child, baby.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("tend:") and e["enabled"]).is_empty(), "a child is too young to see to it")
+	var cared := false
+	for i in 120:
+		GameClock.advance_one_tick()
+		sim.step()
+		cared = cared or (household.pawns.any(func(p: Pawn) -> bool: return p.job_kind == "tend" and p.job_partner == baby.id))
+		if float(baby.care["fed"]) >= Needs.FULL - 0.01:
+			break
+	_check(cared and float(baby.care["fed"]) >= Needs.FULL - 0.5, "when the baby is hungry someone goes to feed it of their own accord")
+	_check(household.pawns.any(func(p: Pawn) -> bool: return p.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "tended_baby")), "and is glad to have done it")
+	baby.care["comfort"] = 10.0
+	_check(Babies.is_crying(baby), "a baby that is left wanting cries")
+	GameClock.set_time(83, 12)
+	Babies.step(sim)
+	_check(father.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "baby_crying"), "and the household hears it")
+	_check(PawnActions.perform(sim, father, "tend:comfort:%d" % baby.id, baby.tile)["ok"] and father.job_kind == "tend" and father.job_interaction == "comfort", "you can send someone to soothe it")
 
 	# Growing up.
 	GameClock.set_time(45 + 60, 0)
@@ -1967,12 +2054,79 @@ func _test_pregnancy() -> void:
 		orientation_found = orientation_found or str(DataRegistry.get_def("traits", trait_id).get("group", "")) == "orientation"
 	_check(teen.age == 18 and teen.adult and orientation_found and not heard.is_empty(), "at eighteen a child comes of age and finds their orientation (%s)" % str(heard))
 
+	# Twins.
+	var pair := _family_setup()
+	var pair_sim: Simulation = pair["sim"]
+	var pair_born: Array = []
+	pair_sim.babies_born.connect(func(ids: Array[int]) -> void: pair_born.append_array(ids))
+	GameClock.set_time(0, 0)
+	Pregnancy.begin(pair_sim, pair["mother"], pair["father"], rng)
+	pair["mother"].babies_due = 2
+	GameClock.set_time(34, 0)
+	_check("twins" in pair_sim.describe_activity(pair["mother"]), "late on you can tell it is twins")
+	heard = _deliver(pair_sim, pair["mother"], rng)
+	_check(pair_born.size() == 2 and pair["household"].pawns.size() == 5 and "twins" in heard[-1], "twins are born together, and both are to be named (%s)" % str(heard))
+	var twins_seen := 0
+	for _i in 2000:
+		var test_mother := Pawn.new()
+		Pregnancy.begin(pair_sim, test_mother, null, rng)
+		twins_seen += 1 if test_mother.babies_due > 1 else 0
+	_check(twins_seen > 30 and twins_seen < 150, "about one birth in twenty-five is twins or more (%d in 2000)" % twins_seen)
+
+	# The town's couples have children too.
+	var town_setup := _family_setup()
+	var town_sim: Simulation = town_setup["sim"]
+	var wife := _townsperson("Alys Cooper", "female", 24, 1001)
+	var husband := _townsperson("Hugh Cooper", "male", 26, 1002)
+	town_sim.town.add_pawn(wife)
+	town_sim.town.add_pawn(husband)
+	Relations.make_family([wife, husband] as Array[Pawn])
+	var days := 0
+	while not wife.is_pregnant() and days < 2000:
+		Pregnancy.new_day(town_sim, rng)
+		days += 1
+	_check(wife.is_pregnant() and wife.pregnancy_father == husband.id, "a couple of the town who live together start a family (after %d days)" % days)
+	GameClock.set_time(0, 0)
+	wife.pregnant_since = 0
+	wife.pregnancy_minutes = Pregnancy.length_minutes(town_sim.world)
+	GameClock.set_time(45, 1)
+	var town_before := town_sim.town.pawns.size()
+	heard = Pregnancy.step(town_sim, rng)
+	var town_baby: Pawn = town_sim.town.pawns[town_sim.town.pawns.size() - 1]
+	_check(heard.is_empty() and town_sim.town.pawns.size() >= town_before + 1 and town_baby.is_infant() and town_baby.home_lot == wife.home_lot and town_baby.display_name.ends_with("Cooper"), "and the baby is born at home, quietly")
+	Pregnancy.carry_infants(town_sim)
+	_check(town_sim.person(town_baby.carried_by) != null and town_sim.person(town_baby.carried_by).home_lot == wife.home_lot, "its family carries it")
+	var neighbours := 0
+	for i in 8:
+		town_sim.town.add_pawn(_townsperson("Child Cooper %d" % i, "male", 5, 1100 + i))
+	wife.recovered_at = 0
+	for i in 2000:
+		Pregnancy.new_day(town_sim, rng)
+		neighbours += 1 if wife.is_pregnant() else 0
+	_check(neighbours == 0, "but not in a house that is already full")
+
+	# A baby left uncared for is taken away.
+	var neglect := _family_setup()
+	var neglect_sim: Simulation = neglect["sim"]
+	GameClock.set_time(0, 0)
+	Pregnancy.begin(neglect_sim, neglect["mother"], neglect["father"], rng)
+	neglect["mother"].babies_due = 1
+	_deliver(neglect_sim, neglect["mother"], rng)
+	var waif: Pawn = neglect["household"].pawns[neglect["household"].pawns.size() - 1]
+	for care_id in waif.care:
+		waif.care[care_id] = 0.0
+	waif.neglected_since = GameClock.tick - 12 * 60
+	heard = Babies.step(neglect_sim)
+	_check(neglect["household"].get_pawn(waif.id) == null and heard.size() == 1 and "parish" in heard[0], "a baby neglected too long is taken in by the parish")
+	_check(neglect["father"].thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "baby_taken"), "and the household grieves")
+
 	# Only babies left: nobody to play.
 	var lone := _family_setup()
 	var lone_sim: Simulation = lone["sim"]
-	GameClock.set_time(45, 0)
-	lone["mother"].pregnant_since = 0
-	Pregnancy.new_day(lone_sim, rng)
+	GameClock.set_time(0, 0)
+	Pregnancy.begin(lone_sim, lone["mother"], lone["father"], rng)
+	lone["mother"].babies_due = 1
+	_deliver(lone_sim, lone["mother"], rng)
 	lone_sim.die(lone["father"], "fell ill")
 	lone_sim.die(lone["child"], "fell ill")
 	_check(not lone_sim.is_game_over(), "mother and baby carry on")
@@ -1981,23 +2135,58 @@ func _test_pregnancy() -> void:
 
 	# Saving.
 	var saved := _family_setup()
-	saved["mother"].pregnant_since = 0
-	saved["mother"].pregnancy_father = saved["father"].id
-	saved["mother"].recovered_on = 7
-	GameClock.set_time(45, 0)
-	Pregnancy.new_day(saved["sim"], rng)
+	GameClock.set_time(0, 0)
+	Pregnancy.begin(saved["sim"], saved["mother"], saved["father"], rng)
+	saved["mother"].babies_due = 1
+	_deliver(saved["sim"], saved["mother"], rng)
+	var saved_baby: Pawn = saved["household"].pawns[saved["household"].pawns.size() - 1]
+	saved_baby.care["clean"] = 40.0
 	_check(SaveGame.save(TEST_SAVE, saved["world"], saved["household"], {}) == OK, "a household with a baby is saved")
 	var back := SaveGame.load_from(TEST_SAVE)
-	_check(back["ok"] and back["household"].to_dict() == saved["household"].to_dict(), "and the baby, its carer and the mother's recovery survive a round trip")
+	_check(back["ok"] and back["household"].to_dict() == saved["household"].to_dict(), "and the baby, its care, its carer and the mother's recovery survive a round trip")
 	var newborn: Pawn = back["household"].pawns[back["household"].pawns.size() - 1]
-	_check(newborn.is_infant() and newborn.birthday == 45 % 60 and back["household"].selected_id == saved["household"].selected_id, "including its birthday")
+	_check(newborn.is_infant() and newborn.birthday == 46 % 60 and is_equal_approx(float(newborn.care["clean"]), 40.0) and back["household"].selected_id == saved["household"].selected_id, "including its birthday and how clean it is")
 	var midway := _family_setup()
-	midway["mother"].pregnant_since = 4
+	GameClock.set_time(3, 0)
+	Pregnancy.begin(midway["sim"], midway["mother"], null, rng)
+	midway["mother"].babies_due = 2
 	SaveGame.save(TEST_SAVE, midway["world"], midway["household"], {})
 	back = SaveGame.load_from(TEST_SAVE)
-	_check(back["household"].pawns[0].pregnant_since == 4 and back["household"].pawns[0].pregnancy_father == 0, "an unfinished pregnancy survives a round trip")
+	var resumed: Pawn = back["household"].pawns[0]
+	_check(resumed.pregnant_since == 3 * GameClock.MINUTES_PER_DAY and resumed.pregnancy_minutes == 45 * GameClock.MINUTES_PER_DAY and resumed.babies_due == 2 and resumed.pregnancy_father == 0, "an unfinished pregnancy survives a round trip")
+	var old: Dictionary = midway["mother"].to_dict()
+	for key in ["pregnant_tick", "pregnancy_minutes", "babies_due", "pregnancy_announced", "labour_since", "labour_minutes", "recovered_tick", "care", "neglected_since"]:
+		old.erase(key)
+	old["pregnant_since"] = 4
+	old["recovered_on"] = 7
+	var migrated := Pawn.from_dict(old)
+	_check(migrated.pregnant_since == 4 * GameClock.MINUTES_PER_DAY and migrated.pregnancy_minutes == 45 * GameClock.MINUTES_PER_DAY and migrated.recovered_at == 7 * GameClock.MINUTES_PER_DAY and migrated.babies_due == 1, "a pregnancy from an older save, counted in days, carries on")
 	DirAccess.remove_absolute(TEST_SAVE)
 	GameClock.reset()
+
+
+## Brings a pregnancy to term at once: labour begins and the babies are born. Returns the messages.
+func _deliver(sim: Simulation, mother: Pawn, rng: RandomNumberGenerator) -> Array[String]:
+	GameClock.set_time(int((mother.pregnant_since + mother.pregnancy_minutes) / GameClock.MINUTES_PER_DAY) + 1, 0)
+	var heard := Pregnancy.step(sim, rng)
+	mother.labour_minutes = GameClock.tick - mother.labour_since
+	heard.append_array(Pregnancy.step(sim, rng))
+	return heard
+
+
+func _townsperson(full_name: String, gender: String, age: int, id: int) -> Pawn:
+	var person := Pawn.new()
+	person.display_name = full_name
+	person.gender = gender
+	person.age = age
+	person.adult = age >= 18
+	person.id = id
+	person.home_lot = "house_cooper"
+	person.tile = Vector2i(20, 10)
+	person.step_to = person.tile
+	for need_id in Needs.active_ids():
+		person.needs[need_id] = 100.0
+	return person
 
 
 func _has_part(result: Dictionary, thought_id: String) -> bool:

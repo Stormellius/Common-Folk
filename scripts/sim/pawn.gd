@@ -24,11 +24,22 @@ var class_id := "peasant"
 ## What this person is ill with, an id from data/illness.json ("" when well), and since which tick.
 var illness := ""
 var ill_since := 0
-## The day number a child was conceived ("" -1 when not expecting), and by whom (see Pregnancy).
+## A pregnancy (see Pregnancy): the tick she conceived (-1 when not expecting), how many minutes it
+## will last, by whom, how many babies are coming, whether the household has been told, and labour
+## (the tick it began, -1 before, and how long it will take).
 var pregnant_since := -1
+var pregnancy_minutes := 0
 var pregnancy_father := 0
-## A mother cannot conceive again before this day number (she is recovering from the birth).
-var recovered_on := 0
+var babies_due := 1
+var pregnancy_announced := false
+var labour_since := -1
+var labour_minutes := 0
+## A mother cannot conceive again before this tick (she is recovering from the birth).
+var recovered_at := 0
+## A baby's needs (see Babies), by id from "baby_care" in data/pregnancy.json, and since when one of
+## them has been empty (-1 while it is cared for).
+var care: Dictionary = {}
+var neglected_since := -1
 ## Day of the year (0 to 59) the person has their birthday, or -1 for "work it out from the id".
 var birthday := -1
 ## An infant is carried by someone from the household and cannot be controlled (see Pregnancy).
@@ -200,9 +211,16 @@ func to_dict() -> Dictionary:
 		"class": class_id,
 		"illness": illness,
 		"ill_since": ill_since,
-		"pregnant_since": pregnant_since,
+		"pregnant_tick": pregnant_since,
+		"pregnancy_minutes": pregnancy_minutes,
 		"pregnancy_father": pregnancy_father,
-		"recovered_on": recovered_on,
+		"babies_due": babies_due,
+		"pregnancy_announced": pregnancy_announced,
+		"labour_since": labour_since,
+		"labour_minutes": labour_minutes,
+		"recovered_tick": recovered_at,
+		"care": _rounded(care),
+		"neglected_since": neglected_since,
 		"birthday": birthday,
 		"carried_by": carried_by,
 		"dying_cause": dying_cause,
@@ -250,9 +268,23 @@ static func from_dict(data: Dictionary) -> Pawn:
 	pawn.class_id = str(data.get("class", "peasant"))
 	pawn.illness = str(data.get("illness", ""))
 	pawn.ill_since = int(data.get("ill_since", 0))
-	pawn.pregnant_since = int(data.get("pregnant_since", -1))
+	if data.has("pregnant_tick"):
+		pawn.pregnant_since = int(data["pregnant_tick"])
+		pawn.pregnancy_minutes = int(data.get("pregnancy_minutes", 0))
+	elif int(data.get("pregnant_since", -1)) >= 0:  # an older save counted the days of a 45-day pregnancy
+		pawn.pregnant_since = int(data["pregnant_since"]) * GameClock.MINUTES_PER_DAY
+		pawn.pregnancy_minutes = 45 * GameClock.MINUTES_PER_DAY
 	pawn.pregnancy_father = int(data.get("pregnancy_father", 0))
-	pawn.recovered_on = int(data.get("recovered_on", 0))
+	pawn.babies_due = int(data.get("babies_due", 1))
+	pawn.pregnancy_announced = bool(data.get("pregnancy_announced", true))
+	pawn.labour_since = int(data.get("labour_since", -1))
+	pawn.labour_minutes = int(data.get("labour_minutes", 0))
+	pawn.recovered_at = int(data.get("recovered_tick", int(data.get("recovered_on", 0)) * GameClock.MINUTES_PER_DAY))
+	var saved_care: Variant = data.get("care", {})
+	if saved_care is Dictionary:
+		for care_id in saved_care:
+			pawn.care[str(care_id)] = float(saved_care[care_id])
+	pawn.neglected_since = int(data.get("neglected_since", -1))
 	pawn.birthday = int(data.get("birthday", -1))
 	pawn.carried_by = int(data.get("carried_by", 0))
 	pawn.dying_cause = str(data.get("dying_cause", ""))

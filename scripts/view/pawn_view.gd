@@ -5,7 +5,6 @@ extends Node2D
 ## it and 3x speed just makes it follow faster.
 
 const FOLLOW_RATE := 18.0  # how quickly the picture catches up with the simulation
-const CHILD_SCALE := 0.75  # children are drawn smaller
 const STRIDE := 0.13       # walk-cycle phase per pixel moved (at 48 px tiles)
 
 var pawn: Pawn
@@ -50,7 +49,7 @@ func _target() -> Vector2:
 	var here := Vector2(pawn.tile) + Vector2(0.5, 0.5)
 	if pawn.is_moving():
 		here = here.lerp(Vector2(pawn.step_to) + Vector2(0.5, 0.5), pawn.step_progress())
-	if pawn.is_infant():
+	if pawn.is_infant() and pawn.pose != "lie":
 		here += Vector2(0.2, -0.12)  # on the carer's arm
 	return here * MapView.TILE_SIZE
 
@@ -95,6 +94,8 @@ func _draw() -> void:
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	if asleep:
 		_draw_blanket_and_zzz(u)
+	elif Babies.is_crying(pawn):
+		_draw_crying(u)
 	elif pawn.pose == "close":
 		_draw_hearts(u)
 	elif pawn.pose == "talk":
@@ -108,9 +109,9 @@ func _draw() -> void:
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
-## Units to pixels for this person: children and babies are drawn smaller.
+## Units to pixels for this person: the young are drawn smaller (see PawnArt.BUILDS).
 func unit() -> float:
-	return MapView.TILE_SIZE / 48.0 * (1.0 if pawn.adult else CHILD_SCALE * (0.6 if pawn.is_infant() else 1.0))
+	return MapView.TILE_SIZE / 48.0 * PawnArt.stage_scale(Life.stage_id(pawn) if Life.stage_id(pawn) != "" else ("adult" if pawn.adult else "child"))
 
 
 ## Where the name sits, in world pixels, before any push down.
@@ -120,13 +121,39 @@ func label_anchor() -> Vector2:
 
 ## A blanket pulled up to the chest, and a little Zzz drifting up from the head.
 func _draw_blanket_and_zzz(u: float) -> void:
-	draw_rect(Rect2(Vector2(-15.0, -1.0) * u, Vector2(30.0, 17.0) * u), PawnArt.OUTLINE)
-	draw_rect(Rect2(Vector2(-14.0, 0.0) * u, Vector2(28.0, 15.0) * u), Color(0.49, 0.31, 0.31))
-	draw_line(Vector2(-14.0, 3.0) * u, Vector2(14.0, 3.0) * u, Color(0.64, 0.44, 0.44), maxf(1.0, 1.5 * u))
+	if not pawn.is_infant():  # (a baby in its cradle is already wrapped up)
+		draw_rect(Rect2(Vector2(-15.0, -1.0) * u, Vector2(30.0, 17.0) * u), PawnArt.OUTLINE)
+		draw_rect(Rect2(Vector2(-14.0, 0.0) * u, Vector2(28.0, 15.0) * u), Color(0.49, 0.31, 0.31))
+		draw_line(Vector2(-14.0, 3.0) * u, Vector2(14.0, 3.0) * u, Color(0.64, 0.44, 0.44), maxf(1.0, 1.5 * u))
+	var bump := Pregnancy.bump(pawn)
+	if bump > 0.02:  # the belly rounds the blanket
+		var mound := Vector2(0.0, 7.0) * u
+		var radius := Vector2(5.0 + 3.5 * bump, 3.5 + 2.5 * bump) * u
+		draw_colored_polygon(PawnArt._ellipse_points(mound, radius + Vector2(0.9, 0.9) * u), PawnArt.OUTLINE)
+		draw_colored_polygon(PawnArt._ellipse_points(mound, radius), Color(0.55, 0.36, 0.36))
 	var drift := sin(Time.get_ticks_msec() / 500.0) * 2.0
 	var font := ThemeDB.fallback_font
+	if Pregnancy.in_labour(pawn):  # no sleep for her: she strains and gasps
+		var strain := absf(sin(Time.get_ticks_msec() / 350.0))
+		for side in [-1.0, 1.0]:
+			draw_line(Vector2(side * 10.0, -14.0) * u, Vector2(side * (13.0 + 2.0 * strain), -18.0 - strain) * u, Color(0.98, 0.95, 0.85, 0.9), maxf(1.0, 1.4 * u))
+			draw_line(Vector2(side * 11.0, -9.0) * u, Vector2(side * (15.0 + 2.0 * strain), -10.0) * u, Color(0.98, 0.95, 0.85, 0.9), maxf(1.0, 1.4 * u))
+		return
 	draw_string_outline(font, Vector2(11.0, -17.0 + drift) * u, "Zzz", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, 4, Color(0, 0, 0, 0.8))
 	draw_string(font, Vector2(11.0, -17.0 + drift) * u, "Zzz", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.92, 0.94, 1.0))
+
+
+## A crying baby: its face screwed up, tears flying and a little wail over its head.
+func _draw_crying(u: float) -> void:
+	var t := Time.get_ticks_msec() / 1000.0
+	for side in [-1.0, 1.0]:
+		var fly := fmod(t * 1.8 + (0.5 if side > 0.0 else 0.0), 1.0)
+		var drop := Vector2(side * (6.0 + 7.0 * fly), -9.0 - 6.0 * sin(fly * PI)) * u
+		draw_circle(drop, 1.7 * u * (1.0 - 0.4 * fly), Color(0.62, 0.80, 1.0, 1.0 - fly))
+	var wail := Vector2(-11.0, -24.0 - absf(sin(t * 6.0)) * 2.0) * u
+	var font := ThemeDB.fallback_font
+	draw_string_outline(font, wail, "waah", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, 4, Color(0, 0, 0, 0.8))
+	draw_string(font, wail, "waah", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.86, 0.80))
 
 
 ## A small speech bubble over the head with three dots that take turns lighting up.

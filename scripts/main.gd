@@ -15,6 +15,7 @@ var _loading := false           # true while a save is being put in place (no au
 ## False on the title screen, where the town behind is only to look at.
 var _in_game := false
 var _speed_before_menu := 1     # the speed to go back to when the menus close
+var _to_name: Array[int] = []  # babies of your household still waiting for a name
 var _loaded_view: Dictionary = {}  # the camera of the save just loaded
 
 @onready var map_view: MapView = $MapView
@@ -52,6 +53,7 @@ func _ready() -> void:
 	menus.title_requested.connect(_show_title)
 	menus.quit_requested.connect(func() -> void: get_tree().quit())
 	menus.closed.connect(_on_menus_closed)
+	menus.baby_named.connect(_on_baby_named)
 	GameClock.ticked.connect(_on_tick)
 	GameClock.day_changed.connect(_on_day_changed)
 	if _skips_title():
@@ -300,6 +302,11 @@ func _open_screen(screen: String) -> void:
 			menus.open_settings()
 		"new":
 			menus.open_new_game()
+		"name":
+			var rng := RandomNumberGenerator.new()
+			rng.seed = 11
+			var baby := PersonFactory.make(rng, "Brook", [], 0)
+			menus.open_naming(baby, "A baby %s for the Brook family, born to Maud." % ("girl" if baby.gender == "female" else "boy"), baby.display_name.get_slice(" ", 0), [])
 		"game_over":
 			menus.show_game_over("Gisela Brook starved.\n\nYour folk have all passed on, after 12 days.")
 		_:
@@ -399,6 +406,8 @@ func _show_world(new_world: WorldState, household: Household, town: Household = 
 	sim.health_notice.connect(_on_realm_notice)
 	sim.pawn_died.connect(_on_pawn_died)
 	sim.household_changed.connect(func() -> void: hud.set_household(sim.household))
+	sim.babies_born.connect(_on_babies_born)
+	_to_name.clear()
 	sim.town_death.connect(_on_town_death)
 	sim.event_started.connect(_on_event_started)
 	sim.event_ended.connect(_on_event_ended)
@@ -440,6 +449,48 @@ func _on_pawn_died(person: String, cause: String, successor: String) -> void:
 	else:
 		var days := GameClock.get_day_number() + 1
 		_open_menu(func() -> void: menus.show_game_over("%s %s.\n\nYour folk have all passed on, after %d days." % [person, cause, days]))
+
+
+## Babies born into your household are named one at a time, in a pop-up that stops the clock.
+func _on_babies_born(ids: Array[int]) -> void:
+	if not _in_game:
+		return
+	_to_name.append_array(ids)
+	if not menus.is_open():
+		_name_next_baby()
+
+
+func _name_next_baby() -> void:
+	while not _to_name.is_empty():
+		var baby := sim.person(_to_name.pop_front())
+		if baby == null or not baby.is_infant():
+			continue
+		var mother := sim.person(baby.carried_by)
+		var family := baby.display_name.get_slice(" ", 1)
+		var what := "girl" if baby.gender == "female" else "boy"
+		var intro := "A baby %s for the %s family" % [what, family] if family != "" else "A baby %s" % what
+		if mother != null and mother.gender == "female":
+			intro += ", born to %s." % mother.display_name.get_slice(" ", 0)
+		else:
+			intro += "."
+		var twin := false
+		for other in sim.household.pawns:
+			twin = twin or (other.id != baby.id and other.is_infant() and other.birthday == baby.birthday and other.age == 0)
+		if twin:
+			intro += " A twin!"
+		var used: Array[String] = []
+		for other in sim.people():
+			used.append(other.display_name.get_slice(" ", 0))
+		_open_menu(func() -> void: menus.open_naming(baby, intro, baby.display_name.get_slice(" ", 0), used))
+		return
+
+
+func _on_baby_named(baby_id: int, given: String) -> void:
+	var baby := sim.person(baby_id) if sim != null else null
+	if baby != null:
+		sim.rename(baby, given)
+		hud.set_household(sim.household)
+	_name_next_baby()
 
 
 func _on_town_death(person: String, cause: String) -> void:

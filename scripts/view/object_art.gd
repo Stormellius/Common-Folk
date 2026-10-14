@@ -35,6 +35,8 @@ static func draw(ci: CanvasItem, def_id: String, u: float, t: float, occupied: b
 			_grave(ci, u)
 		"bed":
 			_bed(ci, u, occupied)
+		"cradle":
+			_cradle(ci, u)
 		"cooking_pot":
 			_cooking_pot(ci, u, t)
 		"hearth":
@@ -81,6 +83,24 @@ static func _bed(ci: CanvasItem, u: float, occupied: bool) -> void:
 	if not occupied:  # a folded blanket at the foot
 		_rect(ci, u, -13, 8, 26, 9, Color(0.49, 0.31, 0.31), 1.0)
 		ci.draw_line(Vector2(-12, 11) * u, Vector2(12, 11) * u, Color(0.62, 0.42, 0.42), maxf(1.0, u))
+
+
+## A little wooden cradle on two rockers, with a straw tick and a folded blanket.
+static func _cradle(ci: CanvasItem, u: float) -> void:
+	_shadow(ci, u, 14.0)
+	for side in [-1.0, 1.0]:  # the rockers stick out past the ends
+		var runner := PackedVector2Array()
+		for i in 9:
+			var f := i / 8.0
+			runner.append(Vector2(side * (11.0 + 2.5 * sin(f * PI)), lerpf(-19.0, 19.0, f)) * u)
+		ci.draw_polyline(runner, OUTLINE, maxf(1.5, 3.4 * u))
+		ci.draw_polyline(runner, Color(0.36, 0.24, 0.14), maxf(1.0, 2.2 * u))
+	_rect(ci, u, -11, -15, 22, 30, Color(0.52, 0.36, 0.21), 1.2)
+	_rect(ci, u, -8, -12, 16, 24, Color(0.80, 0.70, 0.48), 0.0)
+	ci.draw_line(Vector2(-11, -15) * u, Vector2(11, -15) * u, Color(0.66, 0.48, 0.30), maxf(1.0, 1.5 * u))
+	_rect(ci, u, -6, -11, 12, 6, Color(0.93, 0.91, 0.85), 0.8)  # the little pillow
+	_rect(ci, u, -8, 3, 16, 9, Color(0.42, 0.50, 0.62), 0.8)
+	ci.draw_line(Vector2(-7, 6) * u, Vector2(7, 6) * u, Color(0.55, 0.63, 0.74), maxf(1.0, u))
 
 
 static func _cooking_pot(ci: CanvasItem, u: float, t: float) -> void:
