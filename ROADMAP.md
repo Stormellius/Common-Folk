@@ -1,6 +1,6 @@
 # Common Folk: roadmap
 
-Milestones 1 to 17 are done. This file keeps the plan for 12 to 17 as it was built, and what comes next. Each milestone ended with the game playable, the smoke test passing and older saves still loading.
+Milestones 1 to 17 are done. This file keeps the plan for 12 to 17 as it was built, and what comes next (18 to 25). Each milestone ended with the game playable, the smoke test passing and older saves still loading.
 
 ## What the people are called
 
@@ -57,7 +57,7 @@ Folk are born, grow up, grow old and die, as in the Sims, with a medieval face o
 - Fields follow the seasons: bare in winter, sown in spring, growing through summer, ripe in late summer and autumn, stubble after. You can only harvest what is ripe
 - The stockpile shows under the purse. Building takes materials as well as coin (a timber wall takes wood, a stone wall stone): what you hold stands in for coin, and anything you are short of is bought at the shop's price, shown before you build
 - Surplus sells at a shop counter, at a better price on market day
-- Still to come: traders from other towns who buy and sell on the roads
+- Traders from other towns who buy and sell on the roads came later (milestone 22)
 
 ## Milestone 17: Accidents (done)
 
@@ -66,15 +66,19 @@ Folk are born, grow up, grow old and die, as in the Sims, with a medieval face o
 - **Drowning**, very rare, while fishing
 - **Plague**: an illness that spreads from person to person when they are close, worse among the filthy; the recovered are immune for a while, herbs nurse the sick through, and the sickbeds heal injuries. Rare, and deadly
 
+## The plan from here
+
+Eight milestones, in the order that lets each one build on the last. Each ends with the game playable, the smoke test passing and older saves still loading.
+
+- **18 Skills and tools** (next): skills that grow with practice (woodcutting, mining, farming, fishing, herbs, cooking, healing, smithing, carpentry, music) and pass on as a trade from parent or master to child or apprentice. Work needs the right tool in hand, and tools are made, bought, wear out and are carried
+- **19 Marriage and weddings**: engagements and rings, a wedding at the chapel with guests, a married household and a married name
+- **20 Animals**: wild game to hunt, draught and pack animals and mounts that carry goods and people, pets and livestock
+- **21 Builders and rooms**: building as a job, with materials hauled to the site; rooms, roofs and the indoor/outdoor difference
+- **22 Traders and goods**: caravans on the roads, a wider list of goods made at workshops (flour and bread, planks, tools, cloth, iron) and sold
+- **23 Ambitions**: a lifetime aspiration for each of your folk and small wishes that come and go
+- **24 Other families**: play any family in the town, inheritance of land and goods, the town's families carrying on without you, moving between towns
+- **25 Sound and music**: ambient sound, music, instruments to play
+
 ## Later
 
-Roughly in the order they would matter:
-
-- Marriage and weddings at the chapel, engagements, rings
-- Builders and materials hauled to the site, rooms and roofs
-- Skills that grow with practice (woodcutting, cooking, healing, music) and pass on as a trade
-- Ambitions, like the Sims' aspirations: a goal for each of your folk, and small wishes that come and go
-- Playing another family in the town, and the town's families carrying on without you (inheritance, moving between towns)
-- Traders and caravans, and more goods to make and sell
-- Sound and music
 - Sprites drawn by hand to replace the code-drawn art, one piece at a time
