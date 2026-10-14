@@ -37,6 +37,15 @@ static func begin(world: WorldState, start_id: String) -> Dictionary:
 		Skills.seed_pawn(pawn, skill_rng)
 	for tool_id in def.get("tools", []):
 		household.add_stock(str(tool_id), 1)
+	var kept: Dictionary = def.get("stock", {})
+	for item_id in kept:
+		household.add_stock(str(item_id), int(kept[item_id]))
+	var pet_rng := RandomNumberGenerator.new()
+	pet_rng.seed = world.world_seed * 17 + 3
+	for kind in def.get("pets", []):
+		var spot := _pet_spot(world, household)
+		if spot != Vector2i(-1, -1):
+			Fauna.spawn(world, str(kind), spot, pet_rng, "household", WorldState.HOME_LOT)
 	var camp: Variant = def.get("camp")
 	CampGenerator.place(world, household, camp if camp is Array else null, house_id == "")
 	world.titles[WorldState.HOME_LOT] = str(def.get("title", "freehold"))
@@ -44,6 +53,18 @@ static func begin(world: WorldState, start_id: String) -> Dictionary:
 	realm.start_id = start_id
 	realm.choose_head(household)
 	return { "household": household, "realm": realm }
+
+
+## A free tile beside the household, for a pet to begin on.
+static func _pet_spot(world: WorldState, household: Household) -> Vector2i:
+	var around := household.pawns[0].tile if not household.pawns.is_empty() else world.lot.get_center()
+	for radius in range(1, 8):
+		for dy in range(-radius, radius + 1):
+			for dx in range(-radius, radius + 1):
+				var tile := around + Vector2i(dx, dy)
+				if maxi(absi(dx), absi(dy)) == radius and world.is_walkable(tile.x, tile.y) and world.object_at(tile) == null and world.animals_at(tile).is_empty():
+					return tile
+	return Vector2i(-1, -1)
 
 
 static func _template(id: String) -> Dictionary:

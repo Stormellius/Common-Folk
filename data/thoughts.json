@@ -110,5 +110,8 @@
   { "id": "got_engaged",  "text": "Engaged to {name}",       "mood": 16, "hours": 96, "on": "got_engaged" },
   { "id": "wed",          "text": "Married {name}",          "mood": 22, "hours": 96, "on": "wed" },
   { "id": "at_wedding",   "text": "Went to a wedding",       "mood": 8,  "hours": 24, "on": "at_wedding" },
-  { "id": "engagement_off", "text": "The engagement is off", "mood": -12, "hours": 96, "on": "engagement_off" }
+  { "id": "engagement_off", "text": "The engagement is off", "mood": -12, "hours": 96, "on": "engagement_off" },
+  { "id": "hunted",       "text": "A good day's hunting",    "mood": 5,  "hours": 12, "on": "hunted" },
+  { "id": "attacked",     "text": "Attacked by a beast",     "mood": -10, "hours": 72, "on": "attacked" },
+  { "id": "petted",       "text": "Made a fuss of {name}",   "mood": 5,  "hours": 8,  "on": "petted" }
 ]

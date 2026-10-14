@@ -6,5 +6,6 @@
   { "id": "herb_knife",      "name": "Herb knife",       "skill": "herbalism",   "price": 6,  "durability": 3500, "color": "#a9aeb6", "text": "Cuts herbs clean." },
   { "id": "healers_satchel", "name": "Healer's satchel", "skill": "healing",     "price": 16, "durability": 6000, "color": "#a67c52", "text": "Bandages and a mortar, for nursing the sick." },
   { "id": "hammer",          "name": "Hammer",           "skill": "carpentry",   "price": 8,  "durability": 5000, "color": "#8a8f98", "text": "Drives nails; wanted for building." },
-  { "id": "smiths_hammer",   "name": "Smith's hammer",   "skill": "smithing",    "price": 14, "durability": 5000, "color": "#6f7580", "text": "Shapes hot iron." }
+  { "id": "smiths_hammer",   "name": "Smith's hammer",   "skill": "smithing",    "price": 14, "durability": 5000, "color": "#6f7580", "text": "Shapes hot iron." },
+  { "id": "bow", "name": "Bow", "skill": "hunting", "price": 18, "durability": 2500, "color": "#8a6a3a", "text": "Brings down game." }
 ]

@@ -90,7 +90,9 @@ func _draw() -> void:
 	self_modulate = Color(0.72, 0.72, 0.78) if fallen else Color.WHITE  # the dying grow grey
 	if fallen:  # lying on the ground where they fell, a little askew
 		draw_set_transform(Vector2(0.0, 4.0) * u, -0.35 if pawn.id % 2 == 0 else 0.35, Vector2.ONE)
-	PawnArt.draw(self, pawn.look, pawn.facing, u, _phase, asleep or fallen, PawnArt.outfit_for(pawn), breath)
+	if pawn.mount != 0:  # sitting in the saddle, a little above the ground
+		draw_set_transform(Vector2(0.0, -7.0) * u, 0.0, Vector2.ONE)
+	PawnArt.draw(self, pawn.look, pawn.facing, u, _phase * 0.5 if pawn.mount != 0 else _phase, asleep or fallen, PawnArt.outfit_for(pawn), breath)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	if pawn.tool != "" and not fallen and not asleep:
 		PawnArt.draw_tool(self, pawn.tool, pawn.facing, u, Time.get_ticks_msec() / 1000.0 + pawn.id, pawn.job_stage == "using")

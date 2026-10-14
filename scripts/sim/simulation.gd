@@ -87,6 +87,7 @@ func step_motion() -> void:
 			pawn.tick(world)
 	if _has_infants:
 		Pregnancy.carry_infants(self)
+	Fauna.step_motion(self)
 
 
 ## One game minute passes. Called from the clock's `ticked` signal. `motion_steps` is how many
@@ -117,6 +118,7 @@ func step(motion_steps: int = 1) -> void:
 		health_notice.emit(notice)
 	for notice in Fire.step(self, _rng):
 		health_notice.emit(notice)
+	Fauna.step(self, _rng)
 	if minute % 10 == 0:
 		for caught in Illness.spread(self, _rng, 10):
 			_announce_illness(caught)
@@ -133,6 +135,8 @@ func step(motion_steps: int = 1) -> void:
 		for notice in Romance.new_day(self, _rng):
 			health_notice.emit(notice)
 		Skills.find_work(self, _rng)
+		for notice in Fauna.new_day(self, _rng):
+			health_notice.emit(notice)
 		for notice in realm.new_day(self):
 			realm_notice.emit(notice)
 		_roll_illness(everyone)
@@ -1018,6 +1022,15 @@ func describe_activity(pawn: Pawn) -> String:
 		var date_partner := person(pawn.job_partner)
 		var date_name := _first_name(date_partner) if date_partner != null else "someone"
 		text = "On a date with %s" % date_name if pawn.job_stage == "using" else "Going on a date with %s" % date_name
+	elif pawn.job_kind == "hunt":
+		var game := world.get_animal(pawn.job_animal)
+		text = ("Taking aim at %s" if pawn.job_stage == "using" else "Stalking %s") % (game.title() if game != null else "game")
+	elif pawn.job_kind == "pet":
+		var friend := world.get_animal(pawn.job_animal)
+		text = ("Making a fuss of %s" if pawn.job_stage == "using" else "Going to %s") % (friend.title() if friend != null else "an animal")
+	elif pawn.job_kind == "mount":
+		var steed := world.get_animal(pawn.job_animal)
+		text = "Going to %s" % (steed.title() if steed != null else "the horse")
 	elif pawn.job_kind == "wed":
 		var spouse := person(pawn.job_partner)
 		var spouse_name := _first_name(spouse) if spouse != null else "someone"
@@ -1037,7 +1050,7 @@ func describe_activity(pawn: Pawn) -> String:
 		var dying_name := _first_name(dying) if dying != null else "someone"
 		text = "Pleading with Death for %s" % dying_name if pawn.job_stage == "using" else "Hurrying to %s" % dying_name
 	elif pawn.has_orders():
-		text = "Walking"
+		text = "Riding" if pawn.mount != 0 else "Walking"
 	if pawn.is_infant():
 		return "Being carried"
 	if pawn.is_dying():
@@ -1248,6 +1261,8 @@ func _open_around(tile: Vector2i) -> bool:
 
 
 func _step_job(pawn: Pawn) -> void:
+	if pawn.mount != 0 and pawn.job_kind != "" and pawn.job_kind != "mount" and not pawn.has_orders():
+		Fauna.dismount(self, pawn)  # at the door or the workplace the rider gets down
 	if pawn.job_kind == "interact":
 		_step_interaction(pawn)
 		return
@@ -1259,6 +1274,15 @@ func _step_job(pawn: Pawn) -> void:
 		return
 	if pawn.job_kind == "date":
 		_step_date(pawn)
+		return
+	if pawn.job_kind == "hunt":
+		Fauna.step_hunt(self, pawn, _rng)
+		return
+	if pawn.job_kind == "pet":
+		Fauna.step_pet(self, pawn)
+		return
+	if pawn.job_kind == "mount":
+		Fauna.step_mount(self, pawn)
 		return
 	if pawn.job_kind == "wed":
 		_step_wedding(pawn)
@@ -1379,6 +1403,10 @@ func _collect(pawn: Pawn, object_def: Dictionary) -> void:
 			amount = maxi(1, amount - 1)
 		if skill_id != "":
 			amount = Skills.yield_amount(pawn, skill_id, amount, _rng)
+		var packed := Fauna.pack_bonus(self, pawn)
+		if packed > 0.0:  # a pack animal carries the rest
+			var exact := float(amount) * (1.0 + packed)
+			amount = floori(exact) + (1 if _rng.randf() < exact - floorf(exact) else 0)
 		if amount <= 0:
 			continue
 		household.add_stock(str(resource_id), amount)
@@ -1659,6 +1687,9 @@ func _end_job(pawn: Pawn) -> void:
 		placed.user_id = 0
 	Skills.unequip(self, pawn)
 	pawn.job_recipe = ""
+	if pawn.job_animal != 0:
+		pawn.job_animal = 0
+		Fauna.refresh_pace(self, pawn)  # no more creeping after game
 	var partner: Pawn = person(pawn.job_partner) if pawn.job_kind in ["interact", "date", "wed"] else null
 	var partner_kind := pawn.job_kind
 	pawn.job_kind = ""
@@ -1668,6 +1699,8 @@ func _end_job(pawn: Pawn) -> void:
 	pawn.job_partner = 0
 	pawn.job_interaction = ""
 	pawn.pose = ""
+	if pawn.pace > 1.0 or pawn.mount != 0:
+		Fauna.refresh_pace(self, pawn)
 	# An interaction has two people: when one stops, so does the other.
 	if partner != null and partner.job_kind == partner_kind and partner.job_partner == pawn.id:
 		_end_job(partner)
@@ -2050,6 +2083,9 @@ func _repair_after_load() -> void:
 				pawn.needs[need_id] = 80.0
 		if pawn.job_kind == "" and pawn.tool != "":
 			Skills.unequip(self, pawn)  # a tool left in hand by an old save goes back on the shelf
+		if pawn.mount != 0 and (world.get_animal(pawn.mount) == null or world.get_animal(pawn.mount).rider != pawn.id):
+			pawn.mount = 0  # the horse is gone
+		Fauna.refresh_pace(self, pawn)
 		if pawn.job_kind == "use":
 			var placed := world.get_object(pawn.job_object)
 			if placed == null or (placed.user_id != 0 and placed.user_id != pawn.id):

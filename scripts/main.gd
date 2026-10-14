@@ -249,6 +249,15 @@ func _apply_launch_options() -> void:
 				sim.household.selected().skills[parts[0]] = Skills.xp_for_level(int(parts[1]))
 	if _launch_option("tool") != "" and sim != null and sim.household.selected() != null:
 		Skills.equip(sim, sim.household.selected(), _launch_option("tool"), true)
+	if _launch_option("spawn") != "" and sim != null and sim.household.selected() != null:
+		var around := sim.household.selected().tile
+		var index := 0
+		for kind in _launch_option("spawn").split(","):
+			index += 1
+			var spot := around + Vector2i((index - 1) % 5 * 3 - 5, 2 + (index - 1) / 5 * 3)
+			var animal := Fauna.spawn(world, kind, spot, sim.rng(), "household" if not Fauna.def_of(kind).get("type", "wild") == "wild" else "", WorldState.HOME_LOT)
+			animal.think_at = GameClock.tick + 100000  # stand still for the picture
+		camera.position = (Vector2(around) + Vector2(1.5, 3.5)) * MapView.TILE_SIZE
 	if _launch_option("together") != "" and sim != null and sim.household.pawns.size() >= 2:
 		for person in sim.household.pawns:
 			person.needs["libido"] = 10.0
@@ -508,6 +517,7 @@ func _process(_delta: float) -> void:
 		hud.show_pawn(chosen, sim.describe_activity(chosen) if chosen != null else "", sim.job_text(chosen) if chosen != null else "", sim.relationship_lines(chosen) if chosen != null else [])
 		hud.set_events(sim.events.names())
 		hud.set_purse(sim.household.coins, sim.household.stock)
+		hud.set_animals(Fauna.kept_text(sim))
 		hud.set_realm(sim.realm.summary(sim))
 		var here := world.town_at(chosen.tile) if chosen != null else {}
 		hud.set_place(str(here["name"]) if not here.is_empty() else ("Open country" if chosen != null and not world.towns.is_empty() else ""))

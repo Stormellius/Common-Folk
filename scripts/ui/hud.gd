@@ -70,6 +70,7 @@ var _purse_label: Label
 var _realm_label: Label
 var _place_label: Label
 var _stock_label: Label
+var _animals_label: Label
 var _mood_bar: ProgressBar
 var _mood_fill: StyleBoxFlat
 var _mood_label: Label
@@ -123,6 +124,12 @@ func set_purse(coins: int, stock: Dictionary = {}) -> void:
 	_purse_label.text = "Purse  %s" % Economy.format(coins)
 	var held := Economy.goods_text(stock)
 	_stock_label.text = held if held != "" else "Nothing stockpiled"
+
+
+## The animals the household keeps, under the stockpile (nothing shown when there are none).
+func set_animals(text: String) -> void:
+	_animals_label.text = text
+	_animals_label.visible = text != ""
 
 
 ## Class, land title, next tax day, guild: the lines under the purse.
@@ -451,6 +458,11 @@ func _build_clock_panel() -> void:
 	_stock_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_stock_label.custom_minimum_size = Vector2(214, 0)
 	box.add_child(_stock_label)
+	_animals_label = _make_label("", "DimLabel")
+	_animals_label.add_theme_font_size_override("font_size", 12)
+	_animals_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_animals_label.custom_minimum_size = Vector2(214, 0)
+	box.add_child(_animals_label)
 	_realm_label = _make_label("", "DimLabel")
 	_realm_label.add_theme_font_size_override("font_size", 12)
 	_realm_label.visible = false

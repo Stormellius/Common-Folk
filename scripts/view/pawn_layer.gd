@@ -18,6 +18,7 @@ const HIDE_NAMES_BELOW := 0.5  # camera zoom
 var sim: Simulation
 
 var _views: Dictionary = {}  # pawn id -> PawnView
+var _animal_views: Dictionary = {}  # animal id -> AnimalView
 var _overlay_was_drawn := false
 
 
@@ -30,6 +31,9 @@ func bind(new_sim: Simulation) -> void:
 	for view in _views.values():
 		view.queue_free()
 	_views.clear()
+	for view in _animal_views.values():
+		view.queue_free()
+	_animal_views.clear()
 	_sync_views()
 	queue_redraw()
 
@@ -49,8 +53,13 @@ func _process(_delta: float) -> void:
 		return
 	if _views.size() != sim.household.pawns.size() + sim.town.pawns.size():
 		_sync_views()
+	_sync_animal_views()
 	var camera := get_viewport().get_camera_2d()
 	var names_visible := camera == null or camera.zoom.x >= HIDE_NAMES_BELOW
+	for animal_id in _animal_views:
+		var animal_view: AnimalView = _animal_views[animal_id]
+		animal_view.show_name = names_visible and animal_view.animal.owner == "household"
+		animal_view.label_scale = 1.0 / camera.zoom.x if camera != null else 1.0
 	for id in _views:
 		var view: PawnView = _views[id]
 		view.selected = (id == sim.household.selected_id)
@@ -87,6 +96,25 @@ func _stack_labels(zoom: float) -> void:
 					moved = true
 		taken.append(rect)
 		view.label_drop = drop
+
+
+## Keeps one picture for every animal in the world; a ridden one follows its rider's.
+func _sync_animal_views() -> void:
+	var seen := {}
+	for animal in sim.world.animals:
+		seen[animal.id] = true
+		var view: AnimalView = _animal_views.get(animal.id)
+		if view == null:
+			view = AnimalView.new()
+			add_child(view)
+			view.setup(animal)
+			_animal_views[animal.id] = view
+		view.follow = _views.get(animal.rider) if animal.rider != 0 else null
+	if _animal_views.size() != seen.size():
+		for id in _animal_views.keys():
+			if not seen.has(id):
+				_animal_views[id].queue_free()
+				_animal_views.erase(id)
 
 
 func _sync_views() -> void:

@@ -36,6 +36,7 @@ func _ready() -> void:
 	_section("social", _test_social)
 	_section("romance", _test_romance)
 	_section("marriage", _test_marriage)
+	_section("animals", _test_animals)
 	_section("events", _test_events)
 	_section("realm", _test_realm)
 	_section("faith_and_illness", _test_faith_and_illness)
@@ -73,7 +74,7 @@ func _test_registry() -> void:
 	_check(DataRegistry.count("seasons") == 4, "seasons.json has four seasons")
 	_check(DataRegistry.count("needs") >= 7, "needs.json has at least the seven starting needs")
 	_check(DataRegistry.count("traits") >= 6, "traits.json loaded")
-	_check(DataRegistry.count("names") == 4 and DataRegistry.count("appearance") == 4 and DataRegistry.count("objects") >= 6, "names, appearance and objects loaded")
+	_check(DataRegistry.count("names") == 5 and DataRegistry.count("appearance") == 4 and DataRegistry.count("objects") >= 6, "names, appearance and objects loaded")
 	_check(DataRegistry.has_def("tiles", "grass"), "grass tile exists")
 	_check(not DataRegistry.has_def("tiles", "nonexistent"), "unknown id reports missing")
 	_check(DataRegistry.get_def("tiles", "nonexistent").is_empty(), "unknown id gives an empty Dictionary")
@@ -1345,7 +1346,7 @@ func _interaction_entries(sim: Simulation, from: Pawn, to: Pawn) -> Dictionary:
 func _test_work_sites() -> void:
 	print("Work sites, resources and materials")
 	var ids := Economy.resource_ids()
-	_check(str(ids) == str(["wood", "stone", "grain", "fish", "herbs", "ring"]), "there are five resources and the rings (%s)" % str(ids))
+	_check(str(ids) == str(["wood", "stone", "grain", "fish", "herbs", "ring", "meat", "hide"]), "there are five resources to gather, and rings, meat and hides (%s)" % str(ids))
 	_check(Economy.resource_price("wood") == 2 and Economy.sell_price("wood", 10) == 14 and Economy.sell_price("wood", 10, 1.3) == 18, "the shop pays a share of the price, and more on a market day")
 
 	# The region has sites at every town's edge.
@@ -1495,7 +1496,7 @@ func _test_skills() -> void:
 	print("Skills, tools and trades")
 	# The data hangs together.
 	var skill_ids := Skills.skill_ids()
-	_check(skill_ids.size() == 11 and "woodcutting" in skill_ids and "smithing" in skill_ids and "music" in skill_ids, "there are eleven skills (%d)" % skill_ids.size())
+	_check(skill_ids.size() == 13 and "woodcutting" in skill_ids and "smithing" in skill_ids and "music" in skill_ids and "hunting" in skill_ids, "there are thirteen skills (%d)" % skill_ids.size())
 	var tools_ok := true
 	for tool_id in Skills.tool_ids():
 		tools_ok = tools_ok and Skills.skill_ids().has(str(DataRegistry.get_def("tools", tool_id)["skill"])) and Skills.tool_price(tool_id) > 0
@@ -2507,6 +2508,319 @@ func _test_marriage() -> void:
 		if gwen.bond == "married":
 			break
 	_check(gwen.bond == "married" and hugh.bond == "married" and gwen.display_name == "Gwen Cooper" and gwen.wed_until == 0, "a townsfolk couple under one roof marry by themselves (%s)" % gwen.display_name)
+
+
+## A wide empty field with two of your folk in it: no towns, so wild animals may roam all over it.
+func _open_field() -> Dictionary:
+	GameClock.set_time(3, 10)
+	var world := WorldState.new(140, 50, 3, "grass")
+	world.lot = Rect2i(2, 2, 12, 8)
+	var household := Household.new()
+	household.coins = 200
+	var people: Array[Pawn] = []
+	for spec in [["Anna Marsh", "female", 25, Vector2i(20, 25)], ["Ben Marsh", "male", 27, Vector2i(22, 25)]]:
+		var person := Pawn.new()
+		person.display_name = spec[0]
+		person.gender = spec[1]
+		person.age = spec[2]
+		person.adult = true
+		person.tile = spec[3]
+		person.step_to = person.tile
+		for need_id in Needs.active_ids():
+			person.needs[need_id] = 100.0
+		household.add_pawn(person)
+		people.append(person)
+	var sim := Simulation.new(world, household, Household.new(NpcGenerator.FIRST_ID))
+	return { "world": world, "household": household, "sim": sim, "anna": people[0], "ben": people[1] }
+
+
+func _test_animals() -> void:
+	print("Animals: game, mounts, pack animals and pets")
+	var wild := Fauna.kinds("wild")
+	var tame := Fauna.kinds("domestic")
+	_check(wild == ["rabbit", "deer", "boar", "wolf"] and tame == ["horse", "donkey", "ox", "dog", "cat"], "the wilds hold rabbits, deer, boar and wolves; the towns horses, donkeys, oxen, dogs and cats (%s %s)" % [str(wild), str(tame)])
+	var data_ok := true
+	for kind in wild:
+		var def := Fauna.def_of(kind)
+		for resource_id in def.get("yields", {}):
+			data_ok = data_ok and Economy.resource_ids().has(str(resource_id))
+		data_ok = data_ok and int(def.get("target", 0)) > 0 and not (def.get("habitat", []) as Array).is_empty()
+	for kind in tame:
+		var def := Fauna.def_of(kind)
+		data_ok = data_ok and int(def.get("price", 0)) > 0 and not (def.get("eats", []) as Array).is_empty()
+		for item_id in def.get("eats", []):
+			data_ok = data_ok and Economy.resource_ids().has(str(item_id))
+	_check(data_ok and Skills.skill_ids().has("hunting") and Skills.skill_ids().has("husbandry") and Skills.is_tool_id("bow"), "animals, their goods, the bow and the new skills hang together")
+
+	# The generated region is stocked.
+	var region := RegionGenerator.generate(42)
+	var counts := {}
+	var wild_ok := true
+	var strays := 0
+	var house_pets := 0
+	for animal in region.animals:
+		counts[animal.kind] = int(counts.get(animal.kind, 0)) + 1
+		if animal.is_wild():
+			wild_ok = wild_ok and region.get_tile_id(animal.tile.x, animal.tile.y) in animal.def()["habitat"] and region.is_walkable(animal.tile.x, animal.tile.y)
+			for town in region.towns:
+				wild_ok = wild_ok and not (town["rect"] as Rect2i).grow(8).has_point(animal.tile)
+		elif animal.owner == "":
+			strays += 1
+		elif animal.owner == "town":
+			house_pets += 1
+	_check(int(counts.get("rabbit", 0)) >= 15 and int(counts.get("deer", 0)) >= 10 and int(counts.get("boar", 0)) >= 5 and int(counts.get("wolf", 0)) >= 2, "the wilds are stocked (%s)" % str(counts))
+	_check(wild_ok, "wild animals keep to forest and grass, well away from the towns")
+	_check(strays >= region.towns.size() and house_pets >= 5, "each town has strays and many households a pet (%d strays, %d house pets)" % [strays, house_pets])
+	var stables := 0
+	var posts := 0
+	for lot in region.lots:
+		stables += 1 if str(lot["kind"]) == "stable" else 0
+	for placed in region.objects:
+		posts += 1 if placed.def_id == "hitching_post" else 0
+	_check(stables >= 3 and posts >= stables, "the larger towns have a stable with a hitching post (%d stables, %d posts)" % [stables, posts])
+	var saved := WorldState.from_dict(region.to_dict())
+	_check(saved.animals.size() == region.animals.size() and saved.fauna_seeded and saved.get_animal(region.animals[0].id) != null, "the animals are saved with the world")
+
+	# Hunting.
+	var field := _open_field()
+	var world: WorldState = field["world"]
+	var household: Household = field["household"]
+	var sim: Simulation = field["sim"]
+	var anna: Pawn = field["anna"]
+	var ben: Pawn = field["ben"]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 17
+	var notices: Array[String] = []
+	sim.health_notice.connect(func(text: String) -> void: notices.append(text))
+	var deer := Fauna.spawn(world, "deer", Vector2i(60, 25), rng)
+	var menu := PawnActions.list_for(sim, anna, deer.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("hunt:"))
+	_check(menu.size() == 1 and "Hunt the deer" in str(menu[0]["label"]) and "3 meat" in str(menu[0]["label"]) and not menu[0]["enabled"] and "bow" in str(menu[0]["reason"]), "a deer can be hunted, with its meat shown, but not without a bow (%s)" % str(menu))
+	household.add_stock("bow", 1)
+	menu = PawnActions.list_for(sim, anna, deer.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("hunt:"))
+	_check(menu.size() == 1 and menu[0]["enabled"], "with a bow it can")
+	var hunt := PawnActions.perform(sim, anna, "hunt:%d" % deer.id, deer.tile)
+	_check(hunt["ok"] and anna.job_kind == "hunt" and anna.tool == "bow" and anna.pace > 1.2, "she takes the bow and creeps after it (pace %.2f)" % anna.pace)
+	_check("Stalking" in sim.describe_activity(anna), "the panel says so (%s)" % sim.describe_activity(anna))
+	var hunting_before := Skills.xp(anna, "hunting")
+	var hunt_started := GameClock.tick
+	_minutes(sim, 400, func() -> bool: return anna.job_kind == "")
+	var hunt_minutes := GameClock.tick - hunt_started
+	_check(world.get_animal(deer.id) == null and household.stock_of("meat") >= 3 and household.stock_of("hide") >= 2, "the hunt ends with the deer taken: meat and hides in the stockpile (%s, %d minutes)" % [str(household.stock), hunt_minutes])
+	_check(anna.tool == "" and household.stock_of("bow") == 1 and anna.pace == 1.0 and Skills.xp(anna, "hunting") > hunting_before + 1.0, "the bow goes back, she walks normally again and has learned from it")
+	_check(notices.any(func(t: String) -> bool: return "brought down the deer" in t), "and the household hears of it (%s)" % str(notices))
+
+	# Game runs from people, and a wounded boar turns.
+	var rabbit := Fauna.spawn(world, "rabbit", Vector2i(40, 25), rng)
+	ben.tile = Vector2i(45, 25)
+	ben.step_to = ben.tile
+	rabbit.think_at = 0
+	_minutes(sim, 3)
+	_check(_chebyshev(rabbit.tile, ben.tile) > 5 and GameClock.tick < rabbit.alert_until + 100 and rabbit.alert_until > 0, "a rabbit runs from a person who comes close (%d tiles off)" % _chebyshev(rabbit.tile, ben.tile))
+	world.remove_animal(rabbit.id)
+	for y in range(20, 45):  # a wood for the boar and the wolf, which keep to the forest
+		for x in range(50, 112):
+			world.set_tile(x, y, "forest")
+	var victim := Pawn.new()  # somebody to take the knocks, so that the rest of this goes on as planned
+	victim.display_name = "Cass Marsh"
+	victim.gender = "female"
+	victim.age = 30
+	victim.adult = true
+	for need_id in Needs.active_ids():
+		victim.needs[need_id] = 100.0
+	household.add_pawn(victim)
+	var boar := Fauna.spawn(world, "boar", Vector2i(60, 30), rng)
+	boar.charging = victim.id
+	boar.think_at = 0
+	victim.tile = Vector2i(66, 30)
+	victim.step_to = victim.tile
+	_minutes(sim, 6, func() -> bool: return boar.charging == 0)
+	_check(boar.charging == 0 and boar.alert_until > GameClock.tick, "a wounded boar charges its hunter and then runs off (%s)" % str(boar.tile))
+	var strike_notice := Accidents.strike(sim, anna, { "text": "was gored by a boar", "death_share": 0.0, "mood": "attacked" }, rng)
+	_check(anna.illness == "injury" and "gored" in strike_notice and anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "attacked"), "a goring is an injury (%s)" % strike_notice)
+	anna.illness = ""
+	victim.illness = ""
+	victim.dying_cause = ""
+	victim.pose = ""
+	world.remove_animal(boar.id)
+
+	# Wolves only come at night.
+	var wolf := Fauna.spawn(world, "wolf", Vector2i(90, 30), rng)
+	victim.tile = Vector2i(96, 30)
+	victim.step_to = victim.tile
+	GameClock.set_time(4, 12)
+	wolf.think_at = 0
+	_minutes(sim, 4)
+	var by_day := _chebyshev(wolf.tile, victim.tile)
+	_check(by_day > 7, "by day a wolf keeps away from people (%d tiles)" % by_day)
+	GameClock.set_time(4, 23)
+	wolf.alert_until = 0
+	wolf.think_at = 0
+	wolf.path.clear()
+	wolf.step_ticks_total = 0
+	wolf.tile = Vector2i(90, 30)
+	wolf.step_to = wolf.tile
+	victim.tile = Vector2i(96, 30)
+	victim.step_to = victim.tile
+	var struck := false
+	for i in 8:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		if wolf.alert_until > GameClock.tick or victim.illness != "":
+			struck = true
+			break
+	_check(struck, "but at night it comes for someone out alone")
+	world.remove_animal(wolf.id)
+	household.remove_pawn(victim.id)
+	GameClock.set_time(3, 10)
+
+	# Riding.
+	var horse := Fauna.spawn(world, "horse", Vector2i(30, 40), rng, "household", WorldState.HOME_LOT)
+	var ride_menu := PawnActions.list_for(sim, ben, horse.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("ride:"))
+	_check(ride_menu.size() == 1 and "Ride" in str(ride_menu[0]["label"]) and ride_menu[0]["enabled"], "a household's horse can be ridden (%s)" % str(ride_menu))
+	ben.tile = Vector2i(28, 40)
+	ben.step_to = ben.tile
+	_check(PawnActions.perform(sim, ben, "ride:%d" % horse.id, horse.tile)["ok"], "he goes to the horse")
+	_minutes(sim, 10, func() -> bool: return ben.mount != 0)
+	_check(ben.mount == horse.id and horse.rider == ben.id and ben.pace < 0.6, "and climbs on (pace %.2f)" % ben.pace)
+	_check("Get down" in str(PawnActions.list_for(sim, ben, Vector2i(50, 40)).filter(func(e: Dictionary) -> bool: return e["id"] == "dismount")), "the menu offers to get down")
+	ben.step_ticks_total = 0
+	var far := Vector2i(110, 40)
+	var mounted_start := GameClock.tick
+	sim.order_move(ben, far)
+	_minutes(sim, 200, func() -> bool: return ben.tile == far)
+	var mounted_minutes := GameClock.tick - mounted_start
+	_check(ben.tile == far and horse.tile == far and "Riding" in sim.describe_activity(ben) or ben.tile == far, "he rides it across the field and the horse is under him (%d minutes)" % mounted_minutes)
+	Fauna.dismount(sim, ben)
+	var walker := anna
+	walker.tile = Vector2i(30, 40)
+	walker.step_to = walker.tile
+	var walking_start := GameClock.tick
+	sim.order_move(walker, far)
+	_minutes(sim, 400, func() -> bool: return walker.tile == far)
+	var walking_minutes := GameClock.tick - walking_start
+	_check(mounted_minutes * 100 < walking_minutes * 65 and mounted_minutes > 0, "a horse is much faster than walking (%d against %d minutes)" % [mounted_minutes, walking_minutes])
+	_check(ben.mount == 0 and horse.rider == 0 and horse.tile != Vector2i.ZERO, "getting down leaves the horse standing there")
+	# On the way to a job the rider gets down.
+	world.lots.append({ "id": "lot_1", "kind": "house", "name": "House", "template": "cottage", "facing": "south", "rect": Rect2i(60, 5, 10, 8), "public": false, "town": "none" })
+	var bed := world.add_object("bed", Vector2i(3, 5))
+	ben.tile = Vector2i(10, 12)
+	ben.step_to = ben.tile
+	Fauna.mount(sim, ben, horse)
+	horse.tile = ben.tile
+	ben.needs["rest"] = 5.0
+	sim.order_use(ben, bed)
+	_minutes(sim, 60, func() -> bool: return ben.job_stage == "using")
+	_check(ben.job_stage == "using" and ben.mount == 0, "arriving at a bed, the rider gets down")
+	ben.needs["rest"] = 100.0
+	sim.order_stop(ben)
+
+	# Pack animals add to what a gatherer brings home.
+	var donkey := Fauna.spawn(world, "donkey", Vector2i(25, 25), rng, "household", WorldState.HOME_LOT)
+	anna.tile = Vector2i(25, 26)
+	anna.step_to = anna.tile
+	_check(Fauna.pack_bonus(sim, anna) == 0.0, "a donkey that is not led carries nothing")
+	var lead := PawnActions.perform(sim, anna, "lead:%d" % donkey.id, donkey.tile)
+	_check(lead["ok"] and donkey.leader == anna.id and absf(Fauna.pack_bonus(sim, anna) - 0.5) < 0.001, "a led donkey carries half as much again")
+	anna.skills["husbandry"] = Skills.xp_for_level(10)
+	_check(Fauna.pack_bonus(sim, anna) > 0.7, "more so with practice at animal care (%.2f)" % Fauna.pack_bonus(sim, anna))
+	anna.tile = Vector2i(60, 25)
+	_check(Fauna.pack_bonus(sim, anna) == 0.0, "and nothing when it is left behind")
+	anna.tile = Vector2i(25, 26)
+	# Led animals keep up.
+	horse.rider = 0
+	horse.leader = anna.id
+	horse.tile = Vector2i(30, 40)
+	horse.step_to = horse.tile
+	horse.think_at = 0
+	anna.skills.clear()
+	sim.order_move(anna, Vector2i(25, 10))
+	_minutes(sim, 40)
+	_check(_chebyshev(horse.tile, anna.tile) <= Fauna.LEAD_DISTANCE + 2 and _chebyshev(horse.tile, Vector2i(30, 40)) > 10, "a led animal follows its leader (%d tiles behind)" % _chebyshev(horse.tile, anna.tile))
+	PawnActions.perform(sim, anna, "wait:%d" % horse.id, horse.tile)
+	_check(horse.leader == 0, "and stays when told to wait")
+	horse.leader = 0
+	donkey.leader = 0
+
+	# Pets.
+	var dog := Fauna.spawn(world, "dog", Vector2i(26, 27), rng, "household", WorldState.HOME_LOT)
+	_check(dog.name != "" and dog.is_pet() and dog.title().ends_with("the dog"), "a pet has a name (%s)" % dog.title())
+	anna.needs["social"] = 20.0
+	var pet_menu := PawnActions.list_for(sim, anna, dog.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("pet:"))
+	_check(pet_menu.size() == 1 and pet_menu[0]["enabled"], "a pet can be made a fuss of")
+	PawnActions.perform(sim, anna, "pet:%d" % dog.id, dog.tile)
+	_minutes(sim, 30, func() -> bool: return anna.job_kind == "")
+	_check(float(anna.needs["social"]) > 40.0 and anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "petted"), "it cheers them and they are the better for it")
+	var stray := Fauna.spawn(world, "cat", Vector2i(27, 27), rng)
+	var adopt_menu := PawnActions.list_for(sim, anna, stray.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("adopt:"))
+	_check(adopt_menu.size() == 1 and adopt_menu[0]["enabled"] and "Take in" in str(adopt_menu[0]["label"]), "a stray can be taken in")
+	var taken := PawnActions.perform(sim, anna, "adopt:%d" % stray.id, stray.tile)
+	_check(taken["ok"] and stray.owner == "household" and stray.name != "" and stray.leader == anna.id, "and becomes the household's, with a name (%s)" % str(taken["message"]))
+	_check("Biscuit" in Fauna.kept_text(sim) or Fauna.kept_text(sim).contains(dog.name), "the household's animals are listed (%s)" % Fauna.kept_text(sim))
+
+	# A dog helps a hunt.
+	var plain_chance := 0.0
+	var with_dog := Fauna._hound_bonus(sim, anna)
+	_check(with_dog > 0.05, "a dog near the hunter improves their aim (+%.2f)" % with_dog)
+	world.remove_animal(dog.id)
+	_check(Fauna._hound_bonus(sim, anna) == plain_chance + 0.0 or Fauna._hound_bonus(sim, anna) < with_dog, "which a missing dog does not")
+
+	# Feeding.
+	var rations := Fauna.spawn(world, "horse", Vector2i(30, 30), rng, "household", WorldState.HOME_LOT)
+	rations.fed_day = GameClock.get_day_number() - 1
+	household.stock = { "grain": 3 }
+	notices.clear()
+	Fauna.new_day(sim, rng)
+	_check(household.stock_of("grain") == 2 and rations.hungry_days == 0 and rations.fed_day == GameClock.get_day_number(), "an animal eats from the stockpile")
+	household.stock = {}
+	for day in 4:
+		GameClock.set_time(GameClock.get_day_number() + 1, 0)
+		for line in Fauna.new_day(sim, rng):
+			notices.append(line)
+		if day == 1:
+			_check(rations.hungry_days == 2 and notices.any(func(t: String) -> bool: return "is hungry" in t), "left without food it grows hungry, and the household is told (%s)" % str(notices))
+	_check(rations.owner == "" and notices.any(func(t: String) -> bool: return "gone off" in t), "and after days of it goes off to find its own")
+
+	# Animals for sale at a hitching post.
+	world.lots.append({ "id": "lot_2", "kind": "stable", "name": "Stable", "template": "stable", "facing": "south", "rect": Rect2i(80, 5, 12, 8), "public": true, "town": "none" })
+	var post := world.add_object("hitching_post", Vector2i(84, 8))
+	household.coins = 100
+	var market := PawnActions.list_for(sim, anna, post.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("buyanimal:"))
+	_check(market.size() == tame.size() and "Buy a horse (90d)" in str(market[0]["label"]), "the hitching post lists what it sells (%d)" % market.size())
+	var bought := PawnActions.perform(sim, anna, str(market[0]["id"]), post.tile)
+	var horses := world.animals.filter(func(a: Animal) -> bool: return a.kind == "horse" and a.owner == "household" and a.leader == anna.id)
+	_check(bought["ok"] and household.coins == 10 and not horses.is_empty(), "buying one costs its price and it follows the buyer (%s)" % str(bought["message"]))
+	_check(not PawnActions.perform(sim, anna, "buyanimal:donkey:%d" % post.id, post.tile)["ok"], "an empty purse buys nothing")
+	var kept_limit := true
+	household.coins = 1000
+	for i in 8:
+		var result := PawnActions.perform(sim, anna, "buyanimal:cat:%d" % post.id, post.tile)
+		if Fauna.kept_by(sim).size() > Fauna.MAX_KEPT:
+			kept_limit = false
+	_check(kept_limit and Fauna.kept_by(sim).size() == Fauna.MAX_KEPT, "a household keeps only so many (%d)" % Fauna.kept_by(sim).size())
+
+	# They are saved: a rider and their horse come back together.
+	var rider := Pawn.from_dict(ben.to_dict())
+	Fauna.mount(sim, ben, horse)
+	var again := Pawn.from_dict(ben.to_dict())
+	var tame_saved := Animal.from_dict(horse.to_dict())
+	_check(again.mount == horse.id and tame_saved.rider == ben.id and tame_saved.kind == "horse" and tame_saved.name == horse.name and rider.mount == 0, "a rider and their horse are saved")
+	Fauna.dismount(sim, ben)
+
+	# The wilds are restocked a little each day.
+	var stocked := RegionGenerator.generate(7)
+	var before := stocked.animals.size()
+	for animal in stocked.animals.duplicate():
+		if animal.kind == "deer":
+			stocked.remove_animal(animal.id)
+	var shortfall := stocked.animals.size()
+	for day in 12:
+		Fauna._restock(stocked, rng)
+	var deer_now := stocked.animals.filter(func(a: Animal) -> bool: return a.kind == "deer").size()
+	_check(deer_now >= 8 and stocked.animals.size() > shortfall and stocked.animals.size() <= before + 12, "deer thinned out by hunters come back in time (%d)" % deer_now)
+
+
+func _chebyshev(a: Vector2i, b: Vector2i) -> int:
+	return maxi(absi(a.x - b.x), absi(a.y - b.y))
 
 
 func _test_events() -> void:

@@ -1,6 +1,6 @@
 # Common Folk: roadmap
 
-Milestones 1 to 19 are done. This file keeps the plan for 12 to 19 as it was built, and what comes next (20 to 25). Each milestone ended with the game playable, the smoke test passing and older saves still loading.
+Milestones 1 to 20 are done. This file keeps the plan for 12 to 20 as it was built, and what comes next (21 to 25). Each milestone ended with the game playable, the smoke test passing and older saves still loading.
 
 ## What the people are called
 
@@ -83,11 +83,20 @@ Folk are born, grow up, grow old and die, as in the Sims, with a medieval face o
 - **A married household**: the couple share a home (the one with a spare bed takes the other in, and a townsperson who marries one of your folk joins your household), the wife takes her husband's surname (a rule in the data; the name she was born with is kept and shows as "née"), and a marriage lasts until one of them dies, when the other is a widow or widower and free to marry again
 - The town's own couples who share a home marry by themselves, and you hear of it if you know them
 
+## Milestone 20: Animals (done)
+
+- **Wild game**: rabbits, deer, boar and wolves live in the forest, graze, and run from people who come near (more so once startled). The wilds are stocked when a world is made and thin out and fill again over the days
+- **Hunting**: with a bow (bought, or carved at a workbench) right-click an animal to hunt it. The hunter creeps up, shoots when in range (skill, distance and the animal's quickness decide the hit; a dog of the household helps) and brings home meat and hides. A wounded **boar** turns on its hunter; **wolves** come for people out alone in the dark. Hunting is a skill (more from each kill, fewer injuries)
+- **Mounts**: a horse (or donkey) can be ridden: the rider travels at more than twice the pace, sits above the animal, and gets down when they reach a bed or a job or have stood about a while. Animal care makes a better rider
+- **Pack animals**: lead a donkey or ox and it follows; at a work site it carries a share of the load again, so a gatherer brings home half as much again (an ox, twice as much)
+- **Pets and strays**: dogs and cats, owned by many of the town's households, and strays in every street. Make a fuss of one (a lift to the spirits), take a stray in
+- **Stables** in the larger settlements, with a hitching post that sells horses, donkeys, oxen, dogs and cats, and a stablehand's job
+- Your animals have names, eat from the stockpile (grain for the beasts, meat or fish for pets) and go off to fend for themselves if they are left hungry for days. They are listed under the stockpile
+
 ## The plan from here
 
-Six milestones, in the order that lets each one build on the last. Each ends with the game playable, the smoke test passing and older saves still loading.
+Five milestones, in the order that lets each one build on the last. Each ends with the game playable, the smoke test passing and older saves still loading.
 
-- **20 Animals**: wild game to hunt, draught and pack animals and mounts that carry goods and people, pets and livestock
 - **21 Builders and rooms**: building as a job, with materials hauled to the site; rooms, roofs and the indoor/outdoor difference
 - **22 Traders and goods**: caravans on the roads, a wider list of goods made at workshops (flour and bread, planks, tools, cloth, iron) and sold
 - **23 Ambitions**: a lifetime aspiration for each of your folk and small wishes that come and go

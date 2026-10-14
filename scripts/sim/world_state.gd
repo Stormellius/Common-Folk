@@ -49,7 +49,13 @@ var fires: Dictionary = {}
 ## One entry for each of the dead who lies in a grave (see Mortality): { "name", "look", "grave":
 ## [x, y], "restless": bool, "haunt_until": tick }.
 var spirits: Array[Dictionary] = []
+## The animals (see Fauna), wild and tame, and whether the wilds have been stocked yet (a game saved
+## before there were animals is stocked when it is loaded).
+var animals: Array[Animal] = []
+var fauna_seeded := false
 
+var _next_animal_id := 1
+var _animal_by_id := {}  # animal id -> Animal
 var _next_object_id := 1
 var _object_at_tile := {}  # Vector2i -> PlacedObject
 var _object_by_id := {}  # object id -> PlacedObject
@@ -104,6 +110,35 @@ func is_ground_walkable(x: int, y: int) -> bool:
 
 func object_at(tile: Vector2i) -> PlacedObject:
 	return _object_at_tile.get(tile)
+
+
+## Puts an animal in the world and gives it an id.
+func add_animal(animal: Animal) -> Animal:
+	animal.id = _next_animal_id
+	_next_animal_id += 1
+	animals.append(animal)
+	_animal_by_id[animal.id] = animal
+	return animal
+
+
+func remove_animal(id: int) -> void:
+	var animal: Animal = _animal_by_id.get(id)
+	if animal != null:
+		animals.erase(animal)
+		_animal_by_id.erase(id)
+
+
+func get_animal(id: int) -> Animal:
+	return _animal_by_id.get(id)
+
+
+## The animals standing on (or stepping onto) a tile.
+func animals_at(tile: Vector2i) -> Array[Animal]:
+	var found: Array[Animal] = []
+	for animal in animals:
+		if animal.tile == tile or (animal.is_moving() and animal.step_to == tile):
+			found.append(animal)
+	return found
 
 
 func get_object(id: int) -> PlacedObject:
@@ -358,6 +393,9 @@ func to_dict() -> Dictionary:
 		"lifespan": lifespan,
 		"spirits": spirits.duplicate(true),
 		"fires": fires.keys().map(func(tile: Vector2i) -> Array: return [tile.x, tile.y, int(fires[tile]["since"]), int(fires[tile]["fuel"])]),
+		"animals": animals.map(func(animal: Animal) -> Dictionary: return animal.to_dict()),
+		"next_animal_id": _next_animal_id,
+		"fauna_seeded": fauna_seeded,
 	}
 
 
@@ -416,6 +454,15 @@ static func from_dict(data: Dictionary) -> WorldState:
 	for saved in data.get("fires", []):
 		if saved is Array and saved.size() >= 4:
 			world.fires[Vector2i(int(saved[0]), int(saved[1]))] = { "since": int(saved[2]), "fuel": int(saved[3]) }
+	for saved in data.get("animals", []):
+		if saved is Dictionary:
+			var animal := Animal.from_dict(saved)
+			if DataRegistry.has_def("animals", animal.kind):
+				world.animals.append(animal)
+				world._animal_by_id[animal.id] = animal
+				world._next_animal_id = maxi(world._next_animal_id, animal.id + 1)
+	world._next_animal_id = maxi(world._next_animal_id, int(data.get("next_animal_id", 1)))
+	world.fauna_seeded = bool(data.get("fauna_seeded", false))
 	var saved_lifespan := str(data.get("lifespan", "calendar"))
 	world.lifespan = saved_lifespan if DataRegistry.has_def("lifespans", saved_lifespan) else "calendar"
 	for saved in data.get("spirits", []):

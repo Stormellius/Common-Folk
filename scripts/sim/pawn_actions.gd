@@ -33,6 +33,14 @@ const FIRE_ACTION := "fight_fire"
 const TREAT_PREFIX := "treat:"       # "treat:<patient's id>"
 const CRAFT_PREFIX := "craft:"       # "craft:<recipe id>:<object id>"
 const BUY_PREFIX := "buy:"           # "buy:<tool or good id>"
+const HUNT_PREFIX := "hunt:"         # "hunt:<animal id>"
+const PET_PREFIX := "pet:"           # "pet:<animal id>"
+const RIDE_PREFIX := "ride:"         # "ride:<animal id>"
+const LEAD_PREFIX := "lead:"         # "lead:<animal id>"
+const WAIT_PREFIX := "wait:"         # "wait:<animal id>": stop leading it
+const ADOPT_PREFIX := "adopt:"       # "adopt:<animal id>"
+const BUYANIMAL_PREFIX := "buyanimal:"  # "buyanimal:<kind>:<hitching post id>"
+const DISMOUNT := "dismount"
 const WED_PREFIX := "wed:"           # "wed:<fiancé(e)'s id>"
 const FUND_STEPS := [10, 50]
 
@@ -77,6 +85,13 @@ static func list_for(sim: Simulation, pawn: Pawn, tile: Vector2i) -> Array[Dicti
 		for amount in FUND_STEPS:
 			var short: bool = amount > sim.household.coins
 			actions.append(_entry(FUND_PREFIX + str(amount), "Give %s to the town's defense fund (now %s)" % [Economy.format(amount), Economy.format(sim.realm.fund)], not short, "you only have %s" % Economy.format(sim.household.coins) if short else ""))
+	if placed != null and bool(placed.def().get("sells_animals", false)):
+		actions.append_array(_animal_market_entries(sim, pawn, placed))
+	for animal in sim.world.animals_at(tile):
+		actions.append_array(_animal_entries(sim, pawn, animal))
+	if pawn.mount != 0:
+		var steed := sim.world.get_animal(pawn.mount)
+		actions.append(_entry(DISMOUNT, "Get down from %s" % steed.title() if steed != null else "Get down"))
 	if sim.world.fires.has(tile):
 		var fire_blocker := sim.extinguish_blocker(pawn, tile)
 		actions.append(_entry(FIRE_ACTION, "Beat out the flames", fire_blocker == "", fire_blocker))
@@ -161,6 +176,47 @@ static func _sell_entries(sim: Simulation, pawn: Pawn) -> Array[Dictionary]:
 		var short := price > sim.coins_of(pawn)
 		var reason := "only your own folk buy for the household" if sim.household.get_pawn(pawn.id) == null else ("can't afford it" if short else "")
 		entries.append(_entry(BUY_PREFIX + item_id, "Buy %s (%s)" % [Economy.item_phrase(item_id), Economy.format(price)], reason == "", reason))
+	return entries
+
+
+## What can be done about an animal on the tile: hunt it, pet it, ride it, lead it, take it in.
+static func _animal_entries(sim: Simulation, pawn: Pawn, animal: Animal) -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	var def := animal.def()
+	var title := animal.title()
+	if animal.is_wild():
+		var yields: Dictionary = def.get("yields", {})
+		if not yields.is_empty():
+			var blocker := Fauna.hunt_blocker(sim, pawn, animal)
+			var danger := " (dangerous)" if def.has("fights_back") or def.has("hostile") else ""
+			entries.append(_entry(HUNT_PREFIX + str(animal.id), "Hunt %s (+%s)%s" % [title, Economy.stock_text(yields), danger], blocker == "", blocker))
+		return entries
+	var pet_blocker := Fauna.pet_blocker(sim, pawn, animal)
+	entries.append(_entry(PET_PREFIX + str(animal.id), "Make a fuss of %s" % title, pet_blocker == "", pet_blocker))
+	if animal.owner == "":
+		var adopt_blocker := Fauna.adopt_blocker(sim, pawn, animal)
+		entries.append(_entry(ADOPT_PREFIX + str(animal.id), "Take in %s" % title, adopt_blocker == "", adopt_blocker))
+	if animal.owner == "household":
+		if float(def.get("ride", 0.0)) > 0.0:
+			var ride_blocker := Fauna.ride_blocker(sim, pawn, animal)
+			entries.append(_entry(RIDE_PREFIX + str(animal.id), "Ride %s" % title, ride_blocker == "", ride_blocker))
+		var lead_blocker := Fauna.lead_blocker(sim, pawn, animal)
+		if animal.leader == pawn.id:
+			entries.append(_entry(WAIT_PREFIX + str(animal.id), "Tell %s to wait here" % title, lead_blocker == "", lead_blocker))
+		else:
+			entries.append(_entry(LEAD_PREFIX + str(animal.id), "Lead %s" % title if not animal.is_pet() else "Call %s to follow" % title, lead_blocker == "", lead_blocker))
+	return entries
+
+
+## Animals for sale at a hitching post, each with its price.
+static func _animal_market_entries(sim: Simulation, pawn: Pawn, post: PlacedObject) -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	for kind in Fauna.kinds("domestic"):
+		var price := int(Fauna.def_of(kind).get("price", 0))
+		if price <= 0:
+			continue
+		var blocker := Fauna.buy_blocker(sim, pawn, kind)
+		entries.append(_entry(BUYANIMAL_PREFIX + "%s:%d" % [kind, post.id], "Buy %s %s (%s)" % ["an" if str(Fauna.def_of(kind).get("name", kind)).substr(0, 1) in ["A", "E", "I", "O", "U"] else "a", str(Fauna.def_of(kind).get("name", kind)).to_lower(), Economy.format(price)], blocker == "", blocker))
 	return entries
 
 
@@ -309,6 +365,18 @@ static func _perform(sim: Simulation, pawn: Pawn, action_id: String, tile: Vecto
 			return { "ok": false, "message": "Can't move back: %s" % home_blocker }
 		sim.health_notice.emit(Romance.move_home(sim, pawn))
 		return { "ok": true, "message": "" }
+	if action_id == DISMOUNT:
+		Fauna.dismount(sim, pawn)
+		return { "ok": true, "message": "" }
+	if action_id.begins_with(HUNT_PREFIX) or action_id.begins_with(PET_PREFIX) or action_id.begins_with(RIDE_PREFIX) \
+			or action_id.begins_with(LEAD_PREFIX) or action_id.begins_with(WAIT_PREFIX) or action_id.begins_with(ADOPT_PREFIX):
+		return _animal_action(sim, pawn, action_id)
+	if action_id.begins_with(BUYANIMAL_PREFIX):
+		var buy_parts := action_id.trim_prefix(BUYANIMAL_PREFIX).split(":")
+		var post := sim.world.get_object(int(buy_parts[1])) if buy_parts.size() == 2 else null
+		if post == null:
+			return { "ok": false, "message": "That is gone" }
+		return Fauna.buy(sim, pawn, post, buy_parts[0], sim.rng())
 	if action_id.begins_with(WED_PREFIX):
 		var betrothed := sim.person(int(action_id.trim_prefix(WED_PREFIX)))
 		return Romance.order_wedding(sim, pawn, betrothed) if betrothed != null else { "ok": false, "message": "They are not here" }
@@ -349,6 +417,35 @@ static func _perform(sim: Simulation, pawn: Pawn, action_id: String, tile: Vecto
 		if other == null:
 			return { "ok": false, "message": "That person is not here" }
 		return sim.order_interact(pawn, other, parts[0])
+	return { "ok": false, "message": "Unknown action" }
+
+
+static func _animal_action(sim: Simulation, pawn: Pawn, action_id: String) -> Dictionary:
+	var verb := action_id.get_slice(":", 0) + ":"
+	var animal := sim.world.get_animal(int(action_id.get_slice(":", 1)))
+	if animal == null:
+		return { "ok": false, "message": "It has gone" }
+	match verb:
+		HUNT_PREFIX:
+			return Fauna.order_hunt(sim, pawn, animal)
+		PET_PREFIX:
+			return Fauna.order_pet(sim, pawn, animal)
+		RIDE_PREFIX:
+			return Fauna.order_ride(sim, pawn, animal)
+		LEAD_PREFIX:
+			var lead_blocker := Fauna.lead_blocker(sim, pawn, animal)
+			if lead_blocker != "":
+				return { "ok": false, "message": "Can't lead it: %s" % lead_blocker }
+			Fauna.lead(animal, pawn)
+			return { "ok": true, "message": "%s follows %s." % [animal.display_name(), pawn.display_name.get_slice(" ", 0)] }
+		WAIT_PREFIX:
+			Fauna.release(animal)
+			return { "ok": true, "message": "%s will wait here." % animal.display_name() }
+		ADOPT_PREFIX:
+			var adopt_blocker := Fauna.adopt_blocker(sim, pawn, animal)
+			if adopt_blocker != "":
+				return { "ok": false, "message": "Can't take it in: %s" % adopt_blocker }
+			return { "ok": true, "message": Fauna.adopt(sim, pawn, animal, sim.rng()) }
 	return { "ok": false, "message": "Unknown action" }
 
 

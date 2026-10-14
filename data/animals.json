@@ -1,0 +1,19 @@
+[
+  {"id": "rabbit", "name": "Rabbit", "type": "wild", "habitat": ["grass", "forest"], "target": 26, "move_ticks": 1.5, "alert": 6, "flee_minutes": 25, "flee_distance": 16, "wander": 0.1, "hp": 1, "evade": 0.18, "yields": {"meat": 1}, "art": {"body": [11, 7], "head": 4.2, "colors": ["#a99070", "#8f7a5c", "#b9a58a"], "belly": "#e6dcc8", "ears": "long", "tail": "tuft"}},
+
+  {"id": "deer", "name": "Deer", "type": "wild", "habitat": ["grass", "forest"], "target": 16, "move_ticks": 2.0, "alert": 7, "flee_minutes": 30, "flee_distance": 20, "wander": 0.08, "hp": 2, "evade": 0.08, "yields": {"meat": 3, "hide": 2}, "art": {"body": [24, 11], "head": 6.0, "colors": ["#a8794a", "#9a6c40"], "belly": "#e2c9a0", "ears": "point", "tail": "white", "antlers": true, "neck": 6.0}},
+
+  {"id": "boar", "name": "Boar", "type": "wild", "habitat": ["forest"], "target": 9, "move_ticks": 2.4, "alert": 5, "flee_minutes": 20, "flee_distance": 14, "wander": 0.07, "hp": 2, "evade": 0.0, "yields": {"meat": 3, "hide": 1}, "fights_back": {"chance": 0.3, "death_share": 0.08, "text": "was gored by a boar", "death_cause": "was gored by a boar", "mood": "attacked"}, "art": {"body": [22, 13], "head": 7.0, "colors": ["#5d4636", "#4e3b2e"], "belly": "#7a5f49", "ears": "point", "tail": "thin", "tusks": true}},
+
+  {"id": "wolf", "name": "Wolf", "type": "wild", "habitat": ["forest"], "target": 4, "move_ticks": 2.0, "alert": 8, "flee_minutes": 30, "flee_distance": 18, "wander": 0.06, "hp": 2, "evade": 0.05, "yields": {"hide": 2}, "hostile": {"from_hour": 19, "to_hour": 5, "radius": 10, "chance": 0.5, "death_share": 0.1, "text": "was savaged by a wolf", "death_cause": "was killed by a wolf", "mood": "attacked", "keep_from_towns": 16}, "art": {"body": [22, 10], "head": 6.2, "colors": ["#7c7f86", "#6c6e74"], "belly": "#c3c5c8", "ears": "point", "tail": "bushy"}},
+
+  {"id": "horse", "name": "Horse", "type": "domestic", "price": 90, "ride": 0.42, "carry": 0.3, "move_ticks": 2.0, "eats": ["grain"], "ration_days": 1, "wander": 0.02, "art": {"body": [28, 12], "head": 7.0, "colors": ["#7a4a2a", "#a05a2a", "#9a9a9a", "#2e2926", "#c9a15a"], "belly": "#00000000", "ears": "point", "tail": "flow", "mane": true, "saddle": true, "neck": 6.0}},
+
+  {"id": "donkey", "name": "Donkey", "type": "domestic", "price": 45, "ride": 0.62, "carry": 0.5, "move_ticks": 2.6, "eats": ["grain"], "ration_days": 1, "wander": 0.02, "art": {"body": [22, 11], "head": 6.5, "colors": ["#8c8478", "#756e63"], "belly": "#bdb6a8", "ears": "long", "tail": "thin", "panniers": true, "neck": 4.0}},
+
+  {"id": "ox", "name": "Ox", "type": "domestic", "price": 60, "ride": 0.0, "carry": 1.0, "move_ticks": 4.0, "eats": ["grain"], "ration_days": 1, "wander": 0.01, "art": {"body": [28, 15], "head": 7.5, "colors": ["#6d5036", "#8b6a47"], "belly": "#a58762", "ears": "point", "tail": "thin", "horns": true, "panniers": true, "neck": 2.0}},
+
+  {"id": "dog", "name": "Dog", "type": "domestic", "pet": true, "price": 20, "helps_hunt": 0.12, "move_ticks": 1.8, "eats": ["meat", "fish", "grain"], "ration_days": 2, "wander": 0.12, "art": {"body": [15, 8], "head": 5.0, "colors": ["#9a6a3a", "#2e2a28", "#c8b48c", "#7c7060"], "belly": "#e6dcc8", "ears": "floppy", "tail": "curl"}},
+
+  {"id": "cat", "name": "Cat", "type": "domestic", "pet": true, "price": 8, "move_ticks": 2.2, "eats": ["fish", "meat", "grain"], "ration_days": 2, "wander": 0.1, "art": {"body": [11, 6], "head": 4.2, "colors": ["#c9803a", "#8a8a90", "#2a2a2e", "#a58a62"], "belly": "#efe6d4", "ears": "point", "tail": "long"}}
+]

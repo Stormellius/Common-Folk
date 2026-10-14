@@ -2,7 +2,7 @@
 
 A medieval life sim sandbox with a RimWorld look, made in Godot 4.4. You play one of your **folk** at a time in a generated region of towns that carries on without you. They work, court, raise children, grow old and die, and the family goes on.
 
-Milestones 1 to 19 are done; the plan from here is in [ROADMAP.md](ROADMAP.md). The data files and how to mod them are in [docs/DATA.md](docs/DATA.md).
+Milestones 1 to 20 are done; the plan from here is in [ROADMAP.md](ROADMAP.md). The data files and how to mod them are in [docs/DATA.md](docs/DATA.md).
 
 ## Run it
 
@@ -45,6 +45,8 @@ You control one of your folk. Left-click a person (or their portrait, or press T
 **Work, resources and money.** A shared purse, jobs at the shop, tavern, clinic and green with shifts and wages, and **work sites** at the edge of every town: fields (grain ripens in summer and autumn), a woodlot, a quarry, an herb garden and, by the lake, a jetty. Take a job there, or right-click a chopping block, a field or a quarry face to gather for your own stockpile. What you gather can be sold at a shop counter (more on market day) or used in building: a bed takes wood, a stone wall stone, and what you lack is bought at the shop's price. Besides that, quarter-day tax on land, titles (freehold or leasehold), the Merchants' Guild and business lots of your own, decrees, and eviction if you cannot pay.
 
 **Skills and tools.** Eleven skills (woodcutting, mining, farming, fishing, herbalism, cooking, healing, carpentry, smithing, music, trading) grow with practice, to ten levels, and make a person better at the work: bigger hauls, fewer accidents, faster crafting. The young learn quickly, folk with a talent quicker, and an apprentice beside a master twice as fast. Trades pass down families (children inherit talents and the family's trade) and anyone can ask a better hand for a lesson. Work needs the right tool in hand: an axe, a pickaxe, a sickle, a fishing rod and so on, taken from the household's stockpile, worn by use and put back after. Buy them at a shop's tool rack, or forge and carve them at a smithy or workshop's forge and bench.
+
+**Animals.** Rabbits, deer, boar and wolves live in the forest and run from people. With a bow, right-click one to hunt it: the hunter creeps up and shoots, and brings home meat and hides to sell, but a wounded boar turns on its hunter and wolves come for people out alone at night. Buy horses, donkeys, oxen, dogs and cats at a stable's hitching post, or take in a stray. Ride a horse across the map in a third of the time, lead a donkey or ox to a work site to bring home a bigger load, take a dog hunting, and make a fuss of your pets. Your animals eat from the stockpile and wander off if they go hungry.
 
 **Town life.** Festivals, market days, cold snaps and services; the chapel and faith; raids worked out off-screen against the town's defence. People chat and quarrel and remember it.
 

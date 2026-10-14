@@ -88,6 +88,7 @@ var job_object := 0          # id of the PlacedObject being used
 var job_stage := ""          # "walking" on the way there, "using" once started
 var job_tile := Vector2i.ZERO  # where the person stands while using it
 var job_target := Vector2i.ZERO  # what they are working on, when it is a tile (a fire to put out)
+var job_animal := 0          # id of the animal they are hunting, petting or going to ride
 var job_minutes := 0         # how long the use has gone on
 ## "" standing, or "lie" while sleeping. Set by the simulation, read by the view.
 var pose := ""
@@ -137,6 +138,10 @@ var tool := ""
 var tool_lent := false
 var job_recipe := ""
 var mentor_gain := 1.0
+## The animal they ride (0 for none), and how much each step costs: 1 on foot, less on a horse, more
+## when stalking game (worked out again from those two, so not saved).
+var mount := 0
+var pace := 1.0
 ## Ticks to wait before looking for something to do about a need again.
 var think_cooldown := 0
 
@@ -244,6 +249,7 @@ func tick(world: WorldState) -> void:
 		if slowed:
 			cost *= 1.5
 		cost *= Life.walk_multiplier(self)  # elders take their time
+		cost *= pace  # a horse is quicker, stalking slower
 		step_to = next
 		step_ticks_total = maxi(1, roundi(cost))
 		step_ticks_done = 0
@@ -331,6 +337,8 @@ func to_dict() -> Dictionary:
 		"job_stage": job_stage,
 		"job_tile": _vec_to_array(job_tile),
 		"job_target": _vec_to_array(job_target),
+		"job_animal": job_animal,
+		"mount": mount,
 		"job_minutes": job_minutes,
 		"pose": pose,
 		"think": think_cooldown,
@@ -445,6 +453,8 @@ static func from_dict(data: Dictionary) -> Pawn:
 	pawn.job_stage = str(data.get("job_stage", ""))
 	pawn.job_tile = _array_to_vec(data.get("job_tile", [0, 0]))
 	pawn.job_target = _array_to_vec(data.get("job_target", [0, 0]))
+	pawn.job_animal = int(data.get("job_animal", 0))
+	pawn.mount = int(data.get("mount", 0))
 	pawn.job_minutes = int(data.get("job_minutes", 0))
 	pawn.pose = str(data.get("pose", ""))
 	pawn.think_cooldown = int(data.get("think", 0))
