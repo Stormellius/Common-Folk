@@ -12,7 +12,11 @@ static func roll(sim: Simulation, pawn: Pawn, object_def: Dictionary, rng: Rando
 	var risk: Variant = object_def.get("accident")
 	if not risk is Dictionary or pawn.is_dying():
 		return ""
-	if rng.randf() >= float(risk.get("chance_per_hour", 0.0)) / 60.0:
+	var chance := float(risk.get("chance_per_hour", 0.0)) / 60.0
+	var skill_id := str(object_def.get("skill", ""))
+	if skill_id != "":
+		chance *= Skills.safety_multiplier(pawn, skill_id)  # the practised are hurt less often
+	if rng.randf() >= chance:
 		return ""
 	var mine := sim.household.get_pawn(pawn.id) != null
 	var name := pawn.display_name.get_slice(" ", 0)

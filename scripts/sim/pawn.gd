@@ -120,6 +120,17 @@ var parents: Array[int] = []
 var immune: Dictionary = {}
 var treated_until := 0
 var fire_minutes := 0
+## Skills (see Skills): xp by skill id; the skills they take to naturally; the skill their parents
+## were best at, which they learn the basics of when they grow up; the tool in their hand (and whether
+## the employer lent it); the recipe they are making at a forge or bench; and, not saved, how much
+## faster a master nearby has them learning.
+var skills: Dictionary = {}
+var talents: Array[String] = []
+var family_trade := ""
+var tool := ""
+var tool_lent := false
+var job_recipe := ""
+var mentor_gain := 1.0
 ## Ticks to wait before looking for something to do about a need again.
 var think_cooldown := 0
 
@@ -271,6 +282,12 @@ func to_dict() -> Dictionary:
 		"immune": immune.duplicate(),
 		"treated_until": treated_until,
 		"fire_minutes": fire_minutes,
+		"skills": _rounded(skills),
+		"talents": Array(talents),
+		"family_trade": family_trade,
+		"tool": tool,
+		"tool_lent": tool_lent,
+		"job_recipe": job_recipe,
 		"look": look.duplicate(),
 		"tile": _vec_to_array(tile),
 		"facing": _vec_to_array(facing),
@@ -355,6 +372,16 @@ static func from_dict(data: Dictionary) -> Pawn:
 			pawn.immune[str(illness_id)] = int(saved_immune[illness_id])
 	pawn.treated_until = int(data.get("treated_until", 0))
 	pawn.fire_minutes = int(data.get("fire_minutes", 0))
+	var saved_skills: Variant = data.get("skills", {})
+	if saved_skills is Dictionary:
+		for skill_id in saved_skills:
+			pawn.skills[str(skill_id)] = float(saved_skills[skill_id])
+	for talent in data.get("talents", []):
+		pawn.talents.append(str(talent))
+	pawn.family_trade = str(data.get("family_trade", ""))
+	pawn.tool = str(data.get("tool", ""))
+	pawn.tool_lent = bool(data.get("tool_lent", false))
+	pawn.job_recipe = str(data.get("job_recipe", ""))
 	var saved_look: Variant = data.get("look", {})
 	pawn.look = saved_look.duplicate() if saved_look is Dictionary else {}
 	if pawn.look.has("hair_style"):

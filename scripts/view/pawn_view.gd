@@ -92,6 +92,8 @@ func _draw() -> void:
 		draw_set_transform(Vector2(0.0, 4.0) * u, -0.35 if pawn.id % 2 == 0 else 0.35, Vector2.ONE)
 	PawnArt.draw(self, pawn.look, pawn.facing, u, _phase, asleep or fallen, PawnArt.outfit_for(pawn), breath)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	if pawn.tool != "" and not fallen and not asleep:
+		PawnArt.draw_tool(self, pawn.tool, pawn.facing, u, Time.get_ticks_msec() / 1000.0 + pawn.id, pawn.job_stage == "using")
 	if asleep:
 		_draw_blanket_and_zzz(u)
 	elif Babies.is_crying(pawn):

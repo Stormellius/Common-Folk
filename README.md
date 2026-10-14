@@ -2,7 +2,7 @@
 
 A medieval life sim sandbox with a RimWorld look, made in Godot 4.4. You play one of your **folk** at a time in a generated region of towns that carries on without you. They work, court, raise children, grow old and die, and the family goes on.
 
-Milestones 1 to 17 are done; the plan from here is in [ROADMAP.md](ROADMAP.md). The data files and how to mod them are in [docs/DATA.md](docs/DATA.md).
+Milestones 1 to 18 are done; the plan from here is in [ROADMAP.md](ROADMAP.md). The data files and how to mod them are in [docs/DATA.md](docs/DATA.md).
 
 ## Run it
 
@@ -32,7 +32,7 @@ You control one of your folk. Left-click a person (or their portrait, or press T
 
 ## What is in the game
 
-**The world.** A 480 by 320 tile map of forest, lakes and rock with five settlements: your own town in the middle (cobbled streets crossing at a market square with a well and stalls, side streets of houses, inns, shops, a clinic, chapels, a green, lanterns and gardens) and a market town, two villages (one by a lake with a pier) and a hamlet a long walk away. Earth roads join them, going round water or crossing it on plank bridges. Every settlement has a name and its own people, who live and work there. The same seed always gives the same world.
+**The world.** A 480 by 320 tile map of forest, lakes and rock with five settlements: your own town in the middle (cobbled streets crossing at a market square with a well and stalls, side streets of houses, inns, shops, a clinic, chapels, a green, lanterns and gardens) and a market town, two villages (one by a lake with a pier) and a hamlet a long walk away. The larger ones have a smithy, and the towns a carpenter too. Earth roads join them, going round water or crossing it on plank bridges. Every settlement has a name and its own people, who live and work there. The same seed always gives the same world.
 
 **Your folk.** Names, looks and traits come from the seed. Needs (hunger, rest, warmth, hygiene, toilet, social, fun, faith, libido) drain over time and feed a mood built from timed thoughts; an empty need slows a person down and some kill. Three ways to begin: bought land, an inherited cottage, or arriving with nothing.
 
@@ -43,6 +43,8 @@ You control one of your folk. Left-click a person (or their portrait, or press T
 **Love.** Flirt, kiss and ask out someone you are drawn to (orientation is a trait; family and people already taken are out of reach). Dating couples go on dates to the green, the tavern or the chapel. A partner can move in with you, or you can move in with them, and a break-up sends whoever moved in back home. The town's own people pair up, move in and have children without you.
 
 **Work, resources and money.** A shared purse, jobs at the shop, tavern, clinic and green with shifts and wages, and **work sites** at the edge of every town: fields (grain ripens in summer and autumn), a woodlot, a quarry, an herb garden and, by the lake, a jetty. Take a job there, or right-click a chopping block, a field or a quarry face to gather for your own stockpile. What you gather can be sold at a shop counter (more on market day) or used in building: a bed takes wood, a stone wall stone, and what you lack is bought at the shop's price. Besides that, quarter-day tax on land, titles (freehold or leasehold), the Merchants' Guild and business lots of your own, decrees, and eviction if you cannot pay.
+
+**Skills and tools.** Eleven skills (woodcutting, mining, farming, fishing, herbalism, cooking, healing, carpentry, smithing, music, trading) grow with practice, to ten levels, and make a person better at the work: bigger hauls, fewer accidents, faster crafting. The young learn quickly, folk with a talent quicker, and an apprentice beside a master twice as fast. Trades pass down families (children inherit talents and the family's trade) and anyone can ask a better hand for a lesson. Work needs the right tool in hand: an axe, a pickaxe, a sickle, a fishing rod and so on, taken from the household's stockpile, worn by use and put back after. Buy them at a shop's tool rack, or forge and carve them at a smithy or workshop's forge and bench.
 
 **Town life.** Festivals, market days, cold snaps and services; the chapel and faith; raids worked out off-screen against the town's defence. People chat and quarrel and remember it.
 

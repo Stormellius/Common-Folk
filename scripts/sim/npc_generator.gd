@@ -49,7 +49,20 @@ static func create(world: WorldState) -> Household:
 				progress = true
 	for pawn in town.pawns:  # the grand houses hold gentry, everyone else starts as a peasant
 		pawn.class_id = str(_template(str(world.get_lot(pawn.home_lot).get("template", ""))).get("class", "peasant"))
+	for pawn in town.pawns:
+		Skills.seed_pawn(pawn, rng)
 	_assign_jobs(world, town, rng)
+	for pawn in town.pawns:
+		if pawn.work_job != "":
+			Skills.seed_for_job(pawn, DataRegistry.get_def("jobs", pawn.work_job), rng)
+	for home in homes:  # children are heirs to the family's best trade
+		var grown: Array[Pawn] = []
+		var young: Array[Pawn] = []
+		for pawn in town.pawns:
+			if pawn.home_lot == str(home["lot"]["id"]):
+				(grown if pawn.adult else young).append(pawn)
+		for child in young:
+			Skills.inherit(child, grown, rng)
 	for home in homes:  # a family with someone in trade ranks as burghers
 		var in_trade := false
 		for pawn in town.pawns:

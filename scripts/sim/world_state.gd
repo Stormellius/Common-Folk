@@ -52,6 +52,7 @@ var spirits: Array[Dictionary] = []
 
 var _next_object_id := 1
 var _object_at_tile := {}  # Vector2i -> PlacedObject
+var _object_by_id := {}  # object id -> PlacedObject
 
 
 func _init(p_width: int = 0, p_height: int = 0, p_seed: int = 0, default_tile: String = "grass") -> void:
@@ -106,10 +107,7 @@ func object_at(tile: Vector2i) -> PlacedObject:
 
 
 func get_object(id: int) -> PlacedObject:
-	for placed in objects:
-		if placed.id == id:
-			return placed
-	return null
+	return _object_by_id.get(id)
 
 
 ## An object can go on any walkable ground that has no object yet.
@@ -129,6 +127,7 @@ func add_object(def_id: String, tile: Vector2i) -> PlacedObject:
 	placed.tile = tile
 	objects.append(placed)
 	_object_at_tile[tile] = placed
+	_object_by_id[placed.id] = placed
 	tile_changed.emit(tile)
 	return placed
 
@@ -141,6 +140,7 @@ func remove_object(id: int) -> bool:
 		return false
 	objects.erase(placed)
 	_object_at_tile.erase(placed.tile)
+	_object_by_id.erase(id)
 	tile_changed.emit(placed.tile)
 	return true
 
@@ -379,6 +379,7 @@ static func from_dict(data: Dictionary) -> WorldState:
 			if DataRegistry.has_def("objects", placed.def_id):
 				world.objects.append(placed)
 				world._object_at_tile[placed.tile] = placed
+				world._object_by_id[placed.id] = placed
 				world._next_object_id = maxi(world._next_object_id, placed.id + 1)
 	var saved_lot: Variant = data.get("lot")
 	if saved_lot is Array and saved_lot.size() >= 4:

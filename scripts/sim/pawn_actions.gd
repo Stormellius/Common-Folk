@@ -31,6 +31,8 @@ const MOVE_HOME := "move_home"
 const SELL_PREFIX := "sell:"         # "sell:<resource id>"
 const FIRE_ACTION := "fight_fire"
 const TREAT_PREFIX := "treat:"       # "treat:<patient's id>"
+const CRAFT_PREFIX := "craft:"       # "craft:<recipe id>:<object id>"
+const BUY_PREFIX := "buy:"           # "buy:<tool id>"
 const FUND_STEPS := [10, 50]
 
 
@@ -65,6 +67,10 @@ static func list_for(sim: Simulation, pawn: Pawn, tile: Vector2i) -> Array[Dicti
 		actions.append_array(_work_entries(sim, pawn, placed))
 	if placed != null and placed.def_id == "counter" and str(sim.world.lot_at(placed.tile).get("kind", "")) == "shop":
 		actions.append_array(_sell_entries(sim))
+	if placed != null and bool(placed.def().get("recipes", false)):
+		actions.append_array(_recipe_entries(sim, pawn, placed))
+	if placed != null and bool(placed.def().get("sells_tools", false)):
+		actions.append_array(_tool_entries(sim, pawn))
 	if placed != null and str(placed.def().get("offers_work", "")) == "town":
 		actions.append_array(_guild_entries(sim))
 		for amount in FUND_STEPS:
@@ -145,6 +151,28 @@ static func _sell_entries(sim: Simulation) -> Array[Dictionary]:
 			entries.append(_entry(SELL_PREFIX + resource_id, "Sell your %d %s (%s)" % [amount, Economy.resource_name(resource_id).to_lower(), Economy.format(sim.sale_price(resource_id))]))
 	if entries.is_empty():
 		entries.append(_entry("none", "Sell goods", false, "you have nothing gathered to sell"))
+	return entries
+
+
+## What can be made at a forge or workbench: one entry for each recipe, with what it takes.
+static func _recipe_entries(sim: Simulation, pawn: Pawn, placed: PlacedObject) -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	for recipe in Skills.recipes_for(placed.def_id):
+		var blocker := sim.craft_blocker(pawn, placed, recipe)
+		var label := "%s (%s)" % [str(recipe.get("name", recipe["id"])), Skills.inputs_text(recipe)]
+		entries.append(_entry(CRAFT_PREFIX + "%s:%d" % [recipe["id"], placed.id], label, blocker == "", blocker))
+	return entries
+
+
+## Tools for sale on a shop's rack, each with its price.
+static func _tool_entries(sim: Simulation, pawn: Pawn) -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	var yours := sim.household.get_pawn(pawn.id) != null
+	for tool_id in Skills.tool_ids():
+		var price := Skills.tool_price(tool_id)
+		var short := price > sim.coins_of(pawn)
+		var reason := "only your own folk buy for the household" if not yours else ("can't afford it" if short else "")
+		entries.append(_entry(BUY_PREFIX + tool_id, "Buy %s (%s)" % [Skills.tool_phrase(tool_id), Economy.format(price)], reason == "", reason))
 	return entries
 
 
@@ -257,6 +285,14 @@ static func _perform(sim: Simulation, pawn: Pawn, action_id: String, tile: Vecto
 		return nursed
 	if action_id.begins_with(SELL_PREFIX):
 		return sim.sell_stock(action_id.trim_prefix(SELL_PREFIX))
+	if action_id.begins_with(BUY_PREFIX):
+		return sim.buy_tool(pawn, action_id.trim_prefix(BUY_PREFIX))
+	if action_id.begins_with(CRAFT_PREFIX):
+		var craft_parts := action_id.trim_prefix(CRAFT_PREFIX).split(":")
+		var bench := sim.world.get_object(int(craft_parts[1])) if craft_parts.size() == 2 else null
+		if bench == null:
+			return { "ok": false, "message": "That is gone" }
+		return sim.order_craft(pawn, bench, craft_parts[0])
 	if action_id == MOVE_HOME:
 		var home_blocker := Romance.move_home_blocker(sim, pawn)
 		if home_blocker != "":

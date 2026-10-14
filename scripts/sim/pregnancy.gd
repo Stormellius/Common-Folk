@@ -342,6 +342,10 @@ static func _make_baby(sim: Simulation, mother: Pawn, rng: RandomNumberGenerator
 		baby.parents.append(mother.pregnancy_father)
 	baby.tile = mother.committed_tile()
 	baby.step_to = baby.tile
+	var parents: Array[Pawn] = [mother]
+	if father != null:
+		parents.append(father)
+	Skills.inherit(baby, parents, rng)
 	Babies.reset_care(baby)
 	var family_members: Array[Pawn] = _family_of(sim, mother).duplicate()
 	if sim.household.get_pawn(mother.id) != null:

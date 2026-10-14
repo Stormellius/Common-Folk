@@ -78,6 +78,11 @@ static func death_age(pawn: Pawn) -> int:
 	return roundi(lerpf(float(span[0]), float(span[1]), fate))
 
 
+## How fast the person learns at their stage (0 for a baby, more in youth, less in old age).
+static func learn_rate(pawn: Pawn) -> float:
+	return float(stage_of(pawn).get("learn", 1.0))
+
+
 ## How much slower the person walks at their stage (1 for most).
 static func walk_multiplier(pawn: Pawn) -> float:
 	return float(stage_of(pawn).get("walk_multiplier", 1.0))
@@ -118,6 +123,8 @@ static func new_day(sim: Simulation, rng: RandomNumberGenerator) -> Array[String
 			var before := stage_id(pawn)
 			pawn.age += 1
 			var after := stage_id(pawn)
+			if after == "youth" and before != "youth":
+				Skills.take_up_trade(sim, pawn)  # old enough to be shown the family's trade
 			if not pawn.adult and pawn.age >= stage_start("adult", 18):
 				pawn.adult = true
 				PersonFactory.give_orientation(pawn, rng)

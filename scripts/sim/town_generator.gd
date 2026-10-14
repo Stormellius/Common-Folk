@@ -20,9 +20,9 @@ const LEGEND := {
 	"b": "bed", "p": "cooking_pot", "h": "hearth", "w": "wash_basin", "c": "chamber_pot",
 	"l": "lute", "t": "table", "k": "counter", "s": "shelf", "r": "barrel", "n": "bench", "W": "well",
 	"m": "meal_table", "a": "ale_barrel", "f": "food_shelf", "B": "notice_board",
-	"A": "altar", "P": "pew", "H": "sickbed",
+	"A": "altar", "P": "pew", "H": "sickbed", "F": "forge", "K": "workbench", "T": "tool_rack",
 }
-const PRIORITY := ["tavern", "shop", "clinic", "chapel", "park", "house", "vacant"]
+const PRIORITY := ["tavern", "shop", "clinic", "chapel", "smithy", "workshop", "park", "house", "vacant"]
 const YARD := 1       # tiles of open ground around a building, inside its lot
 const JITTER := 6.0   # how much chance shuffles the order of lots along the streets
 const MAIN_WIDTH := 3
@@ -411,6 +411,12 @@ static func _decorate_lot(world: WorldState, rng: RandomNumberGenerator, entry: 
 		"clinic":
 			for i in 3:
 				_put(world, "flower_bed", ring[rng.randi() % ring.size()])
+		"smithy", "workshop":
+			for i in 3:
+				_put(world, "woodpile", ring[rng.randi() % ring.size()])
+			_put(world, "cart", ring[rng.randi() % ring.size()])
+			if kind == "smithy":
+				_put(world, "barrel", ring[rng.randi() % ring.size()])
 		_:
 			var extras := ["flower_bed", "flower_bed", "bush", "woodpile"]
 			if str(entry["template"]) in ["farmhouse", "longhouse"]:

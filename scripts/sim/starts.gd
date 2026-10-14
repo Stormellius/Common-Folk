@@ -30,8 +30,13 @@ static func begin(world: WorldState, start_id: String) -> Dictionary:
 			TownGenerator.stamp(world, template, grid, origin, world.lot, 2)
 	var household := HouseholdGenerator.create(world)
 	household.coins = int(def.get("coins", Economy.start_coins()))
+	var skill_rng := RandomNumberGenerator.new()
+	skill_rng.seed = world.world_seed * 31 + 5
 	for pawn in household.pawns:
 		pawn.class_id = str(def.get("class", "peasant"))
+		Skills.seed_pawn(pawn, skill_rng)
+	for tool_id in def.get("tools", []):
+		household.add_stock(str(tool_id), 1)
 	var camp: Variant = def.get("camp")
 	CampGenerator.place(world, household, camp if camp is Array else null, house_id == "")
 	world.titles[WorldState.HOME_LOT] = str(def.get("title", "freehold"))

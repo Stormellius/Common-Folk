@@ -1,6 +1,6 @@
 # Common Folk: roadmap
 
-Milestones 1 to 17 are done. This file keeps the plan for 12 to 17 as it was built, and what comes next (18 to 25). Each milestone ended with the game playable, the smoke test passing and older saves still loading.
+Milestones 1 to 18 are done. This file keeps the plan for 12 to 18 as it was built, and what comes next (19 to 25). Each milestone ended with the game playable, the smoke test passing and older saves still loading.
 
 ## What the people are called
 
@@ -66,11 +66,19 @@ Folk are born, grow up, grow old and die, as in the Sims, with a medieval face o
 - **Drowning**, very rare, while fishing
 - **Plague**: an illness that spreads from person to person when they are close, worse among the filthy; the recovered are immune for a while, herbs nurse the sick through, and the sickbeds heal injuries. Rare, and deadly
 
+## Milestone 18: Skills and tools (done)
+
+- **Eleven skills** that grow with practice: woodcutting, mining, farming, fishing, herbalism, cooking, healing, carpentry, smithing, music and trading. Each has ten levels (novice to master) and its own effects: more wood, stone, grain, fish or herbs from every trip, fewer accidents, bigger meals, livelier tunes, faster and thriftier crafting, longer nursing
+- Skills grow from the work itself: a shift, a gathering trip, a meal cooked, a tune played. The young learn faster (children and youths), elders slower, and someone with a **talent** for a skill faster still; beside a **master** (three levels ahead) an apprentice learns twice as fast
+- **Trades pass on**: children inherit talents from their parents and the family's best trade; a youth is shown the basics of it when they come of age; anyone can ask a better-skilled person for a **lesson**. Townsfolk without work take a vacancy in town, and follow their family's trade first
+- **Tools in hand**: chopping needs an axe, quarrying a pickaxe, reaping a sickle, fishing a rod, herb picking a knife, nursing a healer's satchel, forging a smith's hammer and carpentry a hammer. The household's tools sit in its stockpile; whoever sets to work takes one, it wears with use and breaks in the end, and it goes back when they stop. The employer's tool is lent to anyone on a wage job
+- Tools are **bought** at the tool rack of any shop, smithy or workshop, or **made** at a forge or workbench from wood and stone (recipes are data: `recipes.json`). Towns now have a smithy and, in the bigger ones, a carpenter's workshop with jobs for a smith and a carpenter
+- The panel shows a person's skills with a bar to the next level, the tool in their hand, their talents and family trade; the tool in hand is drawn
+
 ## The plan from here
 
-Eight milestones, in the order that lets each one build on the last. Each ends with the game playable, the smoke test passing and older saves still loading.
+Seven milestones, in the order that lets each one build on the last. Each ends with the game playable, the smoke test passing and older saves still loading.
 
-- **18 Skills and tools** (next): skills that grow with practice (woodcutting, mining, farming, fishing, herbs, cooking, healing, smithing, carpentry, music) and pass on as a trade from parent or master to child or apprentice. Work needs the right tool in hand, and tools are made, bought, wear out and are carried
 - **19 Marriage and weddings**: engagements and rings, a wedding at the chapel with guests, a married household and a married name
 - **20 Animals**: wild game to hunt, draught and pack animals and mounts that carry goods and people, pets and livestock
 - **21 Builders and rooms**: building as a job, with materials hauled to the site; rooms, roofs and the indoor/outdoor difference

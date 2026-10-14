@@ -85,7 +85,7 @@ static func outfit_for(pawn: Pawn) -> Dictionary:
 	else:
 		outfit["headwear"] = ("coif" if r < 0.45 else ("hood" if r < 0.65 else ("straw_hat" if r < 0.75 else ""))) if female \
 			else ("hood" if r < 0.3 else ("straw_hat" if r < 0.55 else ""))
-	outfit["apron"] = pawn.work_job in ["tavern_hand", "shop_clerk", "clinic_orderly"] or (female and pawn.class_id == "peasant" and pawn.adult and roll.call(2) < 0.3)
+	outfit["apron"] = pawn.work_job in ["tavern_hand", "shop_clerk", "clinic_orderly", "smith", "carpenter"] or (female and pawn.class_id == "peasant" and pawn.adult and roll.call(2) < 0.3)
 	if pawn.adult and not female and roll.call(3) < (0.45 if stage != "elder" else 0.7):
 		outfit["beard"] = 1 if roll.call(4) < (0.6 if stage != "elder" else 0.3) else 2  # 1 short, 2 full
 	outfit["grey"] = clampf((pawn.age - 38) / 30.0, 0.0, 0.92)  # hair goes grey, then white, with the years
@@ -249,6 +249,59 @@ static func draw(ci: CanvasItem, look: Dictionary, facing: Vector2i, u: float, p
 			_ellipse(ci, (head + Vector2(s * 3.3, 1.0)) * u, Vector2(1.3, 1.5) * u, EYE)
 	elif side:
 		_ellipse(ci, (head + Vector2(sx * 4.6, 0.8)) * u, Vector2(1.3, 1.5) * u, EYE)
+
+
+## The tool in a person's hand (data/tools.json): drawn at the right hand, tilted, and swung while
+## `working`. A satchel hangs at the hip instead.
+static func draw_tool(ci: CanvasItem, tool_id: String, facing: Vector2i, u: float, clock: float, working: bool) -> void:
+	var kind := facing_kind(facing)
+	var flip := -1.0 if kind == WEST else 1.0
+	var steel := Color(0.66, 0.68, 0.72)
+	var wood := Color(0.40, 0.28, 0.16)
+	if tool_id == "healers_satchel":
+		var hip := Vector2(-10.0 * flip, 6.0)
+		ci.draw_set_transform(hip * u, 0.0, Vector2.ONE)
+		ci.draw_rect(Rect2(Vector2(-5, -4) * u, Vector2(10, 9) * u), OUTLINE)
+		ci.draw_rect(Rect2(Vector2(-4, -3) * u, Vector2(8, 7) * u), Color(0.60, 0.42, 0.26))
+		ci.draw_rect(Rect2(Vector2(-4, -3) * u, Vector2(8, 3) * u), Color(0.48, 0.32, 0.19))
+		ci.draw_line(Vector2(-1.5, 2) * u, Vector2(1.5, 2) * u, Color(0.86, 0.80, 0.55), maxf(1.0, u))
+		ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		return
+	var hand := Vector2(10.5 * flip, 3.0)
+	if kind == EAST:
+		hand = Vector2(7.0, 3.0)
+	elif kind == NORTH:
+		hand = Vector2(10.0, 0.0)
+	var angle := (-0.5 + (sin(clock * 7.0) * 0.55 if working else 0.0)) * flip
+	ci.draw_set_transform(hand * u, angle, Vector2(flip, 1.0))
+	var haft_top := -18.0
+	match tool_id:
+		"fishing_rod":
+			haft_top = -30.0
+		"sickle", "herb_knife":
+			haft_top = -9.0
+		"hammer", "smiths_hammer":
+			haft_top = -14.0
+	ci.draw_line(Vector2(0, 3) * u, Vector2(0, haft_top) * u, OUTLINE, maxf(1.5, 3.0 * u))
+	ci.draw_line(Vector2(0, 3) * u, Vector2(0, haft_top) * u, wood, maxf(1.0, 1.8 * u))
+	match tool_id:
+		"axe":
+			ci.draw_colored_polygon(_scaled(PackedVector2Array([Vector2(0.5, -18), Vector2(8, -21), Vector2(9, -11), Vector2(0.5, -12)]), u), steel)
+		"pickaxe":
+			ci.draw_line(Vector2(-9, -16) * u, Vector2(9, -18) * u, OUTLINE, maxf(1.5, 3.4 * u))
+			ci.draw_line(Vector2(-9, -16) * u, Vector2(9, -18) * u, steel, maxf(1.0, 2.2 * u))
+		"sickle":
+			ci.draw_arc(Vector2(4, -9) * u, 5.0 * u, PI * 0.5, PI * 1.5, 8, steel, maxf(1.5, 2.0 * u))
+		"herb_knife":
+			ci.draw_colored_polygon(_scaled(PackedVector2Array([Vector2(-1.2, -9), Vector2(1.2, -9), Vector2(0, -16)]), u), steel)
+		"fishing_rod":
+			ci.draw_line(Vector2(0, -30) * u, Vector2(5, -20) * u, Color(0.85, 0.85, 0.80), maxf(1.0, 0.7 * u))
+		"hammer":
+			ci.draw_rect(Rect2(Vector2(-4, -17) * u, Vector2(8, 5) * u), steel)
+		"smiths_hammer":
+			ci.draw_rect(Rect2(Vector2(-5.5, -19) * u, Vector2(11, 7) * u), Color(0.50, 0.52, 0.58))
+			ci.draw_rect(Rect2(Vector2(-5.5, -19) * u, Vector2(11, 2.5) * u), steel)
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 ## Rosy cheeks on the young, lines on the old.

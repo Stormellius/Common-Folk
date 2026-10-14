@@ -28,6 +28,7 @@ func _ready() -> void:
 	_test_region()
 	_test_economy()
 	_test_work_sites()
+	_test_skills()
 	_test_social()
 	_test_romance()
 	_test_events()
@@ -77,16 +78,16 @@ func _test_mod_loading() -> void:
 	DirAccess.make_dir_recursive_absolute(TEST_MOD_DIR)
 	_write_file(TEST_MOD_DIR + "/mod.json", '{"name": "Smoke Test Mod", "load_order": 5}')
 	_write_file(TEST_MOD_DIR + "/tiles.json", '[{"id":"grass","name":"Grass","color":"#123456","walkable":true},{"id":"water","_remove":true},{"id":"lava","name":"Lava","color":"#ff0000","walkable":false}]')
-	_write_file(TEST_MOD_DIR + "/recipes.json", '[{"id":"bread","name":"Bread"}]')
+	_write_file(TEST_MOD_DIR + "/gizmos.json", '[{"id":"bread","name":"Bread"}]')
 	DataRegistry.reload()
 
 	_check("Smoke Test Mod" in DataRegistry.loaded_mods, "mod in user://mods is discovered")
 	_check(str(DataRegistry.get_def("tiles", "grass").get("color")) == "#123456", "mod replaces an existing entry by id")
 	_check(DataRegistry.has_def("tiles", "lava"), "mod adds a new entry")
 	_check(not DataRegistry.has_def("tiles", "water"), "mod removes an entry with _remove")
-	_check(DataRegistry.count("recipes") == 1, "mod can add a brand new kind of content")
+	_check(DataRegistry.count("gizmos") == 1, "mod can add a brand new kind of content")
 
-	for file_name in ["mod.json", "tiles.json", "recipes.json"]:
+	for file_name in ["mod.json", "tiles.json", "gizmos.json"]:
 		DirAccess.remove_absolute(TEST_MOD_DIR + "/" + file_name)
 	DirAccess.remove_absolute(TEST_MOD_DIR)
 	DataRegistry.reload()
@@ -1383,6 +1384,8 @@ func _test_work_sites() -> void:
 	var anna: Pawn = setup["anna"]
 	var ben: Pawn = setup["ben"]
 	var cara: Pawn = setup["cara"]
+	household.add_stock("axe", 1)
+	household.add_stock("sickle", 1)
 	world.lots.append({ "id": "lot_5", "kind": "woodlot", "name": "Woodlot", "template": "woodlot", "facing": "south", "rect": Rect2i(20, 14, 12, 8), "public": true, "town": "t1" })
 	world.lots.append({ "id": "lot_6", "kind": "farm", "name": "Fields", "template": "farm", "facing": "south", "rect": Rect2i(34, 14, 12, 8), "public": true, "town": "t1" })
 	world.lots.append({ "id": "lot_7", "kind": "shop", "name": "Shop", "template": "shop", "facing": "south", "rect": Rect2i(50, 14, 10, 8), "public": true, "town": "t1" })
@@ -1476,6 +1479,328 @@ func _test_work_sites() -> void:
 	_check(loaded["ok"] and loaded["household"].stock == { "stone": 4, "herbs": 2 } and loaded["household"].stock_of("stone") == 4, "and its stockpile comes back")
 	DirAccess.remove_absolute(TEST_SAVE)
 	GameClock.reset()
+
+
+func _test_skills() -> void:
+	print("Skills, tools and trades")
+	# The data hangs together.
+	var skill_ids := Skills.skill_ids()
+	_check(skill_ids.size() == 11 and "woodcutting" in skill_ids and "smithing" in skill_ids and "music" in skill_ids, "there are eleven skills (%d)" % skill_ids.size())
+	var tools_ok := true
+	for tool_id in Skills.tool_ids():
+		tools_ok = tools_ok and Skills.skill_ids().has(str(DataRegistry.get_def("tools", tool_id)["skill"])) and Skills.tool_price(tool_id) > 0
+	for def in DataRegistry.get_list("objects"):
+		if def.has("tool"):
+			tools_ok = tools_ok and Skills.is_tool_id(str(def["tool"])) and Skills.skill_ids().has(str(def.get("skill", "")))
+	_check(tools_ok, "every tool names a real skill and every object that wants a tool names a real one")
+	var recipes_ok := true
+	for recipe in DataRegistry.get_list("recipes"):
+		var station := DataRegistry.get_def("objects", str(recipe["station"]))
+		recipes_ok = recipes_ok and bool(station.get("recipes", false)) and Skills.skill_ids().has(str(recipe["skill"]))
+		for item_id in recipe["outputs"]:
+			recipes_ok = recipes_ok and (Skills.is_tool_id(str(item_id)) or Economy.resource_ids().has(str(item_id)))
+		for item_id in recipe["inputs"]:
+			recipes_ok = recipes_ok and Economy.resource_ids().has(str(item_id))
+	_check(recipes_ok, "every recipe has a real station, skill and goods")
+
+	# Levels.
+	var learner := Pawn.new()
+	learner.age = 30
+	_check(Skills.level(learner, "mining") == 0 and Skills.rank_name(0) == "Untrained" and Skills.rank_name(10) == "Master", "a stranger to a skill is at level 0; level 10 is a master")
+	learner.skills["mining"] = 20.0
+	_check(Skills.level(learner, "mining") == 1 and Skills.level_of_xp(59.0) == 1 and Skills.level_of_xp(60.0) == 2 and Skills.level_of_xp(99999.0) == Skills.max_level(), "xp turns into levels")
+	learner.skills["mining"] = 40.0
+	_check(absf(Skills.progress(learner, "mining") - 0.5) < 0.01, "and shows how far to the next one")
+
+	# Practice, and who learns faster.
+	var setup := _romance_setup()
+	var world: WorldState = setup["world"]
+	var household: Household = setup["household"]
+	var sim: Simulation = setup["sim"]
+	var anna: Pawn = setup["anna"]
+	var ben: Pawn = setup["ben"]
+	var notices: Array[String] = []
+	sim.health_notice.connect(func(text: String) -> void: notices.append(text))
+	for i in 30:
+		Skills.practice(sim, anna, "woodcutting")
+	var adult_xp := Skills.xp(anna, "woodcutting")
+	_check(adult_xp > 2.0 and adult_xp < 3.0, "thirty minutes at the axe teach an adult a little (%.2f xp)" % adult_xp)
+	var youth := Pawn.new()
+	youth.age = 15
+	youth.adult = false
+	var toddler := Pawn.new()
+	toddler.age = 3
+	var elder := Pawn.new()
+	elder.age = 66
+	for who in [youth, toddler, elder]:
+		for i in 30:
+			Skills.practice(sim, who, "woodcutting")
+	_check(Skills.xp(youth, "woodcutting") > adult_xp and Skills.xp(elder, "woodcutting") < adult_xp and Skills.xp(toddler, "woodcutting") == 0.0, "the young learn faster, the old slower, and a toddler not at all")
+	var gifted := Pawn.new()
+	gifted.age = 30
+	gifted.talents = ["woodcutting"] as Array[String]
+	for i in 30:
+		Skills.practice(sim, gifted, "woodcutting")
+	_check(Skills.xp(gifted, "woodcutting") > adult_xp * 1.4, "someone with a talent for it learns faster still")
+	var master := Pawn.new()
+	master.id = 901
+	master.age = 40
+	master.tile = Vector2i(9, 9)
+	master.skills["woodcutting"] = Skills.xp_for_level(6)
+	master.job_kind = "work"
+	master.job_stage = "using"
+	var pupil := Pawn.new()
+	pupil.id = 902
+	pupil.age = 20
+	pupil.tile = Vector2i(10, 9)
+	household.pawns.append(master)
+	household.pawns.append(pupil)
+	GameClock.set_time(3, 12)
+	for i in 40:
+		Skills.practice(sim, pupil, "woodcutting")
+		GameClock.advance_one_tick()
+	_check(Skills.xp(pupil, "woodcutting") > 40.0 * 0.08 * 1.6, "an apprentice beside a master learns about twice as fast (%.2f xp)" % Skills.xp(pupil, "woodcutting"))
+	household.pawns.erase(master)
+	household.pawns.erase(pupil)
+	notices.clear()
+	anna.skills["fishing"] = Skills.xp_for_level(1) - 0.01
+	Skills.practice(sim, anna, "fishing", 1.0)
+	_check(Skills.level(anna, "fishing") == 1 and notices.any(func(t: String) -> bool: return "fishing is now 1" in t), "a new level is announced (%s)" % str(notices))
+
+	# What levels do.
+	var expert := Pawn.new()
+	expert.age = 30
+	expert.skills["farming"] = Skills.xp_for_level(10)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	var total := 0
+	for i in 200:
+		total += Skills.yield_amount(expert, "farming", 4, rng)
+	var novice_total := 0
+	for i in 200:
+		novice_total += Skills.yield_amount(learner, "farming", 4, rng)
+	_check(novice_total == 800 and total > 1500, "a master farmer brings in about twice the harvest (%d against %d)" % [total, novice_total])
+	_check(Skills.safety_multiplier(expert, "farming") == 1.0 and absf(Skills.safety_multiplier(Pawn.new(), "mining") - 1.0) < 0.001, "a skill with no safety effect does not change the risk")
+	expert.skills["woodcutting"] = Skills.xp_for_level(10)
+	_check(Skills.safety_multiplier(expert, "woodcutting") < 0.5, "a practised woodcutter is hurt less often")
+
+	# Tools: the chopping block wants an axe.
+	GameClock.set_time(0, 8)
+	world.lots.append({ "id": "lot_5", "kind": "woodlot", "name": "Woodlot", "template": "woodlot", "facing": "south", "rect": Rect2i(20, 14, 12, 8), "public": true, "town": "t1" })
+	var block := world.add_object("chopping_block", Vector2i(24, 16))
+	anna.tile = Vector2i(22, 18)
+	anna.step_to = anna.tile
+	ben.tile = Vector2i(23, 18)
+	ben.step_to = ben.tile
+	var blocked := sim.use_blocker(anna, block)
+	_check("axe" in blocked, "without an axe the household cannot chop (%s)" % blocked)
+	household.add_stock("axe", 1)
+	_check(sim.use_blocker(anna, block) == "", "with one in the stockpile they can")
+	var result := PawnActions.perform(sim, anna, "use:%d" % block.id, block.tile)
+	_check(result["ok"], "she goes to chop")
+	for i in 40:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		if anna.job_stage == "using":
+			break
+	_check(anna.tool == "axe" and household.stock_of("axe") == 0 and not anna.tool_lent, "she takes the axe from the stockpile when she starts (%s)" % anna.tool)
+	_check("in use" in sim.use_blocker(ben, block) or sim.use_blocker(ben, block) != "", "and nobody else can use the same axe (%s)" % sim.use_blocker(ben, block))
+	var skill_before := Skills.xp(anna, "woodcutting")
+	for i in 120:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		if anna.job_kind == "":
+			break
+	_check(anna.tool == "" and household.stock_of("axe") == 1 and household.stock_of("wood") >= 3, "when the work is done the axe goes back and the wood is in (%s)" % str(household.stock))
+	_check(Skills.xp(anna, "woodcutting") > skill_before + 1.0, "and she has learned from it")
+	_check(float(household.tool_wear.get("axe", 0.0)) > 20.0, "and the axe is a little worn (%.0f)" % float(household.tool_wear.get("axe", 0.0)))
+
+	# A tool at the end of its life breaks in the middle of the work.
+	household.tool_wear["axe"] = float(DataRegistry.get_def("tools", "axe")["durability"]) - 1.5
+	household.stock.erase("wood")
+	notices.clear()
+	PawnActions.perform(sim, anna, "use:%d" % block.id, block.tile)
+	for i in 120:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		if anna.job_kind == "":
+			break
+	_check(household.stock_of("axe") == 0 and anna.tool == "" and anna.job_kind == "" and notices.any(func(t: String) -> bool: return "axe broke" in t), "a worn-out axe breaks and is gone (%s)" % str(notices))
+
+	# Wage work: the employer lends the tool.
+	var hired := sim.hire(anna, "lot_5", "woodcutter")
+	_check(hired["ok"], "she can take the woodcutter's job")
+	GameClock.set_time(1, 7)
+	for i in 300:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		if anna.job_stage == "using":
+			break
+	_check(anna.job_kind == "work" and anna.tool == "axe" and anna.tool_lent and household.stock_of("axe") == 0, "at a wage job the employer's axe is in her hand (%s %s)" % [anna.job_kind, anna.tool])
+	sim.quit_job(anna)
+	_check(anna.tool == "" and household.stock_of("axe") == 0, "and it is not hers to keep")
+
+	# Crafting at a forge and a bench.
+	var forge := world.add_object("forge", Vector2i(10, 8))
+	var bench := world.add_object("workbench", Vector2i(12, 8))
+	anna.tile = Vector2i(10, 6)
+	anna.step_to = anna.tile
+	anna.job_kind = ""
+	household.stock = {}
+	var entries := PawnActions.list_for(sim, anna, forge.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("craft:"))
+	_check(entries.size() >= 5 and "Forge an axe" in str(entries[0]["label"]) and not entries[0]["enabled"], "the forge lists what it can make, switched off without what it takes (%d entries)" % entries.size())
+	household.stock = { "wood": 1, "stone": 2 }
+	entries = PawnActions.list_for(sim, anna, forge.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "craft:forge_axe:%d" % forge.id)
+	_check(entries.size() == 1 and not entries[0]["enabled"] and "hammer" in str(entries[0]["reason"]), "and a smith needs a smith's hammer (%s)" % str(entries))
+	household.add_stock("smiths_hammer", 1)
+	entries = PawnActions.list_for(sim, anna, forge.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "craft:forge_axe:%d" % forge.id)
+	_check(entries.size() == 1 and entries[0]["enabled"], "with the hammer it can be made")
+	var smithing_before := Skills.xp(anna, "smithing")
+	result = PawnActions.perform(sim, anna, "craft:forge_axe:%d" % forge.id, forge.tile)
+	_check(result["ok"] and anna.job_recipe == "forge_axe", "she sets about forging an axe")
+	notices.clear()
+	for i in 200:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		if anna.job_kind == "":
+			break
+	_check(household.stock_of("axe") == 1 and household.stock_of("wood") == 0 and household.stock_of("stone") == 0 and household.stock_of("smiths_hammer") == 1, "an axe comes out, the materials are used up and the hammer is back (%s)" % str(household.stock))
+	_check(Skills.xp(anna, "smithing") > smithing_before + 5.0 and notices.any(func(t: String) -> bool: return "made 1 axe" in t), "and she has practised smithing (%s)" % str(notices))
+	var skilled := Pawn.new()
+	skilled.age = 30
+	skilled.skills["smithing"] = Skills.xp_for_level(8)
+	_check(Skills.recipe_minutes(skilled, DataRegistry.get_def("recipes", "forge_axe")) < Skills.recipe_minutes(Pawn.new(), DataRegistry.get_def("recipes", "forge_axe")), "a better smith works faster")
+	household.stock = { "wood": 2 }
+	household.add_stock("hammer", 1)
+	entries = PawnActions.list_for(sim, anna, bench.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "craft:carve_rod:%d" % bench.id)
+	_check(entries.size() == 1 and entries[0]["enabled"], "the workbench carves a fishing rod from wood")
+
+	# Buying tools at a shop's rack.
+	world.lots.append({ "id": "lot_7", "kind": "shop", "name": "Shop", "template": "shop", "facing": "south", "rect": Rect2i(50, 14, 10, 8), "public": true, "town": "t1" })
+	var rack := world.add_object("tool_rack", Vector2i(54, 16))
+	household.coins = 20
+	household.stock = {}
+	var rack_entries := PawnActions.list_for(sim, anna, rack.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("buy:"))
+	_check(rack_entries.size() == Skills.tool_ids().size() and "Buy an axe" in str(rack_entries[0]["label"]) and rack_entries[0]["enabled"], "a tool rack sells every tool (%d)" % rack_entries.size())
+	var bought := PawnActions.perform(sim, anna, "buy:axe", rack.tile)
+	_check(bought["ok"] and household.stock_of("axe") == 1 and household.coins == 20 - Skills.tool_price("axe"), "buying an axe costs its price (%d left)" % household.coins)
+	household.coins = 1
+	_check(not PawnActions.perform(sim, anna, "buy:pickaxe", rack.tile)["ok"], "and an empty purse cannot buy another")
+
+	# Nursing wants the satchel, and a good healer nurses longer.
+	var patient := Pawn.new()
+	patient.id = 903
+	patient.age = 30
+	patient.illness = "fever"
+	patient.tile = anna.tile + Vector2i(1, 0)
+	household.pawns.append(patient)
+	household.stock = { "herbs": 2 }
+	_check("satchel" in sim.treat_blocker(anna, patient), "nursing needs a healer's satchel (%s)" % sim.treat_blocker(anna, patient))
+	household.stock = { "herbs": 2, "healers_satchel": 1 }
+	anna.skills["healing"] = Skills.xp_for_level(8)
+	GameClock.set_time(5, 8)
+	var nursed := sim.treat(anna, patient)
+	_check(nursed["ok"] and patient.treated_until - GameClock.tick > 3 * GameClock.MINUTES_PER_DAY * 1.3, "a skilled healer's nursing lasts longer")
+	household.pawns.erase(patient)
+
+	# Trades pass on.
+	var mother := Pawn.new()
+	mother.age = 35
+	mother.talents = ["smithing", "music"] as Array[String]
+	mother.skills["smithing"] = Skills.xp_for_level(6)
+	var father := Pawn.new()
+	father.age = 36
+	father.skills["music"] = Skills.xp_for_level(2)
+	var heirs_with_talent := 0
+	var trade_ok := true
+	for i in 60:
+		var baby := Pawn.new()
+		Skills.inherit(baby, [mother, father] as Array[Pawn], rng)
+		trade_ok = trade_ok and baby.family_trade == "smithing" and baby.talents.size() <= 2
+		heirs_with_talent += 1 if "smithing" in baby.talents else 0
+	_check(trade_ok and heirs_with_talent > 10 and heirs_with_talent < 40, "children take the family trade and sometimes a talent (%d of 60)" % heirs_with_talent)
+	anna.skills["smithing"] = Skills.xp_for_level(6)
+	var heir_pawn := Pawn.new()
+	heir_pawn.display_name = "Kit Marsh"
+	heir_pawn.age = 13
+	heir_pawn.adult = false
+	household.add_pawn(heir_pawn)
+	heir_pawn.family_trade = "smithing"
+	heir_pawn.parents = [anna.id] as Array[int]
+	Skills.take_up_trade(sim, heir_pawn)
+	_check(absf(Skills.xp(heir_pawn, "smithing") - Skills.xp_for_level(6) * 0.3) < 1.0, "a youth is shown the basics of the family trade (%.0f xp)" % Skills.xp(heir_pawn, "smithing"))
+
+	# Lessons.
+	ben.skills.clear()
+	anna.skills = { "woodcutting": Skills.xp_for_level(5) }
+	_check(sim.interaction_blocker(anna, ben, "lesson") == "", "someone who knows more can give a lesson")
+	var taught := Skills.give_lesson(sim, anna, ben)
+	_check(Skills.xp(ben, "woodcutting") >= 40.0 and "taught" in taught, "and the other learns (%s)" % taught)
+	ben.skills = { "woodcutting": Skills.xp_for_level(5) }
+	_check("anything to teach" in sim.interaction_blocker(anna, ben, "lesson"), "but not between equals (%s)" % sim.interaction_blocker(anna, ben, "lesson"))
+
+	# Townsfolk without work look for it, trades first.
+	var local_town: Household = setup["town"]
+	local_town.add_pawn(_townsperson("Smith Junior", "male", 20, 0))
+	var young := local_town.pawns[local_town.pawns.size() - 1]
+	young.home_lot = "lot_1"
+	young.family_trade = "trading"
+	young.skills["trading"] = Skills.xp_for_level(3)
+	world.lots.append({ "id": "lot_8", "kind": "shop", "name": "Shop", "template": "shop", "facing": "south", "rect": Rect2i(70, 14, 10, 8), "public": true, "town": "t1" })
+	Skills.find_work(sim, rng, 5)
+	_check(young.work_job == "shop_clerk" and young.work_lot == "lot_8", "an unemployed youth takes the post that suits their trade (%s at %s)" % [young.work_job, young.work_lot])
+
+	# The generated region has places to buy and make tools, and people who know their trades.
+	var region := RegionGenerator.generate(42)
+	var shops_with_racks := 0
+	var racks := 0
+	var forges := 0
+	var benches := 0
+	for placed in region.objects:
+		racks += 1 if placed.def_id == "tool_rack" else 0
+		forges += 1 if placed.def_id == "forge" else 0
+		benches += 1 if placed.def_id == "workbench" else 0
+	var smithies := 0
+	var workshops := 0
+	for lot in region.lots:
+		smithies += 1 if str(lot["kind"]) == "smithy" else 0
+		workshops += 1 if str(lot["kind"]) == "workshop" else 0
+		if str(lot["kind"]) == "shop":
+			for placed in region.objects:
+				if placed.def_id == "tool_rack" and (lot["rect"] as Rect2i).has_point(placed.tile):
+					shops_with_racks += 1
+					break
+	_check(smithies >= 3 and workshops >= 2 and forges >= 2 * smithies and benches >= 2 * workshops and racks >= smithies + workshops + shops_with_racks and shops_with_racks >= 5, "the towns have smithies, workshops and tool racks in their shops (%d smithies, %d workshops, %d forges, %d benches, %d racks, %d shops with one)" % [smithies, workshops, forges, benches, racks, shops_with_racks])
+	var region_folk := NpcGenerator.create(region)
+	var skilled_folk := 0
+	var adults := 0
+	var smiths := 0
+	var smith_levels_ok := true
+	var heirs := 0
+	for person in region_folk.pawns:
+		if person.adult:
+			adults += 1
+			skilled_folk += 1 if not Skills.known(person).is_empty() else 0
+		elif person.family_trade != "":
+			heirs += 1
+		if person.work_job in ["smith", "carpenter"]:
+			smiths += 1
+			smith_levels_ok = smith_levels_ok and Skills.level(person, Skills.job_skill(DataRegistry.get_def("jobs", person.work_job))) >= 1
+	_check(adults > 0 and skilled_folk * 10 >= adults * 8, "most grown townsfolk know some trade (%d of %d)" % [skilled_folk, adults])
+	_check(smiths >= 3 and smith_levels_ok, "the smiths and carpenters are practised at it (%d)" % smiths)
+	_check(heirs >= 5, "the children of the town's families are heirs to a trade (%d)" % heirs)
+
+	# All of it is saved.
+	var copy := Pawn.from_dict(anna.to_dict())
+	anna.talents = ["music"] as Array[String]
+	anna.family_trade = "smithing"
+	anna.tool = "axe"
+	anna.tool_lent = true
+	copy = Pawn.from_dict(anna.to_dict())
+	_check(copy.skills == anna.skills and copy.talents == anna.talents and copy.family_trade == "smithing" and copy.tool == "axe" and copy.tool_lent, "skills, talents, family trade and the tool in hand come back from a save")
+	household.tool_wear = { "axe": 12.5 }
+	var restored := Household.from_dict(household.to_dict())
+	_check(float(restored.tool_wear.get("axe", 0.0)) == 12.5, "and so does the wear on the household's tools")
 
 
 func _test_social() -> void:
@@ -3509,7 +3834,7 @@ func _test_accidents() -> void:
 	anna.step_to = anna.tile
 	household.stock = {}
 	_check("no herbs" in sim.treat_blocker(anna, dan), "nursing needs herbs (%s)" % sim.treat_blocker(anna, dan))
-	household.stock = { "herbs": 2 }
+	household.stock = { "herbs": 2, "healers_satchel": 1 }
 	var nurse_entries := PawnActions.list_for(sim, anna, dan.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "treat:%d" % dan.id)
 	_check(nurse_entries.size() == 1 and nurse_entries[0]["enabled"] and "Nurse" in str(nurse_entries[0]["label"]), "an ill person's menu offers to nurse them with herbs")
 	var base_chance := Illness.recovery_chance(plague, dan)

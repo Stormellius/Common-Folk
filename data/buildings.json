@@ -54,7 +54,7 @@
     "grid": [
       "#########",
       "#f.f.f.r#",
-      "#.......#",
+      "#......T#",
       "#kkkkk..#",
       "#.......#",
       "#.t...t.#",
@@ -145,7 +145,7 @@
     "grid": [
       "###########",
       "#f.f.f.f.r#",
-      "#.........#",
+      "#........T#",
       "#kkkkkk...#",
       "#.........#",
       "#.t..r..t.#",
@@ -161,5 +161,25 @@
       "S.....S",
       "S.P.P.S",
       "SSS+SSS"
+    ] },
+  { "id": "smithy", "name": "Smithy", "kind": "smithy", "floor": "flagstone", "public": true,
+    "grid": [
+      "SSSSSSSSSS",
+      "SF.F....TS",
+      "S........S",
+      "S..r.....S",
+      "Sk.k.....S",
+      "S........S",
+      "SSSS+SSSSS"
+    ] },
+  { "id": "workshop", "name": "Carpenter's workshop", "kind": "workshop", "floor": "planks", "public": true,
+    "grid": [
+      "###########",
+      "#K.K.K...T#",
+      "#.........#",
+      "#.....r...#",
+      "#k.k......#",
+      "#.........#",
+      "#####+#####"
     ] }
 ]

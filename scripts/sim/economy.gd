@@ -114,3 +114,22 @@ static func stock_text(stock: Dictionary) -> String:
 		if int(stock.get(resource_id, 0)) > 0:
 			parts.append("%d %s" % [int(stock[resource_id]), resource_name(resource_id).to_lower()])
 	return ", ".join(parts)
+
+
+## The name of a resource or a tool.
+static func item_name(item_id: String) -> String:
+	if Skills.is_tool_id(item_id):
+		return Skills.tool_name(item_id)
+	return resource_name(item_id)
+
+
+## Like stock_text, but resources and tools both: "2 wood, 1 axe".
+static func goods_text(goods: Dictionary) -> String:
+	var parts: Array[String] = []
+	for resource_id in resource_ids():
+		if int(goods.get(resource_id, 0)) > 0:
+			parts.append("%d %s" % [int(goods[resource_id]), resource_name(resource_id).to_lower()])
+	for tool_id in Skills.tool_ids():
+		if int(goods.get(tool_id, 0)) > 0:
+			parts.append("%d %s" % [int(goods[tool_id]), Skills.tool_name(tool_id).to_lower()])
+	return ", ".join(parts)

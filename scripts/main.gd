@@ -199,6 +199,13 @@ func _apply_launch_options() -> void:
 			var parts := pair.split(":")
 			if parts.size() == 2:
 				sim.household.selected().needs[parts[0]] = float(parts[1])
+	if _launch_option("skills") != "" and sim != null and sim.household.selected() != null:
+		for pair in _launch_option("skills").split(","):
+			var parts := pair.split(":")
+			if parts.size() == 2:
+				sim.household.selected().skills[parts[0]] = Skills.xp_for_level(int(parts[1]))
+	if _launch_option("tool") != "" and sim != null and sim.household.selected() != null:
+		Skills.equip(sim, sim.household.selected(), _launch_option("tool"), true)
 	if _launch_option("together") != "" and sim != null and sim.household.pawns.size() >= 2:
 		for person in sim.household.pawns:
 			person.needs["libido"] = 10.0

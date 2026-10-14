@@ -100,5 +100,9 @@
   { "id": "saw_fire",     "text": "A fire close by",          "mood": -5,  "hours": 6,   "on": "saw_fire" },
   { "id": "fought_fire",  "text": "Helped put out a fire",    "mood": 6,   "hours": 24,  "on": "fought_fire" },
   { "id": "hurt_at_work", "text": "Hurt at work",             "mood": -8,  "hours": 48,  "on": "hurt_at_work" },
-  { "id": "cared_for",    "text": "Nursed with herbs",        "mood": 6,   "hours": 24,  "on": "cared_for" }
+  { "id": "cared_for",    "text": "Nursed with herbs",        "mood": 6,   "hours": 24,  "on": "cared_for" },
+  { "id": "skill_up",     "text": "Getting better at the work", "mood": 4,  "hours": 12, "on": "skill_up" },
+  { "id": "learned",      "text": "Learned something useful", "mood": 4,  "hours": 12, "on": "learned" },
+  { "id": "taught",       "text": "Passed on a trade",       "mood": 4,  "hours": 12, "on": "taught" },
+  { "id": "crafted",      "text": "Made something with their hands", "mood": 3, "hours": 6, "on": "crafted" }
 ]

@@ -58,6 +58,8 @@ var _speed_buttons: Array[Button] = []
 var _hint_label: Label
 var _help_panel: PanelContainer
 
+const SKILL_ROWS := 5
+
 var _needs_panel: PanelContainer
 var _needs_name: Label
 var _needs_age: Label
@@ -73,6 +75,8 @@ var _mood_fill: StyleBoxFlat
 var _mood_label: Label
 var _thoughts_text: RichTextLabel
 var _relations_text: RichTextLabel
+var _skill_rows: Array[Dictionary] = []  # { "row": HBoxContainer, "name": Label, "bar": ProgressBar }
+var _skill_note: Label
 var _events_label: Label
 var _need_rows: Dictionary = {}  # need id -> { "bar": ProgressBar, "fill": StyleBoxFlat }
 var _household_row: HBoxContainer
@@ -117,7 +121,7 @@ func set_place(text: String) -> void:
 ## The household's purse, shown under the clock, and what it has gathered.
 func set_purse(coins: int, stock: Dictionary = {}) -> void:
 	_purse_label.text = "Purse  %s" % Economy.format(coins)
-	var held := Economy.stock_text(stock)
+	var held := Economy.goods_text(stock)
 	_stock_label.text = held if held != "" else "Nothing stockpiled"
 
 
@@ -280,6 +284,30 @@ func show_pawn(pawn: Pawn, activity: String, job: String = "", relations: Array[
 		var opinion := float(line["opinion"])
 		known.append("[color=%s]%s[/color]  %s" % ["#a9c784" if opinion > 0.0 else "#e08a72", str(line["label"]), str(line["name"])])
 	_relations_text.text = "\n".join(known) if not known.is_empty() else "[color=#a89c86]Knows nobody well yet[/color]"
+	var skills := Skills.known(pawn)
+	for index in SKILL_ROWS:
+		var shown: bool = index < skills.size()
+		var entry: Dictionary = _skill_rows[index]
+		entry["row"].visible = shown
+		if shown:
+			var skill_id := str(skills[index]["id"])
+			var rank_level := Skills.level(pawn, skill_id)
+			entry["name"].text = "%s %d" % [Skills.name_of(skill_id), rank_level]
+			entry["name"].tooltip_text = "%s (%s). %s" % [Skills.name_of(skill_id), Skills.rank_name(rank_level), str(DataRegistry.get_def("skills", skill_id).get("text", ""))]
+			entry["bar"].value = Skills.progress(pawn, skill_id)
+	var notes: Array[String] = []
+	if skills.is_empty():
+		notes.append("No skills to speak of yet")
+	if pawn.tool != "":
+		notes.append("%s in hand" % Skills.tool_name(pawn.tool))
+	if not pawn.talents.is_empty():
+		var gifts: Array[String] = []
+		for talent in pawn.talents:
+			gifts.append(Skills.name_of(talent).to_lower())
+		notes.append("Gifted at " + " and ".join(gifts))
+	if pawn.family_trade != "":
+		notes.append("Family trade: " + Skills.name_of(pawn.family_trade).to_lower())
+	_skill_note.text = ". ".join(notes)
 	for need_id in _need_rows:
 		var value := float(pawn.needs.get(need_id, Needs.FULL))
 		var row: Dictionary = _need_rows[need_id]
@@ -556,6 +584,25 @@ func _build_needs_panel() -> void:
 		bar.add_theme_stylebox_override("fill", fill)
 		row.add_child(bar)
 		_need_rows[need_id] = { "bar": bar, "fill": fill }
+
+	_section(box, "Skills")
+	for i in SKILL_ROWS:
+		var skill_row := HBoxContainer.new()
+		skill_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		skill_row.add_theme_constant_override("separation", 8)
+		box.add_child(skill_row)
+		var skill_name := _make_label("", "")
+		skill_name.add_theme_font_size_override("font_size", 14)
+		skill_name.custom_minimum_size = Vector2(118, 0)
+		skill_row.add_child(skill_name)
+		var skill_bar := _make_bar(1.0)
+		skill_bar.custom_minimum_size = Vector2(70, 9)
+		skill_row.add_child(skill_bar)
+		_skill_rows.append({ "row": skill_row, "name": skill_name, "bar": skill_bar })
+	_skill_note = _make_label("", "DimLabel")
+	_skill_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_skill_note.custom_minimum_size = Vector2(214, 0)
+	box.add_child(_skill_note)
 
 	_section(box, "Thoughts")
 	_thoughts_text = _make_rich_text()

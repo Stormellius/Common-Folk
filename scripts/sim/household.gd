@@ -11,6 +11,8 @@ var dead: Array[Dictionary] = []
 var coins := 0
 ## What the household has gathered, by resource id (see Economy).
 var stock: Dictionary = {}
+## Minutes of use each kind of tool has had towards its next breaking (see Skills).
+var tool_wear: Dictionary = {}
 var _next_id := 1
 
 
@@ -120,7 +122,7 @@ func to_dict() -> Dictionary:
 	var saved_pawns: Array = []
 	for pawn in pawns:
 		saved_pawns.append(pawn.to_dict())
-	return { "pawns": saved_pawns, "selected": selected_id, "next_id": _next_id, "dead": dead.duplicate(true), "coins": coins, "stock": stock.duplicate() }
+	return { "pawns": saved_pawns, "selected": selected_id, "next_id": _next_id, "dead": dead.duplicate(true), "coins": coins, "stock": stock.duplicate(), "tool_wear": tool_wear.duplicate() }
 
 
 static func from_dict(data: Dictionary, first_id: int = 1) -> Household:
@@ -136,6 +138,10 @@ static func from_dict(data: Dictionary, first_id: int = 1) -> Household:
 	if saved_stock is Dictionary:
 		for resource_id in saved_stock:
 			household.stock[str(resource_id)] = int(saved_stock[resource_id])
+	var saved_wear: Variant = data.get("tool_wear", {})
+	if saved_wear is Dictionary:
+		for tool_id in saved_wear:
+			household.tool_wear[str(tool_id)] = float(saved_wear[tool_id])
 	household._next_id = int(data.get("next_id", first_id + household.pawns.size()))
 	household.selected_id = int(data.get("selected", -1))
 	var chosen := household.get_pawn(household.selected_id)

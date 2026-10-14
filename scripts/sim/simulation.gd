@@ -132,6 +132,7 @@ func step(motion_steps: int = 1) -> void:
 			health_notice.emit(notice)
 		for notice in Romance.new_day(self, _rng):
 			health_notice.emit(notice)
+		Skills.find_work(self, _rng)
 		for notice in realm.new_day(self):
 			realm_notice.emit(notice)
 		_roll_illness(everyone)
@@ -218,6 +219,9 @@ func use_blocker(pawn: Pawn, placed: PlacedObject) -> String:
 	var gather := gather_blocker(pawn, placed)
 	if gather != "":
 		return gather
+	var tool_issue := Skills.tool_blocker(self, pawn, placed.def())
+	if tool_issue != "":
+		return tool_issue
 	if _plan_use(pawn, placed).is_empty():
 		return "can't get there"
 	return ""
@@ -262,6 +266,46 @@ func order_use(pawn: Pawn, placed: PlacedObject) -> Dictionary:
 	return { "ok": true, "message": "" }
 
 
+## Why `pawn` cannot make `recipe` at `placed` (a forge, a workbench) now, or "".
+func craft_blocker(pawn: Pawn, placed: PlacedObject, recipe: Dictionary) -> String:
+	if recipe.is_empty() or str(recipe.get("station", "")) != placed.def_id:
+		return "that can't be made here"
+	if household.get_pawn(pawn.id) == null:
+		return "only your own folk make things for the household"
+	if bool(placed.def().get("heavy", false)) and not Life.may_do_heavy_work(pawn):
+		return "too heavy for %s" % _first_name(pawn)
+	if pawn.age < 12:
+		return "too young"
+	var recipe_issue := Skills.recipe_blocker(self, pawn, recipe)
+	if recipe_issue != "":
+		return recipe_issue
+	return use_blocker(pawn, placed)
+
+
+## Sends a pawn to make something at a forge or bench: walk there, then work until it is done.
+func order_craft(pawn: Pawn, placed: PlacedObject, recipe_id: String) -> Dictionary:
+	var recipe := DataRegistry.get_def("recipes", recipe_id)
+	var blocker := craft_blocker(pawn, placed, recipe)
+	if blocker != "":
+		return { "ok": false, "message": "Can't make that: %s" % blocker }
+	var result := order_use(pawn, placed)
+	if result["ok"]:
+		pawn.job_recipe = recipe_id
+	return result
+
+
+## Buys a tool from a shop's rack with the household's money.
+func buy_tool(pawn: Pawn, tool_id: String) -> Dictionary:
+	var price := Skills.tool_price(tool_id)
+	if household.get_pawn(pawn.id) == null or not Skills.is_tool_id(tool_id):
+		return { "ok": false, "message": "Can't buy that" }
+	if price > coins_of(pawn):
+		return { "ok": false, "message": "Can't afford it (%s)" % Economy.format(price) }
+	spend(pawn, price)
+	household.add_stock(tool_id, 1)
+	return { "ok": true, "message": "%s bought %s for %s." % [_first_name(pawn), Skills.tool_phrase(tool_id), Economy.format(price)] }
+
+
 ## Why `pawn` cannot do the interaction with `other` right now, or "" if they can. Both people
 ## must be willing: that is how consent works here. Someone who isn't in the mood says no,
 ## and the menu shows the entry switched off with that reason.
@@ -285,6 +329,10 @@ func interaction_blocker(pawn: Pawn, other: Pawn, interaction_id: String) -> Str
 			return "%s isn't interested" % other_name
 		if not _attracted_to(pawn, other):
 			return "%s isn't interested" % _first_name(pawn)
+	if bool(interaction.get("lesson", false)):
+		var lesson_issue := Skills.lesson_blocker(pawn, other)
+		if lesson_issue != "":
+			return lesson_issue
 	if bool(interaction.get("romantic", false)):
 		var romantic_blocker := _romance_blocker(pawn, other, interaction)
 		if romantic_blocker != "":
@@ -790,12 +838,16 @@ func _step_work(pawn: Pawn) -> void:
 			return
 		pawn.job_stage = "using"
 		pawn.job_minutes = 0
+		Skills.equip(self, pawn, Skills.tool_needed(DataRegistry.get_def("objects", str(job.get("station", "")))), true)  # the employer lends the tool
 		for step in [Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)]:
 			var there := world.object_at(pawn.tile + step)
 			if there != null and there.def_id == str(job.get("station", "")):
 				pawn.facing = step
 		return
 	pawn.job_minutes += 1
+	var work_skill := Skills.job_skill(job)
+	if work_skill != "":
+		Skills.practice(self, pawn, work_skill)
 	var station := DataRegistry.get_def("objects", str(job.get("station", "")))
 	if station.has("accident"):
 		var accident := Accidents.roll(self, pawn, station, _rng)
@@ -1221,11 +1273,24 @@ func _step_job(pawn: Pawn) -> void:
 		if pawn.tile != pawn.job_tile:
 			_end_job(pawn)  # the route was blocked or cancelled
 			return
+		var tool_id := Skills.tool_needed(placed.def())
+		if tool_id != "" and not Skills.equip(self, pawn, tool_id):
+			if household.get_pawn(pawn.id) != null:
+				health_notice.emit("%s has no %s to work with." % [_first_name(pawn), Skills.tool_name(tool_id).to_lower()])
+			_end_job(pawn)
+			return
+		var recipe := DataRegistry.get_def("recipes", pawn.job_recipe) if pawn.job_recipe != "" else {}
+		if not recipe.is_empty() and Skills.recipe_blocker(self, pawn, recipe) != "":
+			health_notice.emit("%s hasn't the materials for that now." % _first_name(pawn))
+			_end_job(pawn)
+			return
 		var price := price_of(placed.def_id)
 		if price > 0 and not spend(pawn, price):
 			_end_job(pawn)  # somebody spent the money on the way
 			return
 		_credit_owner(pawn, placed, price)
+		if not recipe.is_empty():
+			Skills.consume_inputs(self, pawn, recipe, _rng)
 		pawn.job_stage = "using"
 		pawn.job_minutes = 0
 		pawn.pose = str(placed.def().get("pose", ""))
@@ -1235,11 +1300,14 @@ func _step_job(pawn: Pawn) -> void:
 	# Using it: refill the needs it satisfies until they are all full or time is up.
 	var object_def := placed.def()
 	var satisfies: Dictionary = object_def.get("satisfies", {})
-	var all_full := not object_def.has("gathers")  # gathering goes on until the time is up
+	var recipe := DataRegistry.get_def("recipes", pawn.job_recipe) if pawn.job_recipe != "" else {}
+	var all_full := not object_def.has("gathers") and recipe.is_empty()  # gathering and making go on until the time is up
+	var skill_id := str(object_def.get("skill", ""))
+	var boost := Skills.boost(pawn, skill_id) if skill_id != "" else 1.0
 	for need_id in satisfies:
 		if not pawn.needs.has(need_id):
 			continue
-		var value := minf(Needs.FULL, float(pawn.needs[need_id]) + float(satisfies[need_id]) / 60.0)
+		var value := minf(Needs.FULL, float(pawn.needs[need_id]) + float(satisfies[need_id]) * boost / 60.0)
 		pawn.needs[need_id] = value
 		if value < Needs.FULL:
 			all_full = false
@@ -1254,11 +1322,22 @@ func _step_job(pawn: Pawn) -> void:
 		if pawn.job_kind == "" or pawn.is_dying():
 			return
 	pawn.job_minutes += 1
+	if skill_id != "":
+		Skills.practice(self, pawn, skill_id)
+	var broken := Skills.wear(self, pawn)
+	if broken != "":
+		if household.get_pawn(pawn.id) != null:
+			health_notice.emit(broken)
+		_end_job(pawn)
+		return
 	if pawn.illness != "" and pawn.illness in object_def.get("cures", []) and pawn.job_minutes >= int(object_def.get("cure_minutes", 60)):
 		_recover(pawn)
 		Mood.add_event(pawn, "treated", GameClock.tick)
-	if all_full or pawn.job_minutes >= int(object_def.get("max_use_minutes", 60)):
+	var minutes_needed := Skills.recipe_minutes(pawn, recipe) if not recipe.is_empty() else int(object_def.get("max_use_minutes", 60))
+	if all_full or pawn.job_minutes >= minutes_needed:
 		Mood.add_event(pawn, "used:%s" % placed.def_id, GameClock.tick)
+		if not recipe.is_empty():
+			_finish_craft(pawn, recipe)
 		if satisfies.has("hunger"):
 			Pregnancy.after_eating(pawn)
 		if object_def.has("gathers"):
@@ -1276,14 +1355,28 @@ func _collect(pawn: Pawn, object_def: Dictionary) -> void:
 		return
 	var gathers: Dictionary = object_def.get("gathers", {})
 	var brought: Dictionary = {}
+	var skill_id := str(object_def.get("skill", ""))
 	for resource_id in gathers:
 		var amount := int(gathers[resource_id])
 		if pawn.traits.has("lazy"):
 			amount = maxi(1, amount - 1)
+		if skill_id != "":
+			amount = Skills.yield_amount(pawn, skill_id, amount, _rng)
+		if amount <= 0:
+			continue
 		household.add_stock(str(resource_id), amount)
 		brought[str(resource_id)] = amount
 	Mood.add_event(pawn, "gathered", GameClock.tick)
 	health_notice.emit("%s gathered %s." % [_first_name(pawn), Economy.stock_text(brought)])
+
+
+## Something was made at a forge or bench: what came out goes on the household's stock.
+func _finish_craft(pawn: Pawn, recipe: Dictionary) -> void:
+	var made: Dictionary = recipe.get("outputs", {})
+	for item_id in made:
+		household.add_stock(str(item_id), int(made[item_id]))
+	Mood.add_event(pawn, "crafted", GameClock.tick)
+	health_notice.emit("%s made %s." % [_first_name(pawn), Economy.goods_text(made)])
 
 
 ## Why `nurse` cannot treat `patient` with herbs now, or "".
@@ -1294,6 +1387,8 @@ func treat_blocker(nurse: Pawn, patient: Pawn) -> String:
 		return "not possible"
 	if household.stock_of("herbs") < 1:
 		return "you have no herbs"
+	if household.stock_of("healers_satchel") < 1:
+		return "needs a healer's satchel (a shop sells them)"
 	if patient.treated_until > GameClock.tick:
 		return "already nursed"
 	if nurse.age < 12 or nurse.is_dying() or nurse.id == patient.id and patient.is_dying():
@@ -1309,7 +1404,9 @@ func treat(nurse: Pawn, patient: Pawn) -> Dictionary:
 	if blocker != "":
 		return { "ok": false, "message": "Can't nurse them: %s" % blocker }
 	household.add_stock("herbs", -1)
-	patient.treated_until = GameClock.tick + 3 * GameClock.MINUTES_PER_DAY
+	var days := 3.0 * (1.0 + Skills.effect(nurse, "healing", "cure"))
+	patient.treated_until = GameClock.tick + roundi(days * GameClock.MINUTES_PER_DAY)
+	Skills.practice(self, nurse, "healing", 40.0)
 	Mood.add_event(patient, "cared_for", GameClock.tick)
 	return { "ok": true, "message": "%s nurses %s with herbs." % [_first_name(nurse), _first_name(patient)] }
 
@@ -1382,6 +1479,10 @@ func _finish_interaction(pawn: Pawn, partner: Pawn, interaction: Dictionary) -> 
 		Mood.add_event(partner, "interaction:%s" % pawn.job_interaction, GameClock.tick)
 	pawn.add_opinion(partner.id, delta)
 	partner.add_opinion(pawn.id, delta)
+	if bool(interaction.get("lesson", false)) and not flopped:
+		var taught := Skills.give_lesson(self, pawn, partner)
+		if taught != "" and (household.get_pawn(pawn.id) != null or household.get_pawn(partner.id) != null):
+			health_notice.emit(taught)
 	var romance_rule: Dictionary = interaction.get("romance", {})
 	if not romance_rule.is_empty():
 		var warmth := float(romance_rule.get("gain", 0.0))
@@ -1464,6 +1565,8 @@ func _end_job(pawn: Pawn) -> void:
 	var placed := world.get_object(pawn.job_object)
 	if placed != null and placed.user_id == pawn.id:
 		placed.user_id = 0
+	Skills.unequip(self, pawn)
+	pawn.job_recipe = ""
 	var partner: Pawn = person(pawn.job_partner) if pawn.job_kind in ["interact", "date"] else null
 	var partner_kind := pawn.job_kind
 	pawn.job_kind = ""
@@ -1853,6 +1956,8 @@ func _repair_after_load() -> void:
 		for need_id in active_needs:
 			if not pawn.needs.has(need_id):
 				pawn.needs[need_id] = 80.0
+		if pawn.job_kind == "" and pawn.tool != "":
+			Skills.unequip(self, pawn)  # a tool left in hand by an old save goes back on the shelf
 		if pawn.job_kind == "use":
 			var placed := world.get_object(pawn.job_object)
 			if placed == null or (placed.user_id != 0 and placed.user_id != pawn.id):

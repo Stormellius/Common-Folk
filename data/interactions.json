@@ -98,5 +98,18 @@
     "min_opinion": 25,
     "opinion": { "gain": 6 },
     "romance": { "gain": 5 }
+  },
+  {
+    "id": "lesson",
+    "name": "Lesson",
+    "action": "Trade lesson with {name}",
+    "doing": "Having a lesson",
+    "pose": "talk",
+    "satisfies": { "social": 60 },
+    "max_use_minutes": 40,
+    "lesson": true,
+    "willing_below": { "social": 95 },
+    "unwilling": "isn't in the mood for a lesson",
+    "opinion": { "gain": 3 }
   }
 ]

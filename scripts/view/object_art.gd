@@ -8,7 +8,7 @@ extends RefCounted
 ## `t` is the time in seconds, for flames and steam; `occupied` is true while someone sleeps in it.
 
 const OUTLINE := Color(0.06, 0.05, 0.05, 0.85)
-const ANIMATED := ["hearth", "cooking_pot", "watch_post", "altar"]
+const ANIMATED := ["hearth", "cooking_pot", "watch_post", "altar", "forge"]
 ## How tall the south face of a wall looks, in units. Light comes from the top-left, as in the
 ## terrain shader, so a wall shows a lit top and a shaded face to the south.
 const WALL_FACE := 12.0
@@ -111,6 +111,12 @@ static func draw(ci: CanvasItem, def_id: String, u: float, t: float, occupied: b
 			_altar(ci, u, t)
 		"sickbed":
 			_sickbed(ci, u, occupied)
+		"forge":
+			_forge(ci, u, t)
+		"workbench":
+			_workbench(ci, u)
+		"tool_rack":
+			_tool_rack(ci, u)
 		_:
 			_crate(ci, u)
 
@@ -701,6 +707,66 @@ static func _crate(ci: CanvasItem, u: float) -> void:
 	_rect(ci, u, -13, -13, 26, 26, Color(0.54, 0.42, 0.25), 1.2)
 	ci.draw_line(Vector2(-13, -13) * u, Vector2(13, 13) * u, Color(0.40, 0.30, 0.17), maxf(1.0, u))
 	ci.draw_line(Vector2(13, -13) * u, Vector2(-13, 13) * u, Color(0.40, 0.30, 0.17), maxf(1.0, u))
+
+
+## A stone forge with a glowing firebox and an anvil to its side.
+static func _forge(ci: CanvasItem, u: float, t: float) -> void:
+	_shadow(ci, u, 22.0)
+	ci.draw_circle(Vector2(-2, -2) * u, 26.0 * u, Color(1.0, 0.5, 0.15, 0.10))
+	_rect(ci, u, -22, -19, 31, 31, Color(0.46, 0.46, 0.48), 1.3)
+	for row in 3:  # courses of stone
+		var y := -13.0 + row * 9.0
+		ci.draw_line(Vector2(-22, y) * u, Vector2(9, y) * u, Color(0.33, 0.33, 0.35), maxf(1.0, 0.9 * u))
+		for col in 3:
+			var x := -17.0 + col * 10.0 + (4.0 if row % 2 == 0 else 0.0)
+			ci.draw_line(Vector2(x, y) * u, Vector2(x, y + 9.0) * u, Color(0.33, 0.33, 0.35), maxf(1.0, 0.9 * u))
+	_rect(ci, u, -17, -9, 21, 15, Color(0.10, 0.07, 0.06), 1.0)  # the firebox
+	var glow := 0.8 + 0.2 * sin(t * 6.0)
+	_ellipse(ci, u, Vector2(-6.5, 0), Vector2(8.5, 4.5), Color(0.95, 0.38, 0.10) * glow, 0.0)
+	_ellipse(ci, u, Vector2(-6.5, 0), Vector2(5.0, 2.5), Color(1.0, 0.78, 0.30) * glow, 0.0)
+	_flame(ci, u, Vector2(-9, 1), 8.0 + 2.5 * sin(t * 9.0), 5.0)
+	_flame(ci, u, Vector2(-3, 2), 7.0 + 2.5 * sin(t * 8.0 + 1.3), 4.5)
+	# the anvil
+	var anvil := PackedVector2Array([Vector2(12, -4), Vector2(23, -4), Vector2(25, -1), Vector2(21, 1), Vector2(21, 7), Vector2(24, 9), Vector2(11, 9), Vector2(14, 7), Vector2(14, 1), Vector2(12, 1)])
+	ci.draw_colored_polygon(_scaled(anvil, u), Color(0.30, 0.31, 0.35))
+	ci.draw_polyline(_scaled(anvil + PackedVector2Array([Vector2(12, -4)]), u), OUTLINE, maxf(1.0, u))
+	ci.draw_line(Vector2(13, -3) * u, Vector2(23, -3) * u, Color(0.55, 0.57, 0.62), maxf(1.0, 1.2 * u))
+	ci.draw_line(Vector2(5, 15) * u, Vector2(17, 11) * u, Color(0.32, 0.22, 0.13), maxf(1.5, 2.4 * u))  # tongs on the floor
+
+
+## A carpenter's bench with a plank on it, a saw and a mallet.
+static func _workbench(ci: CanvasItem, u: float) -> void:
+	_shadow(ci, u, 21.0)
+	_rect(ci, u, -22, -13, 44, 26, Color(0.40, 0.28, 0.17), 1.3)
+	_rect(ci, u, -22, -13, 44, 17, Color(0.64, 0.48, 0.30), 0.0)
+	ci.draw_line(Vector2(-22, 4) * u, Vector2(22, 4) * u, Color(0.30, 0.20, 0.12), maxf(1.0, u))
+	_rect(ci, u, -16, -9, 24, 6, Color(0.78, 0.64, 0.42), 0.9)  # a plank
+	ci.draw_line(Vector2(-12, -6) * u, Vector2(2, -6) * u, Color(0.60, 0.46, 0.28), maxf(1.0, 0.8 * u))
+	var saw := PackedVector2Array([Vector2(8, -2), Vector2(20, -6), Vector2(20, -1), Vector2(8, 2)])
+	ci.draw_colored_polygon(_scaled(saw, u), Color(0.66, 0.68, 0.72))
+	ci.draw_line(Vector2(8, 0) * u, Vector2(5, 3) * u, Color(0.30, 0.20, 0.12), maxf(1.5, 2.6 * u))
+	ci.draw_line(Vector2(-18, 8) * u, Vector2(-10, 8) * u, Color(0.30, 0.20, 0.12), maxf(1.5, 2.4 * u))  # mallet
+	_rect(ci, u, -11, 5, 6, 6, Color(0.48, 0.34, 0.20), 0.8)
+	_rect(ci, u, 13, 7, 4, 3, Color(0.78, 0.64, 0.42), 0.0)  # shavings
+	_rect(ci, u, 18, 9, 3, 2, Color(0.78, 0.64, 0.42), 0.0)
+
+
+## A wall rack hung with tools for sale.
+static func _tool_rack(ci: CanvasItem, u: float) -> void:
+	_shadow(ci, u, 20.0)
+	_rect(ci, u, -22, -13, 44, 26, Color(0.36, 0.26, 0.16), 1.3)
+	_rect(ci, u, -20, -11, 40, 22, Color(0.52, 0.38, 0.24), 0.0)
+	ci.draw_line(Vector2(-20, -1) * u, Vector2(20, -1) * u, Color(0.28, 0.19, 0.11), maxf(1.5, 2.0 * u))
+	# an axe, a pick, a sickle and a hammer, hanging by their hafts
+	ci.draw_line(Vector2(-14, -10) * u, Vector2(-14, 5) * u, Color(0.30, 0.20, 0.12), maxf(1.5, 2.2 * u))
+	ci.draw_colored_polygon(_scaled(PackedVector2Array([Vector2(-14, -9), Vector2(-8, -10), Vector2(-8, -3), Vector2(-14, -4)]), u), Color(0.64, 0.66, 0.70))
+	ci.draw_line(Vector2(-4, -10) * u, Vector2(-4, 6) * u, Color(0.30, 0.20, 0.12), maxf(1.5, 2.2 * u))
+	ci.draw_line(Vector2(-10, -9) * u, Vector2(2, -9) * u, Color(0.58, 0.60, 0.64), maxf(1.5, 2.4 * u))
+	ci.draw_arc(Vector2(7, -3) * u, 6.0 * u, PI * 0.9, PI * 2.1, 10, Color(0.68, 0.70, 0.74), maxf(1.5, 2.0 * u))
+	ci.draw_line(Vector2(7, 3) * u, Vector2(7, 8) * u, Color(0.30, 0.20, 0.12), maxf(1.5, 2.2 * u))
+	ci.draw_line(Vector2(16, -9) * u, Vector2(16, 7) * u, Color(0.30, 0.20, 0.12), maxf(1.5, 2.2 * u))
+	_rect(ci, u, 12, -10, 8, 5, Color(0.50, 0.52, 0.56), 0.8)
+	_rect(ci, u, -22, 9, 44, 4, Color(0.28, 0.19, 0.11), 0.0)
 
 
 # --- little shapes -----------------------------------------------------------------
