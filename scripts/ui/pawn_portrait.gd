@@ -4,6 +4,7 @@ extends Control
 ## pawn in the world.
 
 var look: Dictionary = {}
+var outfit: Dictionary = {}
 
 
 func _init() -> void:
@@ -14,4 +15,4 @@ func _init() -> void:
 
 func _draw() -> void:
 	draw_set_transform(Vector2(22, 22), 0.0, Vector2.ONE)
-	PawnArt.draw(self, look, Vector2i(0, 1), 1.15, 0.0)
+	PawnArt.draw(self, look, Vector2i(0, 1), 1.15, 0.0, false, outfit)

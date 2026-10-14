@@ -13,11 +13,15 @@ const TILE_SIZE := 48
 const TERRAIN_SHADER := preload("res://shaders/terrain.gdshader")
 const STYLES := { "flat": 0, "grass": 1, "dirt": 2, "water": 3, "stone": 4, "forest": 5 }
 const MAX_TILE_TYPES := 256
+## The map is drawn in square chunks of this many tiles, so a light at night only has to be
+## worked out for the few chunks it reaches instead of the whole map.
+const CHUNK_TILES := 16
 
 var world: WorldState
 
 var _material := ShaderMaterial.new()
 var _last_detail := -1.0
+var _chunks: Array[Node2D] = []
 
 
 func _ready() -> void:
@@ -32,7 +36,23 @@ func _ready() -> void:
 func set_world(new_world: WorldState) -> void:
 	world = new_world
 	_upload_world()
-	queue_redraw()
+	_make_chunks()
+
+
+## One child per chunk, each drawing its own rectangle with this node's shader. They stay at the
+## origin, so the shader still sees world coordinates.
+func _make_chunks() -> void:
+	for chunk in _chunks:
+		chunk.queue_free()
+	_chunks.clear()
+	for y in range(0, world.height, CHUNK_TILES):
+		for x in range(0, world.width, CHUNK_TILES):
+			var area := Rect2(x * TILE_SIZE, y * TILE_SIZE, mini(CHUNK_TILES, world.width - x) * TILE_SIZE, mini(CHUNK_TILES, world.height - y) * TILE_SIZE)
+			var chunk := Node2D.new()
+			chunk.use_parent_material = true
+			chunk.draw.connect(func() -> void: chunk.draw_rect(area, Color.WHITE))
+			add_child(chunk)
+			_chunks.append(chunk)
 
 
 func _process(_delta: float) -> void:
@@ -44,13 +64,6 @@ func _process(_delta: float) -> void:
 	if absf(detail - _last_detail) > 0.01:
 		_last_detail = detail
 		_material.set_shader_parameter("detail", detail)
-
-
-func _draw() -> void:
-	if world == null:
-		return
-	# One rectangle covers the whole map; the shader decides every pixel's color.
-	draw_rect(Rect2(0, 0, world.width * TILE_SIZE, world.height * TILE_SIZE), Color.WHITE)
 
 
 func _upload_world() -> void:

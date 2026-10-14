@@ -8,6 +8,10 @@
 - Twelve townspeople live in the houses in families (shared surname, two adults and the children the beds allow). They have needs, traits and moods like your household, sleep, eat and wash at home, use the tavern's lute and the clinic's basin, and wander the roads, the green and their own yard by day. Children are drawn smaller and have only two traits. Things on a private lot can only be used by the people who live there; the tavern, shop, clinic and green are open to all. Deaths in town leave a grave and a message
 - Terrain drawn by a GPU shader in a gritty RimWorld-like style: muted earthy colors, grain, grass tufts, pebbly dirt, shallow-to-deep animated water, plated rock with a lit bevel and a cast shadow, and oak and pine trees with shadows. No art files needed yet
 - Day and night light (blue nights, warm dawn and dusk) and seasons (green spring, golden summer, brown autumn, snowy winter) that follow the game clock
+- Buildings with depth: a wall fills its tile and joins its neighbors, with a lit top, a shaded face where it ends to the south and stonework or planking that runs on from tile to tile, and walls throw soft shadows on the ground and floors east and south of them (light comes from the top-left everywhere). Floors are seamless boards, flagstones and strewn straw
+- Firelight: after dark, hearths, cooking fires, the watch post's lantern and the altar's candles light up what is around them and flicker. Walls stop the light (a doorway lets the glow out), so a lit room stays inside its walls. Smoke rises from hearths and drifts off on the wind
+- Weather, as a look only (needs and work do not notice it yet): each day is clear, cloudy or wet, rolled from the world seed with chances per season. Rain streaks down (snow in winter), heavy cloud dims and cools the day, cloud shadows drift across the town, and fireflies come out on summer nights
+- People dress for who they are: hoods and straw hats for peasants, felt caps for burghers, feathered hats, circlets and a gold trim for the gentry, linen coifs for many women, an apron for anyone who works a counter, belts, and beards for some men. The ill look pale, everyone breathes while standing, and names that would overlap stack under each other
 - Camera: pan, zoom toward the cursor, middle-mouse drag
 - Game clock with pause and 1x / 2x / 3x speed, a calendar with seasons, and a clock panel
 - A household of three people (names and looks from the world seed) drawn in RimWorld-style top-down art made by code. Control one at a time: click a person (or their portrait at the bottom, or press Tab) to select them, then right-click anywhere for a menu of what they can do there (walk, stop, sleep, eat, wash, and with another adult, spend time together). The others keep walking if they have orders
@@ -44,7 +48,7 @@ Options go after `--` on the command line, which is handy for testing and screen
 godot --path . -- --seed=1234 --day=50 --hour=12 --zoom=0.5 --look=70,30 --speed=0
 ```
 
-`seed` is the world, `day` and `hour` set the date (day 0 is the first day, 15 days per season), `zoom` the camera zoom, `look` the tile to center on, and `speed` 0 to 3, `walk` a tile (such as `--walk=70,50`) to send the selected person to, and `menu` a tile to open the right-click menu on, `load=1` to load the newest save at start, `shot=path.png` to save a screenshot a moment after starting and quit, `dying=1` to put the selected person minutes from starving, `needs` values for the selected person (such as `--needs=rest:10,hunger:30`), `build` to start in build mode with a tool (`--build=place:wall`, `floor:planks`, `remove`, `move`), `demohouse=1` to build a small room with the real build commands, and `together=1` to start the two-person interaction.
+`seed` is the world, `day` and `hour` set the date (day 0 is the first day, 15 days per season), `zoom` the camera zoom, `look` the tile to center on, and `speed` 0 to 3, `walk` a tile (such as `--walk=70,50`) to send the selected person to, and `menu` a tile to open the right-click menu on, `load=1` to load the newest save at start, `shot=path.png` to save a screenshot a moment after starting and quit, `weather` (`clear`, `cloudy`, `rain` or `snow`) to override the day's weather, `dying=1` to put the selected person minutes from starving, `needs` values for the selected person (such as `--needs=rest:10,hunger:30`), `build` to start in build mode with a tool (`--build=place:wall`, `floor:planks`, `remove`, `move`), `demohouse=1` to build a small room with the real build commands, and `together=1` to start the two-person interaction.
 
 ## Controls
 
@@ -76,6 +80,7 @@ mods/                  Mods, one folder each (example_mod is disabled by default
 scenes/main.tscn       The only scene
 shaders/
   terrain.gdshader     Paints the whole map on the GPU
+  clouds.gdshader      Drifting cloud shadows
 scripts/
   autoload/            Global singletons
     data_registry.gd     Loads data/ and mods, answers "what is tile X?"
@@ -106,19 +111,23 @@ scripts/
     simulation.gd        Ticks the world; the commands views may give (order_move, order_use, build_place...)
     save_game.gd         Writes and reads the save file
   view/                Drawing and input for the map
-    map_view.gd          Feeds the world and season look to the terrain shader
-    day_night.gd         Tints the map by time of day
+    map_view.gd          Feeds the world and season look to the terrain shader (drawn in chunks)
+    day_night.gd         Tints the map by time of day and cloud; says how dark it is
     tile_cursor.gd       Hover highlight and grid
-    pawn_art.gd          Draws a person with code (swap for sprites later)
+    pawn_art.gd          Draws a person with code, and works out what they wear (swap for sprites later)
     object_art.gd        Draws beds, pots, walls, doors... with code
     floor_art.gd         Draws planks, flagstone and straw
     floor_layer.gd       The floors, between the ground and the objects
+    shadow_layer.gd      Soft shadows walls throw on the ground and floors
     build_controller.gd  Build mode: lot shading, preview and mouse tools
     build_ghost.gd       The green/red preview under the mouse
-    object_view.gd       One object on screen
+    object_view.gd       One object on screen, with its firelight and, for a wall, what blocks the light
     object_layer.gd      All objects, drawn under the people
     pawn_view.gd         One pawn on screen, gliding between tiles
-    pawn_layer.gd        All pawns, route overlay and mouse orders
+    pawn_layer.gd        All pawns, route overlay, name stacking and mouse orders
+    smoke_layer.gd       Smoke rising from hearths
+    cloud_shadows.gd     Cloud shadows over the whole map
+    weather.gd           The day's weather; rain, snow and fireflies drawn over the screen
     camera_controller.gd Pan and zoom
   ui/hud.gd            Flat dark panels: clock and speed buttons, household bar, tile info, help, messages
   ui/pawn_portrait.gd  Small person picture for the household bar
@@ -152,7 +161,7 @@ A mod is a folder in `mods/` (or `user://mods/` in a built game) with the same k
 
 To try it, set `"enabled": true` in `mods/example_mod/mod.json` and restart. Grass turns bright green. Problems in data files (bad JSON, missing ids) are shown on screen and printed as warnings.
 
-`names.json` (given names and family names) and `appearance.json` (skin, hair and clothing colors) feed the household generator, so a mod can change who your people are. `needs.json` lists the needs (`drain_per_hour`, `optional: true` for ones nobody has yet, `slows_when_empty: false` for ones that can sit at zero harmlessly, like Libido, and `fatal_after_hours` with a `death_cause` for ones that can kill); `traits.json` changes drain rates and, with `thought_multipliers`, how strongly thoughts land (a trait with `"group": "orientation"` is an orientation: every new person gets exactly one of those plus two other, different traits); both are used now, and traits will matter more in milestone 7. Seasons in `seasons.json` can carry `need_drain_multipliers` (winter makes warmth drain 2.5 times faster).
+`names.json` (given names and family names) and `appearance.json` (skin, hair and clothing colors) feed the household generator, so a mod can change who your people are. `needs.json` lists the needs (`drain_per_hour`, `optional: true` for ones nobody has yet, `slows_when_empty: false` for ones that can sit at zero harmlessly, like Libido, and `fatal_after_hours` with a `death_cause` for ones that can kill); `traits.json` changes drain rates and, with `thought_multipliers`, how strongly thoughts land (a trait with `"group": "orientation"` is an orientation: every new person gets exactly one of those plus two other, different traits); both are used now, and traits will matter more in milestone 7. Seasons in `seasons.json` can carry `need_drain_multipliers` (winter makes warmth drain 2.5 times faster), and the weather: `rain_chance` and `cloud_chance` per day (a wet day snows when the season's `snow` is 0.5 or more) and `fireflies: true`.
 
 `objects.json` describes the things people use:
 
@@ -162,7 +171,7 @@ To try it, set `"enabled": true` in `mods/example_mod/mod.json` and restart. Gra
   "satisfies": { "rest": 14.0 }, "max_use_minutes": 600 }
 ```
 
-`category` (default `furniture`) picks the build palette tab, `buildable: false` keeps something out of it, `connects` makes walls and doors join their neighbors, and `drag: true` lets the tool run a row. `satisfies` is points restored per hour of use; a person stops when every need it fills is full or after `max_use_minutes`. `use_position` is `on` (stand on the tile) or `beside`. `action` is the right-click menu entry and `doing` the activity shown in the panel. A need is only in play while some object satisfies it, so adding an object with `"satisfies": { "faith": 20 }` switches Faith on (it also needs `optional` to be false). Objects with no drawing in `object_art.gd` appear as a crate.
+`light` makes a thing glow after dark: `{ "color": "#ff9040", "radius": 4.5, "energy": 1.0 }` (radius in tiles; walls block it). `smoke: true` sends smoke up from it. `category` (default `furniture`) picks the build palette tab, `buildable: false` keeps something out of it, `connects` makes walls and doors join their neighbors, and `drag: true` lets the tool run a row. `satisfies` is points restored per hour of use; a person stops when every need it fills is full or after `max_use_minutes`. `use_position` is `on` (stand on the tile) or `beside`. `action` is the right-click menu entry and `doing` the activity shown in the panel. A need is only in play while some object satisfies it, so adding an object with `"satisfies": { "faith": 20 }` switches Faith on (it also needs `optional` to be false). Objects with no drawing in `object_art.gd` appear as a crate.
 
 `thoughts.json` lists the thoughts. A state thought has a `when` (`need` with `below` or `above`, `idle`, or `alone`) and holds while that is true; thoughts sharing a `group` do not stack, the strongest wins. An event thought has `on` (`used:<object id>`, `interaction:<id>`, `death`) and `hours` it lasts. `only_for` and `never_for` take trait ids.
 
@@ -210,17 +219,21 @@ godot --headless --path . res://tests/balance_check.tscn
 
 This is not a pass/fail test. It plays 15 days in spring and in winter on three seeds with nobody giving orders and prints deaths (yours and the town's), mood and the lowest each need got, so you can see whether a change to needs, thoughts or the camp broke the balance.
 
-Two more helpers: `res://tests/town_dump.tscn -- --seed=7` prints a picture of a generated town in characters, and `res://tests/perf_check.tscn` times one game day with the whole town (about 1.5 ms per tick).
+Two more helpers: `res://tests/town_dump.tscn -- --seed=7` prints a picture of a generated town in characters, and `res://tests/perf_check.tscn` times one game day with the whole town (about 1.5 ms per tick). For the art, `godot --path . res://tests/pawn_gallery.tscn` shows one person of each class, sex and outfit from all four sides (add `-- --shot=gallery.png` to save it and quit; it needs a window, not `--headless`).
 
 ## Graphics notes
 
 The terrain is procedural, so changing how it looks means editing `shaders/terrain.gdshader`. The `terrain()` function holds one block per style, `tree_shape()` and `tree_outline()` define the oak and pine silhouettes, and light always comes from the top-left (`LIGHT_DIR`). Tiles are 48 pixels at zoom 1 (`TILE_SIZE` in `map_view.gd`; change it there and everything else follows). Colors come from `data/tiles.json`, so a mod can re-tint the whole world. The shader uses only features of Godot's Compatibility renderer, so it runs on modest GPUs.
 
-This is a procedural approximation of the RimWorld look. The real thing relies on hand-painted textures and sprites, so when characters, furniture and buildings arrive they will be sprites drawn on top (made in Krita or Aseprite, or from a free pack); the day and night tint (a `CanvasModulate` node) will apply to them automatically. To stop the dark nights, set the night colors in `day_night.gd` closer to white. The HUD colors are constants at the top of `scripts/ui/hud.gd`.
+Everything else is drawn by code too, in one style: dark outlines, a soft drop shadow, light from the top-left. Walls fill their tile; `WALL_FACE`, `TIMBER` and `STONE` at the top of `object_art.gd` set how tall their south face looks and their colors, and `shadow_layer.gd` sets how dark and wide their shadows are. Floors keep their colors in `data/floors.json`. People's outfits are chosen in `PawnArt.outfit_for()` from their class, sex, age, job and a hash of their name, so nothing extra is saved and the same person always looks the same; the hats, hoods and coifs are drawn by the functions under it.
+
+Firelight is a `PointLight2D` on each object with a `light` in `objects.json`, brighter the darker it is (`DayNight.darkness`), and every wall but a door carries a thin `LightOccluder2D` along its middle, so the inner face of a wall is lit and the light stops there. The terrain is drawn in 16 by 16 tile chunks (`CHUNK_TILES` in `map_view.gd`) so each light only has to be worked out where it reaches. Weather, smoke and fireflies run on a clock that stops while the game is paused; cloud cover and wind come from `Weather`'s static values, and `DayNight` dims the day by `Weather.gloom`.
+
+This is a procedural approximation of the RimWorld look. The real thing relies on hand-painted textures and sprites, so characters, furniture and buildings can later become sprites drawn on top (made in Krita or Aseprite, or from a free pack): replace `PawnArt.draw()`, `ObjectArt.draw()` or `FloorArt.draw()` and leave the rest alone. The day and night tint (a `CanvasModulate` node) and the firelight will apply to sprites automatically. To stop the dark nights, set the night colors in `day_night.gd` closer to white. The HUD colors are constants at the top of `scripts/ui/hud.gd`.
 
 ## Known limits
 
-The lot may include water or rocks you cannot build on. Pawns can walk through each other and are drawn over tree canopies. Townspeople's wages come from nowhere and pile up, and the only trade is what customers spend at the tables, barrels and shelves on your business lot (nobody staffs it, and there is no stock). Townspeople are not clickable, and only chat, work, live, wander and die. Nobody lives in the tavern, shop or clinic, and the shop sells only bread. Illness does not spread from person to person. Births have no complications, a pregnancy cannot be ended or prevented, there are no twins, and nobody ages out or dies of old age. Only the player's household has children: townspeople never conceive (they do have birthdays, and their children come of age).
+Weather is only a look: rain does not make anyone wet or cold, and the weather does not change what people do. Only walls stop firelight, not furniture or people, and there are no roofs, so a house is always open to the sky. The lot may include water or rocks you cannot build on. Pawns can walk through each other and are drawn over tree canopies. Townspeople's wages come from nowhere and pile up, and the only trade is what customers spend at the tables, barrels and shelves on your business lot (nobody staffs it, and there is no stock). Townspeople are not clickable, and only chat, work, live, wander and die. Nobody lives in the tavern, shop or clinic, and the shop sells only bread. Illness does not spread from person to person. Births have no complications, a pregnancy cannot be ended or prevented, there are no twins, and nobody ages out or dies of old age. Only the player's household has children: townspeople never conceive (they do have birthdays, and their children come of age).
 
 ## Next
 

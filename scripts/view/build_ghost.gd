@@ -22,4 +22,4 @@ func _draw() -> void:
 	if kind == "floor":
 		FloorArt.draw(self, def_id, Rect2(Vector2(-size, -size) * 0.5, Vector2(size, size)), cell)
 	elif kind == "place":
-		ObjectArt.draw(self, def_id, size / 48.0, 0.0, false, connections)
+		ObjectArt.draw(self, def_id, size / 48.0, 0.0, false, connections, cell)

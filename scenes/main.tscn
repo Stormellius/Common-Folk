@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=16 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/view/map_view.gd" id="2_map"]
@@ -10,6 +10,10 @@
 [ext_resource type="Script" path="res://scripts/view/object_layer.gd" id="8_objects"]
 [ext_resource type="Script" path="res://scripts/view/floor_layer.gd" id="9_floors"]
 [ext_resource type="Script" path="res://scripts/view/build_controller.gd" id="10_build"]
+[ext_resource type="Script" path="res://scripts/view/shadow_layer.gd" id="11_shadows"]
+[ext_resource type="Script" path="res://scripts/view/smoke_layer.gd" id="12_smoke"]
+[ext_resource type="Script" path="res://scripts/view/cloud_shadows.gd" id="13_clouds"]
+[ext_resource type="Script" path="res://scripts/view/weather.gd" id="14_weather"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
@@ -23,11 +27,20 @@ script = ExtResource("2_map")
 [node name="FloorLayer" type="Node2D" parent="."]
 script = ExtResource("9_floors")
 
+[node name="ShadowLayer" type="Node2D" parent="."]
+script = ExtResource("11_shadows")
+
 [node name="ObjectLayer" type="Node2D" parent="."]
 script = ExtResource("8_objects")
 
 [node name="PawnLayer" type="Node2D" parent="."]
 script = ExtResource("7_pawns")
+
+[node name="SmokeLayer" type="Node2D" parent="."]
+script = ExtResource("12_smoke")
+
+[node name="CloudShadows" type="Node2D" parent="."]
+script = ExtResource("13_clouds")
 
 [node name="BuildController" type="Node2D" parent="."]
 script = ExtResource("10_build")
@@ -37,6 +50,9 @@ script = ExtResource("3_cursor")
 
 [node name="Camera" type="Camera2D" parent="."]
 script = ExtResource("4_camera")
+
+[node name="Weather" type="CanvasLayer" parent="."]
+script = ExtResource("14_weather")
 
 [node name="HUD" type="CanvasLayer" parent="."]
 script = ExtResource("5_hud")

@@ -27,9 +27,17 @@ var label_scale := 1.0:
 			label_scale = value
 			queue_redraw()
 
+## How far the name is pushed down so it does not cover a neighbor's (set by the layer), in
+## screen pixels.
+var label_drop := 0.0:
+	set(value):
+		if absf(value - label_drop) > 0.5:
+			label_drop = value
+			queue_redraw()
+
 var _phase := 0.0
-var _drawn_facing := Vector2i(-99, -99)
-var _drawn_pose := "?"
+## Townspeople's names are drawn a little dimmer than your household's.
+var townsfolk := false
 
 
 func setup(new_pawn: Pawn) -> void:
@@ -63,18 +71,14 @@ func _process(delta: float) -> void:
 	elif _phase != 0.0:
 		_phase = 0.0
 		queue_redraw()
-	if pawn.pose == "lie" or pawn.pose == "close" or pawn.pose == "talk":
-		queue_redraw()  # the floating Zzz, the hearts and the speech bubble move
-	if pawn.facing != _drawn_facing or pawn.pose != _drawn_pose:
-		queue_redraw()
+	# Always redraw: people breathe while they stand, and the Zzz, hearts and speech bubbles move.
+	queue_redraw()
 
 
 func _draw() -> void:
 	if pawn == null:
 		return
-	_drawn_facing = pawn.facing
-	_drawn_pose = pawn.pose
-	var u := MapView.TILE_SIZE / 48.0 * (1.0 if pawn.adult else CHILD_SCALE * (0.6 if pawn.is_infant() else 1.0))
+	var u := unit()
 	if selected:
 		var ring := PackedVector2Array()
 		for i in range(25):
@@ -82,7 +86,8 @@ func _draw() -> void:
 			ring.append(Vector2(cos(a) * 17.0, 7.0 + sin(a) * 10.0) * u)
 		draw_polyline(ring, Color(1.0, 0.95, 0.6, 0.95), 2.0)
 	var asleep := pawn.pose == "lie"
-	PawnArt.draw(self, pawn.look, pawn.facing, u, _phase, asleep)
+	var breath := Time.get_ticks_msec() / 1000.0 * 1.6 + pawn.id * 2.3
+	PawnArt.draw(self, pawn.look, pawn.facing, u, _phase, asleep, PawnArt.outfit_for(pawn), breath)
 	if asleep:
 		_draw_blanket_and_zzz(u)
 	elif pawn.pose == "close":
@@ -91,10 +96,20 @@ func _draw() -> void:
 		_draw_speech(u)
 	if show_name and not pawn.is_infant():
 		var font := ThemeDB.fallback_font
-		draw_set_transform(Vector2(0.0, 27.0 * u), 0.0, Vector2(label_scale, label_scale))
+		draw_set_transform(Vector2(0.0, 27.0 * u + label_drop * label_scale), 0.0, Vector2(label_scale, label_scale))
 		draw_string_outline(font, Vector2(-70.0, 0.0), pawn.display_name, HORIZONTAL_ALIGNMENT_CENTER, 140.0, 13, 4, Color(0, 0, 0, 0.85))
-		draw_string(font, Vector2(-70.0, 0.0), pawn.display_name, HORIZONTAL_ALIGNMENT_CENTER, 140.0, 13, Color(0.95, 0.94, 0.9))
+		draw_string(font, Vector2(-70.0, 0.0), pawn.display_name, HORIZONTAL_ALIGNMENT_CENTER, 140.0, 13, Color(0.78, 0.77, 0.72) if townsfolk else Color(0.97, 0.96, 0.92))
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## Units to pixels for this person: children and babies are drawn smaller.
+func unit() -> float:
+	return MapView.TILE_SIZE / 48.0 * (1.0 if pawn.adult else CHILD_SCALE * (0.6 if pawn.is_infant() else 1.0))
+
+
+## Where the name sits, in world pixels, before any push down.
+func label_anchor() -> Vector2:
+	return position + Vector2(0.0, 27.0 * unit())
 
 
 ## A blanket pulled up to the chest, and a little Zzz drifting up from the head.

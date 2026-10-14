@@ -15,6 +15,10 @@ var _loading := false           # true while a save is being put in place (no au
 
 @onready var map_view: MapView = $MapView
 @onready var floor_layer: FloorLayer = $FloorLayer
+@onready var shadow_layer: ShadowLayer = $ShadowLayer
+@onready var smoke_layer: SmokeLayer = $SmokeLayer
+@onready var cloud_shadows: CloudShadows = $CloudShadows
+@onready var weather: Weather = $Weather
 @onready var object_layer: ObjectLayer = $ObjectLayer
 @onready var build: BuildController = $BuildController
 @onready var pawn_layer: PawnLayer = $PawnLayer
@@ -93,7 +97,8 @@ func _unhandled_input(event: InputEvent) -> void:
 ## dying = the selected person is minutes from starving (to see the death and the hand-over),
 ## start = how to begin (bought, inherited or arrived; without it, and without seed or load, a start screen asks),
 ## shot = save a screenshot to this path a moment after starting, then quit,
-## demohouse = build a small walled room with a door and a floor on the lot, using the real build commands.
+## demohouse = build a small walled room with a door and a floor on the lot, using the real build commands,
+## weather = clear, cloudy, rain or snow instead of the seeded weather (only changes the look).
 ## Handy for screenshots and testing.
 func _launch_option(name: String) -> String:
 	var prefix := "--%s=" % name
@@ -150,6 +155,8 @@ func _apply_launch_options() -> void:
 		var spot := _launch_option("menu").split(",")
 		if spot.size() == 2:
 			_on_context_menu_requested(Vector2(700, 260), Vector2i(int(spot[0]), int(spot[1])))
+	if _launch_option("weather") != "":
+		weather.force(_launch_option("weather"))
 	if _launch_option("zoom") != "":
 		var zoom_level := clampf(float(_launch_option("zoom")), CameraController.ZOOM_MIN, CameraController.ZOOM_MAX)
 		camera.zoom = Vector2(zoom_level, zoom_level)
@@ -222,6 +229,10 @@ func _show_world(new_world: WorldState, household: Household, town: Household = 
 	map_view.set_world(world)
 	tile_cursor.set_world(world)
 	floor_layer.bind(world)
+	shadow_layer.bind(world)
+	smoke_layer.bind(sim)
+	cloud_shadows.set_world(world)
+	weather.bind(world)
 	object_layer.bind(sim)
 	pawn_layer.bind(sim)
 	build.bind(sim)
