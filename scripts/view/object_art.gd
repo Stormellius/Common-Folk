@@ -20,6 +20,24 @@ static func is_animated(def_id: String) -> bool:
 	return def_id in ANIMATED
 
 
+## How far the crops have got: 0 bare earth, 1 seedlings, 2 growing, 3 ripe, 4 stubble. They are
+## sown in spring, ripen through summer and autumn, and the land lies bare in winter.
+static func crop_stage() -> int:
+	var seasons: Array = DataRegistry.get_list("seasons")
+	if seasons.is_empty():
+		return 3
+	var position := GameClock.get_season_position()
+	var progress := float(position["progress"])
+	match str(seasons[position["index"]].get("id", "")):
+		"spring":
+			return 0 if progress < 0.25 else 1
+		"summer":
+			return 2 if progress < 0.6 else 3
+		"autumn":
+			return 3 if progress < 0.55 else 4
+	return 0
+
+
 ## `connections` is a bitmask of neighbors that a wall or door should join up with
 ## (1 north, 2 east, 4 south, 8 west; see WorldState.connection_mask). `cell` is the tile it
 ## stands on; it only varies the stonework and planks so neighbors do not look stamped.
@@ -37,6 +55,16 @@ static func draw(ci: CanvasItem, def_id: String, u: float, t: float, occupied: b
 			_bed(ci, u, occupied)
 		"cradle":
 			_cradle(ci, u)
+		"chopping_block":
+			_chopping_block(ci, u, cell)
+		"quarry_face":
+			_quarry_face(ci, u, cell)
+		"field_plot":
+			_field_plot(ci, u, cell)
+		"herb_bed":
+			_herb_bed(ci, u, cell)
+		"fishing_spot":
+			_fishing_spot(ci, u)
 		"lantern_post":
 			_lantern_post(ci, u, t)
 		"flower_bed":
@@ -203,6 +231,94 @@ static func _market_stall(ci: CanvasItem, u: float, cell: Vector2i) -> void:
 		var goods := [Color(0.84, 0.30, 0.22), Color(0.95, 0.78, 0.30), Color(0.50, 0.68, 0.30), Color(0.80, 0.62, 0.40)]
 		ci.draw_circle(at * u, 2.8 * u, OUTLINE)
 		ci.draw_circle(at * u, 2.2 * u, goods[int(hash01(cell.x + i, cell.y, 16) * goods.size()) % goods.size()])
+
+
+## A stump with an axe stuck in it and chips of wood about.
+static func _chopping_block(ci: CanvasItem, u: float, cell: Vector2i) -> void:
+	_shadow(ci, u, 18.0)
+	for i in 6:  # chips
+		var at := Vector2(lerpf(-20.0, 20.0, hash01(cell.x, cell.y, 20 + i)), lerpf(-15.0, 17.0, hash01(cell.x, cell.y, 30 + i)))
+		_ellipse(ci, u, at, Vector2(3.0, 1.6), Color(0.76, 0.58, 0.34), 0.0)
+	_ellipse(ci, u, Vector2.ZERO, Vector2(15, 13), Color(0.33, 0.22, 0.13), 1.3)
+	_ellipse(ci, u, Vector2(0, -1), Vector2(12.5, 10.5), Color(0.72, 0.54, 0.33), 0.0)
+	for ring in [8.5, 5.0, 2.0]:
+		ci.draw_arc(Vector2(0, -1) * u, ring * u, 0.0, TAU, 14, Color(0.55, 0.38, 0.21), maxf(1.0, 0.8 * u))
+	ci.draw_line(Vector2(5, -3) * u, Vector2(13, -13) * u, Color(0.30, 0.20, 0.12), maxf(1.5, 3.0 * u))  # the axe's haft
+	var blade := PackedVector2Array([Vector2(1, -2), Vector2(7, -1), Vector2(9, -7), Vector2(3, -8)])
+	ci.draw_colored_polygon(_scaled(blade, u), Color(0.62, 0.64, 0.68))
+	ci.draw_polyline(_scaled(PackedVector2Array([Vector2(1, -2), Vector2(7, -1), Vector2(9, -7), Vector2(3, -8), Vector2(1, -2)]), u), OUTLINE, maxf(1.0, u))
+
+
+## A heap of cut and broken rock with a pick leaning on it.
+static func _quarry_face(ci: CanvasItem, u: float, cell: Vector2i) -> void:
+	_shadow(ci, u, 20.0)
+	for i in 9:
+		var at := Vector2(lerpf(-14.0, 14.0, hash01(cell.x, cell.y, 50 + i)), lerpf(-12.0, 12.0, hash01(cell.x, cell.y, 60 + i)))
+		var size := Vector2(lerpf(5.0, 9.5, hash01(cell.x, cell.y, 70 + i)), lerpf(4.0, 7.5, hash01(cell.x, cell.y, 80 + i)))
+		var shade := 0.78 + 0.35 * hash01(cell.x, cell.y, 90 + i)
+		_ellipse(ci, u, at, size, Color(0.62, 0.62, 0.60) * shade, 1.0)
+		_ellipse(ci, u, at + Vector2(-1.2, -1.4), size * 0.5, Color(1, 1, 1, 0.12), 0.0)
+	ci.draw_line(Vector2(-16, 14) * u, Vector2(6, -10) * u, OUTLINE, maxf(1.5, 3.8 * u))
+	ci.draw_line(Vector2(-16, 14) * u, Vector2(6, -10) * u, Color(0.45, 0.31, 0.18), maxf(1.0, 2.4 * u))
+	ci.draw_line(Vector2(0, -12) * u, Vector2(13, -6) * u, Color(0.55, 0.57, 0.60), maxf(1.5, 2.6 * u))  # the pick's head
+
+
+## One plot of a field: tilled furrows, and whatever the season has done to them.
+static func _field_plot(ci: CanvasItem, u: float, cell: Vector2i) -> void:
+	var stage := crop_stage()
+	_rect(ci, u, -24, -24, 48, 48, Color(0.38, 0.27, 0.18), 0.0)
+	for i in 6:
+		var y := -19.0 + i * 7.6
+		ci.draw_line(Vector2(-24, y) * u, Vector2(24, y) * u, Color(0.28, 0.19, 0.12), maxf(1.0, 2.2 * u))
+		ci.draw_line(Vector2(-24, y + 2.6) * u, Vector2(24, y + 2.6) * u, Color(0.47, 0.34, 0.22), maxf(1.0, 1.2 * u))
+	if stage == 0:
+		return
+	for row in 6:
+		var y := -19.0 + row * 7.6
+		for col in 8:
+			var x := -21.0 + col * 6.0 + 1.5 * hash01(cell.x + col, cell.y + row, 3)
+			match stage:
+				1:
+					ci.draw_line(Vector2(x, y + 2.0) * u, Vector2(x, y - 1.5) * u, Color(0.46, 0.68, 0.30), maxf(1.0, 1.4 * u))
+				2:
+					ci.draw_line(Vector2(x, y + 2.0) * u, Vector2(x + 0.5, y - 5.0) * u, Color(0.36, 0.60, 0.24), maxf(1.0, 1.8 * u))
+					ci.draw_line(Vector2(x, y + 2.0) * u, Vector2(x - 1.8, y - 3.5) * u, Color(0.42, 0.65, 0.27), maxf(1.0, 1.4 * u))
+				3:
+					ci.draw_line(Vector2(x, y + 2.0) * u, Vector2(x, y - 6.0) * u, Color(0.80, 0.66, 0.28), maxf(1.0, 1.8 * u))
+					ci.draw_line(Vector2(x, y - 6.0) * u, Vector2(x + 0.8, y - 9.5) * u, Color(0.93, 0.78, 0.32), maxf(1.0, 2.4 * u))
+					ci.draw_line(Vector2(x + 2.0, y + 2.0) * u, Vector2(x + 1.6, y - 4.0) * u, Color(0.74, 0.60, 0.25), maxf(1.0, 1.4 * u))
+				_:
+					ci.draw_line(Vector2(x, y + 2.0) * u, Vector2(x, y - 1.0) * u, Color(0.70, 0.60, 0.36), maxf(1.0, 1.4 * u))
+
+
+## A raised bed of herbs in a wooden frame.
+static func _herb_bed(ci: CanvasItem, u: float, cell: Vector2i) -> void:
+	var stage := crop_stage()
+	_rect(ci, u, -20, -20, 40, 40, Color(0.40, 0.28, 0.17), 1.2)
+	_rect(ci, u, -17, -17, 34, 34, Color(0.27, 0.19, 0.12), 0.0)
+	if stage == 0:
+		return
+	var leaf := Color(0.40, 0.62, 0.30) if stage < 4 else Color(0.62, 0.58, 0.30)
+	for i in 9:
+		var at := Vector2(lerpf(-12.0, 12.0, hash01(cell.x, cell.y, 100 + i)), lerpf(-12.0, 12.0, hash01(cell.x, cell.y, 110 + i)))
+		var grown := 3.0 if stage == 1 else 5.5
+		_ellipse(ci, u, at, Vector2(grown, grown * 0.8), leaf * (0.85 + 0.3 * hash01(cell.x, cell.y, 120 + i)), 0.0)
+		if stage in [2, 3] and i % 3 == 0:
+			ci.draw_circle((at + Vector2(0, -1)) * u, 1.8 * u, Color(0.70, 0.52, 0.86) if stage == 3 else Color(0.90, 0.85, 0.50))
+
+
+## The end of the jetty: a post with a coil of rope, a bucket of fish and a net.
+static func _fishing_spot(ci: CanvasItem, u: float) -> void:
+	_shadow(ci, u, 14.0)
+	ci.draw_circle(Vector2(-8, -6) * u, 6.5 * u, OUTLINE)
+	ci.draw_circle(Vector2(-8, -6) * u, 5.2 * u, Color(0.34, 0.22, 0.13))
+	ci.draw_circle(Vector2(-8, -6) * u, 3.2 * u, Color(0.55, 0.40, 0.24))
+	ci.draw_arc(Vector2(10, 6) * u, 6.0 * u, 0.0, TAU, 12, Color(0.72, 0.62, 0.40), maxf(1.5, 2.2 * u))  # rope
+	ci.draw_arc(Vector2(10, 6) * u, 3.4 * u, 0.0, TAU, 10, Color(0.62, 0.52, 0.32), maxf(1.0, 1.6 * u))
+	_ellipse(ci, u, Vector2(8, -9), Vector2(8, 6), Color(0.40, 0.28, 0.17), 1.0)
+	_ellipse(ci, u, Vector2(8, -10), Vector2(6, 4), Color(0.20, 0.34, 0.44), 0.0)
+	for fish in [Vector2(6, -10), Vector2(10, -9)]:
+		_ellipse(ci, u, fish, Vector2(3.2, 1.5), Color(0.70, 0.76, 0.82), 0.0)
 
 
 ## A little wooden cradle on two rockers, with a straw tick and a folded blanket.

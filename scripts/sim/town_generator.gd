@@ -107,7 +107,9 @@ static func generate_town(world: WorldState, profile_id: String, center: Vector2
 	report["town"] = town
 	_decorate(world, rng, town_id, roads, plaza, center)
 	if bool(config.get("lake", false)):
-		_dig_lake(world, rng, center, half_width, half_up, half_down)
+		var pier := _dig_lake(world, rng, center, half_width, half_up, half_down)
+		if pier != Vector2i(-1, -1):
+			town["pier"] = [pier.x, pier.y]  # the far end of the pier, for the jetty (see SiteGenerator)
 	return report
 
 
@@ -434,7 +436,8 @@ static func _put(world: WorldState, def_id: String, tile: Vector2i) -> void:
 # --- a lake for a fishing village -----------------------------------------------------
 
 ## Digs a pond beside the clearing, on the side with the most room, and runs a pier out into it.
-static func _dig_lake(world: WorldState, rng: RandomNumberGenerator, center: Vector2i, half_width: int, half_up: int, half_down: int) -> void:
+## Returns the far end of the pier.
+static func _dig_lake(world: WorldState, rng: RandomNumberGenerator, center: Vector2i, half_width: int, half_up: int, half_down: int) -> Vector2i:
 	var radius := Vector2i(rng.randi_range(15, 19), rng.randi_range(9, 12))
 	var best := Vector2i(1, 0)
 	var best_room := -1
@@ -468,10 +471,13 @@ static func _dig_lake(world: WorldState, rng: RandomNumberGenerator, center: Vec
 		tile += best
 		steps += 1
 	var pier_id := "bridge_h" if best.x != 0 else "bridge"
+	var far_end := Vector2i(-1, -1)
 	for i in 9:
 		if world.in_bounds(tile.x, tile.y) and world.get_tile_id(tile.x, tile.y) == "water":
 			world.set_tile(tile.x, tile.y, pier_id)
+			far_end = tile
 		tile += best
+	return far_end
 
 
 static func _near_lot(world: WorldState, tile: Vector2i) -> bool:

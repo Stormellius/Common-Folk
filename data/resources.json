@@ -1,0 +1,7 @@
+[
+  { "id": "wood",  "name": "Wood",  "price": 2, "color": "#a9794a" },
+  { "id": "stone", "name": "Stone", "price": 3, "color": "#8d9096" },
+  { "id": "grain", "name": "Grain", "price": 2, "color": "#d6b24a" },
+  { "id": "fish",  "name": "Fish",  "price": 3, "color": "#7fa6c4" },
+  { "id": "herbs", "name": "Herbs", "price": 4, "color": "#6f9f55" }
+]

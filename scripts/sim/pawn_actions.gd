@@ -28,6 +28,7 @@ const DATE_PREFIX := "date:"         # "date:<partner's id>"
 const MOVE_PREFIX := "move:"         # "move:invite:<id>" (they move in with you) or "move:join:<id>" (you move in with them)
 const BREAKUP_PREFIX := "breakup:"   # "breakup:<partner's id>"
 const MOVE_HOME := "move_home"
+const SELL_PREFIX := "sell:"         # "sell:<resource id>"
 const FUND_STEPS := [10, 50]
 
 
@@ -55,9 +56,13 @@ static func list_for(sim: Simulation, pawn: Pawn, tile: Vector2i) -> Array[Dicti
 		var price := sim.price_of(placed.def_id)
 		if price > 0:
 			label += " (%s)" % Economy.format(price)
+		if placed.def().has("gathers"):
+			label += " (+%s)" % Economy.stock_text(placed.def()["gathers"])
 		actions.append(_entry(USE_PREFIX + str(placed.id), label, blocker == "", blocker))
 	if placed != null and placed.def().has("offers_work"):
 		actions.append_array(_work_entries(sim, pawn, placed))
+	if placed != null and placed.def_id == "counter" and str(sim.world.lot_at(placed.tile).get("kind", "")) == "shop":
+		actions.append_array(_sell_entries(sim))
 	if placed != null and str(placed.def().get("offers_work", "")) == "town":
 		actions.append_array(_guild_entries(sim))
 		for amount in FUND_STEPS:
@@ -123,6 +128,18 @@ static func _baby_entries(sim: Simulation, pawn: Pawn, baby: Pawn) -> Array[Dict
 	return entries
 
 
+## Selling what the household has gathered, at a shop counter: one entry for each resource held.
+static func _sell_entries(sim: Simulation) -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	for resource_id in Economy.resource_ids():
+		var amount := sim.household.stock_of(resource_id)
+		if amount > 0:
+			entries.append(_entry(SELL_PREFIX + resource_id, "Sell your %d %s (%s)" % [amount, Economy.resource_name(resource_id).to_lower(), Economy.format(sim.sale_price(resource_id))]))
+	if entries.is_empty():
+		entries.append(_entry("none", "Sell goods", false, "you have nothing gathered to sell"))
+	return entries
+
+
 ## Joining a guild, from the notice board.
 static func _guild_entries(sim: Simulation) -> Array[Dictionary]:
 	var entries: Array[Dictionary] = []
@@ -167,7 +184,8 @@ static func _land_entries(sim: Simulation, tile: Vector2i) -> Array[Dictionary]:
 static func _work_entries(sim: Simulation, pawn: Pawn, placed: PlacedObject) -> Array[Dictionary]:
 	var entries: Array[Dictionary] = []
 	var lot_id := "" if str(placed.def()["offers_work"]) == "town" else str(sim.world.lot_at(placed.tile).get("id", "none"))
-	for opening in sim.open_positions(lot_id):
+	var board_town := "" if lot_id != "" else str(sim.world.town_at(placed.tile).get("id", ""))
+	for opening in sim.open_positions(lot_id, board_town):
 		var job: Dictionary = opening["job"]
 		var lot: Dictionary = opening["lot"]
 		var blocker := sim.hire_blocker(pawn, str(lot["id"]), str(job["id"]))
@@ -219,6 +237,8 @@ static func _perform(sim: Simulation, pawn: Pawn, action_id: String, tile: Vecto
 		if dying == null:
 			return { "ok": false, "message": "Death has already taken them" }
 		return sim.order_plead(pawn, dying)
+	if action_id.begins_with(SELL_PREFIX):
+		return sim.sell_stock(action_id.trim_prefix(SELL_PREFIX))
 	if action_id == MOVE_HOME:
 		var home_blocker := Romance.move_home_blocker(sim, pawn)
 		if home_blocker != "":

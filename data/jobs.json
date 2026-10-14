@@ -1,6 +1,11 @@
 [
-  { "id": "tavern_hand",    "name": "Tavern hand",    "workplace": "tavern", "positions": 3, "wage": 4, "from": 12, "to": 20, "station": "counter", "min_age": 16, "not_for": ["gentry"] },
-  { "id": "shop_clerk",     "name": "Shop clerk",     "workplace": "shop",   "positions": 2, "wage": 5, "from": 8,  "to": 16, "station": "counter", "min_age": 16 },
-  { "id": "clinic_orderly", "name": "Clinic orderly", "workplace": "clinic", "positions": 2, "wage": 4, "from": 7,  "to": 15, "station": "counter", "min_age": 16 },
-  { "id": "groundskeeper",  "name": "Groundskeeper",  "workplace": "park",   "positions": 1, "wage": 3, "from": 8,  "to": 16, "station": "well",    "min_age": 16, "not_for": ["gentry"] }
+  {"id": "tavern_hand", "name": "Tavern hand", "workplace": "tavern", "positions": 3, "wage": 4, "from": 12, "to": 20, "station": "counter", "min_age": 16, "not_for": ["gentry"]},
+  {"id": "shop_clerk", "name": "Shop clerk", "workplace": "shop", "positions": 2, "wage": 5, "from": 8, "to": 16, "station": "counter", "min_age": 16},
+  {"id": "clinic_orderly", "name": "Clinic orderly", "workplace": "clinic", "positions": 2, "wage": 4, "from": 7, "to": 15, "station": "counter", "min_age": 16},
+  {"id": "groundskeeper", "name": "Groundskeeper", "workplace": "park", "positions": 1, "wage": 3, "from": 8, "to": 16, "station": "well", "min_age": 16, "not_for": ["gentry"]},
+  {"id": "woodcutter", "name": "Woodcutter", "workplace": "woodlot", "positions": 3, "wage": 4, "from": 7, "to": 15, "station": "chopping_block", "min_age": 16, "heavy": true},
+  {"id": "quarryman", "name": "Quarryman", "workplace": "quarry", "positions": 3, "wage": 5, "from": 7, "to": 15, "station": "quarry_face", "min_age": 16, "heavy": true, "not_for": ["gentry"]},
+  {"id": "farmhand", "name": "Farmhand", "workplace": "farm", "positions": 4, "wage": 3, "from": 6, "to": 14, "station": "field_plot", "min_age": 14},
+  {"id": "herbalist", "name": "Herbalist", "workplace": "herb_garden", "positions": 2, "wage": 4, "from": 8, "to": 15, "station": "herb_bed", "min_age": 16},
+  {"id": "fisher", "name": "Fisher", "workplace": "jetty", "positions": 2, "wage": 4, "from": 5, "to": 13, "station": "fishing_spot", "min_age": 14}
 ]

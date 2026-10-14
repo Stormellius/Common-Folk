@@ -26,6 +26,7 @@ A mod is a folder in `mods/` (or `user://mods/` in an exported game) with the sa
 | `worldgen.json` | `region` (map `width` and `height`, and the `settlements`: a `profile`, where (`at`, as fractions of the map) and `home: true` for the player's town), then one profile per kind of settlement (below) |
 | `buildings.json` | Templates drawn in characters: `#` timber wall, `S` stone wall, `+` door, `.` floor, space for nothing, and a letter for an object (b bed, p pot, h hearth, w basin, c chamber pot, l lute, t table, k counter, s shelf, r barrel, n bench, W well, m tavern table, a ale barrel, f bread shelf, B notice board, A altar, P pew, H sickbed). Door in the bottom wall; the generator mirrors and turns it to face the street. `kind` (a `house` is filled with a family, one person per bed), `floor`, `public`, `class` (`gentry` for grand houses) |
 | `floors.json` | Floors the player can lay: `color`, `line`, `pattern` (`planks`, `flags`, `straw`), `cost` per tile |
+| `resources.json` | The things folk gather: `name`, `price` (what the shop sells it for; it pays `sell_percent` of that, from `economy.json`) |
 | `names.json` | `given_female`, `given_male`, `family` and `town` name lists |
 | `appearance.json` | Skin, hair and clothing colours |
 
@@ -35,14 +36,14 @@ A settlement profile has `kind` (`town`, `village`, `hamlet`), `npc_count`, `bui
 
 | File | What it holds |
 | --- | --- |
-| `objects.json` | What can stand on the map. `cost` (to build), `price` (per use), `category` (build tab: `furniture`, `structure`, `business`, `decor`), `buildable: false`, `blocks_walking`, `use_position` (`on` or `beside`), `pose`, `action` and `doing` (menu entry and activity), `satisfies` (points restored per hour), `max_use_minutes`, `autonomous: false` (only used on your order), `cures`, `offers_work` (`town` or `lot`), `light` (`color`, `radius` in tiles, `energy`, `shadow`), `smoke`, `connects` and `drag` (walls), `defense`. An object with no drawing in `object_art.gd` shows as a crate |
+| `objects.json` | What can stand on the map. `cost` (to build), `price` (per use), `category` (build tab: `furniture`, `structure`, `business`, `decor`), `buildable: false`, `blocks_walking`, `use_position` (`on` or `beside`), `pose`, `action` and `doing` (menu entry and activity), `satisfies` (points restored per hour), `max_use_minutes`, `autonomous: false` (only used on your order), `cures`, `offers_work` (`town` or `lot`), `light` (`color`, `radius` in tiles, `energy`, `shadow`), `smoke`, `connects` and `drag` (walls), `defense`, `materials` (what it takes to build, by resource id: held materials stand in for their price in coin), and for work sites `gathers` (what a use brings in), `gather_seasons`, `heavy` (not for elders), `drains` (needs lost per hour of work). An object with no drawing in `object_art.gd` shows as a crate |
 | `needs.json` | `drain_per_hour`, `optional`, `slows_when_empty`, `fatal_after_hours` with a `death_cause`, `seek_below`. A need is only in play while some object or interaction satisfies it |
 | `traits.json` | `need_drain_multipliers`, `thought_multipliers`, `group: "orientation"` with `attracted_to` (`opposite`, `same`, `both`, `none`). Everyone gets one orientation and two other traits |
 | `thoughts.json` | State thoughts have a `when` (`need` with `below` or `above`, `idle`, `alone`, `pregnant`, `heavy`, `in_labour`, `partner`) and hold while it is true; thoughts in one `group` do not stack. Event thoughts have `on` (`used:<object>`, `interaction:<id>`, or an event name) and `hours`. `only_for` and `never_for` take trait ids; `{name}` in the text is the person it is about |
 | `interactions.json` | Things two people do: `satisfies`, `max_use_minutes`, `pose` (`talk` or `close`), `opinion` (`gain`, `backfire`, `loss`), `romance` (the same), `min_opinion`, `min_romance`, `adults_only`, `requires_attraction`, `romantic` (family and the taken are out), `begins_dating`, `willing_below` with an `unwilling` reason, `autonomous`, `conception_chance` |
 | `life_stages.json` | `from_age`, `walk_multiplier`, `need_drain_multipliers`, `heavy_work: false`, and for the last `dies_between` |
 | `lifespans.json` | `days_per_year`: how many game days make a year of life |
-| `jobs.json` | `workplace` (building kind), `positions`, `wage` per hour, `from` and `to` hours, `station` (the object a worker stands beside), `min_age`, `not_for` (classes) |
+| `jobs.json` | `workplace` (a building kind, or a work site: `farm`, `woodlot`, `quarry`, `herb_garden`, `jetty`), `positions`, `wage` per hour, `from` and `to` hours, `station` (the object a worker stands beside), `min_age`, `heavy`, `not_for` (classes) |
 | `economy.json` | `symbol`, `start_coins`, `npc_start_coins`, `refund_percent`, and prices |
 
 ## Systems

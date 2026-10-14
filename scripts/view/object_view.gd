@@ -27,13 +27,14 @@ var connections := -1:
 var _light: PointLight2D
 var _light_energy := 1.0
 var _occluders: Array[LightOccluder2D] = []
+var _crop_stage := -1
 
 
 func setup(new_placed: PlacedObject) -> void:
 	placed = new_placed
 	position = (Vector2(placed.tile) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE
 	_add_light()
-	set_process(_light != null or ObjectArt.is_animated(placed.def_id))  # most things never change
+	set_process(_light != null or ObjectArt.is_animated(placed.def_id) or placed.def().has("gather_seasons"))  # most things never change
 	queue_redraw()
 
 
@@ -106,6 +107,11 @@ func _process(_delta: float) -> void:
 		return
 	if ObjectArt.is_animated(placed.def_id):
 		queue_redraw()
+	if placed.def().has("gather_seasons"):  # crops change with the season
+		var stage := ObjectArt.crop_stage()
+		if stage != _crop_stage:
+			_crop_stage = stage
+			queue_redraw()
 	if _light != null:
 		_light.enabled = DayNight.darkness > 0.01
 		if _light.enabled:

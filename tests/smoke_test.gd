@@ -27,6 +27,7 @@ func _ready() -> void:
 	_test_town()
 	_test_region()
 	_test_economy()
+	_test_work_sites()
 	_test_social()
 	_test_romance()
 	_test_events()
@@ -1327,6 +1328,153 @@ func _interaction_entries(sim: Simulation, from: Pawn, to: Pawn) -> Dictionary:
 		if id.begins_with(PawnActions.INTERACT_PREFIX):
 			found[id.trim_prefix(PawnActions.INTERACT_PREFIX).get_slice(":", 0)] = entry
 	return found
+
+
+func _test_work_sites() -> void:
+	print("Work sites, resources and materials")
+	var ids := Economy.resource_ids()
+	_check(str(ids) == str(["wood", "stone", "grain", "fish", "herbs"]), "there are five resources (%s)" % str(ids))
+	_check(Economy.resource_price("wood") == 2 and Economy.sell_price("wood", 10) == 14 and Economy.sell_price("wood", 10, 1.3) == 18, "the shop pays a share of the price, and more on a market day")
+
+	# The region has sites at every town's edge.
+	var region := RegionGenerator.generate(42)
+	var kinds := {}
+	var all_public := true
+	for lot in region.lots:
+		if str(lot["kind"]) in ["farm", "woodlot", "quarry", "herb_garden", "jetty"]:
+			kinds[lot["kind"]] = int(kinds.get(lot["kind"], 0)) + 1
+			all_public = all_public and bool(lot["public"]) and str(lot.get("town", "")) != ""
+	_check(kinds.has("farm") and kinds.has("woodlot") and kinds.has("quarry") and kinds.has("herb_garden") and kinds.has("jetty") and all_public, "fields, woodlots, quarries, herb gardens and a jetty are public lots of their towns (%s)" % str(kinds))
+	var sites_worked := {}
+	var plots := 0
+	for placed in region.objects:
+		plots += 1 if placed.def_id == "field_plot" else 0
+	var region_people := NpcGenerator.create(region)
+	for pawn in region_people.pawns:
+		if pawn.work_job in ["woodcutter", "quarryman", "farmhand", "herbalist", "fisher"]:
+			sites_worked[pawn.work_job] = int(sites_worked.get(pawn.work_job, 0)) + 1
+			if str(region.town_of_lot(pawn.work_lot).get("id", "")) != str(region.town_of_lot(pawn.home_lot).get("id", "")):
+				sites_worked["far"] = 1
+	_check(plots >= 60 and sites_worked.size() >= 3 and not sites_worked.has("far"), "townsfolk work the land near their homes (%s, %d field plots)" % [str(sites_worked), plots])
+	var site_finder := PathFinder.new(region)
+	var every_site_reachable := true
+	for lot in region.lots:
+		if str(lot["kind"]) in ["farm", "woodlot", "quarry", "herb_garden", "jetty"]:
+			var home_town := region.get_town(str(lot["town"]))
+			var found := false
+			for placed in region.objects:
+				if (lot["rect"] as Rect2i).has_point(placed.tile) and str(placed.def().get("category", "")) == "worksite":
+					for step in [Vector2i(0, 0), Vector2i(0, 1), Vector2i(1, 0), Vector2i(0, -1), Vector2i(-1, 0)]:
+						var spot: Vector2i = placed.tile + step
+						if region.is_walkable(spot.x, spot.y):
+							found = not site_finder.find_path(home_town["center"], spot).is_empty()
+							break
+					break
+			every_site_reachable = every_site_reachable and found
+	_check(every_site_reachable, "and every site can be walked to from its town")
+
+	# A small world to gather in.
+	GameClock.set_time(0, 8)  # spring
+	var setup := _romance_setup()
+	var world: WorldState = setup["world"]
+	var household: Household = setup["household"]
+	var sim: Simulation = setup["sim"]
+	var anna: Pawn = setup["anna"]
+	var ben: Pawn = setup["ben"]
+	var cara: Pawn = setup["cara"]
+	world.lots.append({ "id": "lot_5", "kind": "woodlot", "name": "Woodlot", "template": "woodlot", "facing": "south", "rect": Rect2i(20, 14, 12, 8), "public": true, "town": "t1" })
+	world.lots.append({ "id": "lot_6", "kind": "farm", "name": "Fields", "template": "farm", "facing": "south", "rect": Rect2i(34, 14, 12, 8), "public": true, "town": "t1" })
+	world.lots.append({ "id": "lot_7", "kind": "shop", "name": "Shop", "template": "shop", "facing": "south", "rect": Rect2i(50, 14, 10, 8), "public": true, "town": "t1" })
+	var block := world.add_object("chopping_block", Vector2i(24, 16))
+	var plot := world.add_object("field_plot", Vector2i(36, 16))
+	var counter := world.add_object("counter", Vector2i(54, 16))
+	var board := world.add_object("notice_board", Vector2i(44, 12))
+	anna.tile = Vector2i(22, 18)
+	anna.step_to = anna.tile
+	var chop := PawnActions.list_for(sim, anna, block.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("use:"))
+	_check(chop.size() == 1 and "Chop wood" in str(chop[0]["label"]) and "3 wood" in str(chop[0]["label"]) and chop[0]["enabled"], "the chopping block offers to chop wood, and says what it yields (%s)" % str(chop))
+	var before_rest := float(anna.needs["rest"])
+	var started := PawnActions.perform(sim, anna, str(chop[0]["id"]), block.tile)
+	_check(started["ok"] and anna.job_kind == "use", "she sets off to chop")
+	for i in 120:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		if anna.job_kind == "":
+			break
+	_check(household.stock_of("wood") == 3 and anna.job_kind == "", "after a spell of work three wood is in the stockpile (%s)" % str(household.stock))
+	_check(float(anna.needs["rest"]) < before_rest - 5.0, "and she is tired for it")
+	_check(anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "gathered"), "and has a hard day's work behind her")
+	ben.age = 70
+	ben.traits = [] as Array[String]
+	_check("heavy" in sim.use_blocker(ben, block), "an elder keeps clear of the axe (%s)" % sim.use_blocker(ben, block))
+	var kid := Pawn.new()
+	kid.display_name = "Kid Marsh"
+	kid.age = 8
+	kid.adult = false
+	kid.tile = Vector2i(9, 6)
+	kid.step_to = kid.tile
+	household.add_pawn(kid)
+	_check("young" in sim.use_blocker(kid, plot), "and a child from the plough")
+	_check("only your own" in sim.use_blocker(cara, block), "the town's people do not gather for your household")
+	_check("until summer" in sim.use_blocker(anna, plot), "nothing is ripe in the fields in spring (%s)" % sim.use_blocker(anna, plot))
+	GameClock.set_time(20, 8)  # summer
+	_check(sim.use_blocker(anna, plot) == "" and ObjectArt.crop_stage() >= 2, "but in summer the crops are coming on")
+	GameClock.set_time(31, 8)
+	_check(ObjectArt.crop_stage() == 3, "ripe late in summer")
+	GameClock.set_time(50, 8)
+	_check(ObjectArt.crop_stage() == 0 and "until" in sim.use_blocker(anna, plot), "and the land lies bare in winter")
+	GameClock.set_time(31, 8)
+	anna.tile = Vector2i(36, 17)
+	anna.step_to = anna.tile
+	PawnActions.perform(sim, anna, "use:%d" % plot.id, plot.tile)
+	for i in 80:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		if anna.job_kind == "":
+			break
+	_check(household.stock_of("grain") == 4, "harvesting brings in grain (%s)" % str(household.stock))
+
+	# Building takes materials, or coin for what is lacking.
+	household.stock = { "wood": 5 }
+	household.coins = 20
+	var price := Economy.build_price("bed", household.stock)
+	_check(price["coins"] == 12 and price["uses"] == { "wood": 3 }, "wood you hold stands in for coin (%s)" % str(price))
+	_check(Economy.build_price("bed", {})["coins"] == 18, "without it you pay the whole price")
+	var built := sim.build_place("bed", Vector2i(10, 5))
+	_check(built["ok"] and household.stock_of("wood") == 2 and household.coins == 8, "a bed takes three wood and 12d (%d wood, %dd left)" % [household.stock_of("wood"), household.coins])
+	household.coins = 3
+	household.stock = { "wood": 1 }
+	var refused := sim.build_blocker("bed", Vector2i(10, 6))
+	_check("bed" not in refused and "wood" in refused and "3d" in refused, "a builder who cannot afford it is told what it takes (%s)" % refused)
+	_check("wood" in Economy.cost_text("wall") and "d" in Economy.cost_text("wall"), "the build menu shows what a thing costs in coin and in wood (%s)" % Economy.cost_text("stone_wall"))
+
+	# Selling.
+	household.stock = { "wood": 10, "grain": 3 }
+	household.coins = 0
+	var sells := PawnActions.list_for(sim, anna, counter.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("sell:"))
+	_check(sells.size() == 2 and "Sell your 10 wood (14d)" in str(sells[0]["label"]), "a shop counter buys what you have gathered (%s)" % str(sells.map(func(e: Dictionary) -> String: return str(e["label"]))))
+	var sold := PawnActions.perform(sim, anna, "sell:wood", counter.tile)
+	_check(sold["ok"] and household.coins == 14 and household.stock_of("wood") == 0 and "14d" in str(sold["message"]), "selling pays out (%s)" % str(sold["message"]))
+	sim.events.active.append({ "id": "market_day", "until": GameClock.tick + 600 })
+	_check(sim.sale_price("grain") == Economy.sell_price("grain", 3, 1.3), "and pays more on market day")
+	_check(not sim.sell_stock("fish")["ok"], "nothing to sell, nothing paid")
+	var empty := PawnActions.list_for(sim, anna, counter.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "none")
+	household.stock = {}
+	var none_left := PawnActions.list_for(sim, anna, counter.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "none" and not e["enabled"])
+	_check(none_left.size() >= 1 and empty.size() == 0, "with an empty stockpile the counter says there is nothing to sell")
+
+	# The notice board lists the jobs of its own town.
+	world.lots.append({ "id": "lot_8", "kind": "shop", "name": "Shop", "template": "shop", "facing": "south", "rect": Rect2i(46, 24, 10, 6), "public": true, "town": "t1" })
+	var board_entries := PawnActions.list_for(sim, anna, board.tile).map(func(e: Dictionary) -> String: return str(e["id"]))
+	_check(board_entries.has("hire:lot_7:shop_clerk") and board_entries.has("hire:lot_5:woodcutter") and not board_entries.has("hire:lot_4:shop_clerk"), "the board in the town lists its jobs (shop, woodlot) and not those of another town")
+
+	# Saving the stockpile.
+	household.stock = { "stone": 4, "herbs": 2 }
+	_check(SaveGame.save(TEST_SAVE, world, household, {}) == OK, "a household with a stockpile is saved")
+	var loaded := SaveGame.load_from(TEST_SAVE)
+	_check(loaded["ok"] and loaded["household"].stock == { "stone": 4, "herbs": 2 } and loaded["household"].stock_of("stone") == 4, "and its stockpile comes back")
+	DirAccess.remove_absolute(TEST_SAVE)
+	GameClock.reset()
 
 
 func _test_social() -> void:

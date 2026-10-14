@@ -8,10 +8,10 @@
   },
   {
     "id": "market_day", "name": "Market day",
-    "announce": "It is market day: bread is half price at the shop.",
+    "announce": "It is market day: bread is half price at the shop, and goods fetch more.",
     "chance": 0.09, "cooldown_days": 6,
     "start_hour": 8, "duration_hours": 8,
-    "gather": "shop", "price_multipliers": { "food_shelf": 0.5 }, "thought": "event:market_day"
+    "gather": "shop", "price_multipliers": { "food_shelf": 0.5 }, "sell_multiplier": 1.3, "thought": "event:market_day"
   },
   {
     "id": "cold_snap", "name": "Cold snap",

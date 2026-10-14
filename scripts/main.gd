@@ -441,7 +441,7 @@ func _process(_delta: float) -> void:
 		var chosen := sim.household.selected()
 		hud.show_pawn(chosen, sim.describe_activity(chosen) if chosen != null else "", sim.job_text(chosen) if chosen != null else "", sim.relationship_lines(chosen) if chosen != null else [])
 		hud.set_events(sim.events.names())
-		hud.set_purse(sim.household.coins)
+		hud.set_purse(sim.household.coins, sim.household.stock)
 		hud.set_realm(sim.realm.summary(sim))
 		var here := world.town_at(chosen.tile) if chosen != null else {}
 		hud.set_place(str(here["name"]) if not here.is_empty() else ("Open country" if chosen != null and not world.towns.is_empty() else ""))

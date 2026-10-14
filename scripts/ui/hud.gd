@@ -67,6 +67,7 @@ var _needs_job: Label
 var _purse_label: Label
 var _realm_label: Label
 var _place_label: Label
+var _stock_label: Label
 var _mood_bar: ProgressBar
 var _mood_fill: StyleBoxFlat
 var _mood_label: Label
@@ -108,14 +109,16 @@ func _ready() -> void:
 	_on_speed_changed(GameClock.speed_level)
 
 
-## The household's purse, shown under the clock.
 ## Where the person you control is: a town's name, or "Open country".
 func set_place(text: String) -> void:
 	_place_label.text = text
 
 
-func set_purse(coins: int) -> void:
+## The household's purse, shown under the clock, and what it has gathered.
+func set_purse(coins: int, stock: Dictionary = {}) -> void:
 	_purse_label.text = "Purse  %s" % Economy.format(coins)
+	var held := Economy.stock_text(stock)
+	_stock_label.text = held if held != "" else "Nothing stockpiled"
 
 
 ## Class, land title, next tax day, guild: the lines under the purse.
@@ -415,6 +418,11 @@ func _build_clock_panel() -> void:
 	_purse_label.add_theme_font_size_override("font_size", 15)
 	_purse_label.add_theme_color_override("font_color", UiTheme.GOLD)
 	box.add_child(_purse_label)
+	_stock_label = _make_label("", "DimLabel")
+	_stock_label.add_theme_font_size_override("font_size", 12)
+	_stock_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_stock_label.custom_minimum_size = Vector2(214, 0)
+	box.add_child(_stock_label)
 	_realm_label = _make_label("", "DimLabel")
 	_realm_label.add_theme_font_size_override("font_size", 12)
 	_realm_label.visible = false
@@ -690,7 +698,7 @@ func _build_build_ui() -> void:
 			item.button_group = group
 			item.focus_mode = Control.FOCUS_NONE
 			item.custom_minimum_size = Vector2(90, 70)
-			item.tooltip_text = str(entry["name"]) + ("  -  %s" % Economy.format(int(entry["cost"])) if int(entry.get("cost", 0)) > 0 else "")
+			item.tooltip_text = str(entry["name"]) + ("  -  %s" % (Economy.cost_text(str(entry["id"])) if str(entry["kind"]) == "place" else Economy.format(int(entry["cost"]))) if int(entry.get("cost", 0)) > 0 else "")
 			var icon := BuildIcon.new()
 			icon.kind = str(entry["kind"])
 			icon.id = str(entry["id"])

@@ -94,5 +94,6 @@
   { "id": "moved_in",     "text": "Moved in with {name}",     "mood": 10,  "hours": 72,  "on": "moved_in" },
   { "id": "moved_away",   "text": "{name} has moved out",     "mood": -5,  "hours": 48,  "on": "moved_away" },
   { "id": "partnered",    "text": "Has someone special",      "mood": 4,   "when": { "partner": true }, "group": "partner" },
-  { "id": "flirt_flop",   "text": "Flirting fell flat",       "mood": -4,  "hours": 8,   "on": "flirt_flop" }
+  { "id": "flirt_flop",   "text": "Flirting fell flat",       "mood": -4,  "hours": 8,   "on": "flirt_flop" },
+  { "id": "gathered",     "text": "A hard day's gathering",   "mood": 2,   "hours": 6,   "on": "gathered", "never_for": ["lazy"] }
 ]

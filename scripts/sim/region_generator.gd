@@ -40,6 +40,8 @@ static func generate(world_seed: int, width: int = 0, height: int = 0) -> WorldS
 			home_done = true
 		TownGenerator.generate_town(world, str(entry["profile"]), center, is_home, "")
 	_join_towns(world, rng)
+	SiteGenerator.place_all(world, rng)
+	SiteGenerator.verify(world, PathFinder.new(world))
 	return world
 
 

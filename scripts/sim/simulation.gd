@@ -206,8 +206,33 @@ func use_blocker(pawn: Pawn, placed: PlacedObject) -> String:
 	var price := price_of(placed.def_id)
 	if price > coins_of(pawn):
 		return "can't afford it (%s)" % Economy.format(price)
+	var gather := gather_blocker(pawn, placed)
+	if gather != "":
+		return gather
 	if _plan_use(pawn, placed).is_empty():
 		return "can't get there"
+	return ""
+
+
+## Why `pawn` cannot gather from `placed` now (a chopping block, a field...), or "".
+func gather_blocker(pawn: Pawn, placed: PlacedObject) -> String:
+	var def := placed.def()
+	if not def.has("gathers"):
+		return ""
+	if household.get_pawn(pawn.id) == null:
+		return "only your own folk gather for the household"
+	if bool(def.get("heavy", false)) and not Life.may_do_heavy_work(pawn):
+		return "too heavy for %s" % _first_name(pawn)
+	if pawn.age < 12:
+		return "too young"
+	var seasons: Array = def.get("gather_seasons", [])
+	if not seasons.is_empty():
+		var now := str(GameClock.get_date().get("season_id", ""))
+		if now not in seasons:
+			var names: Array[String] = []
+			for season_id in seasons:
+				names.append(str(DataRegistry.get_def("seasons", str(season_id)).get("name", season_id)).to_lower())
+			return "nothing to gather until %s" % " or ".join(names)
 	return ""
 
 
@@ -614,11 +639,13 @@ func staff_count(lot_id: String, job_id: String) -> int:
 
 ## Jobs with a vacancy: [{ "lot": lot entry, "job": job def, "open": how many }]. With a lot id,
 ## only that business (the counter offers its own work; the notice board lists the whole town's).
-func open_positions(lot_id: String = "") -> Array[Dictionary]:
+func open_positions(lot_id: String = "", town_id: String = "") -> Array[Dictionary]:
 	var found: Array[Dictionary] = []
 	for lot in world.lots:
 		if lot_id != "" and str(lot["id"]) != lot_id:
 			continue
+		if town_id != "" and str(lot.get("town", "")) != town_id:
+			continue  # a notice board lists the jobs of its own town
 		for job in DataRegistry.get_list("jobs"):
 			if str(job.get("workplace", "")) != str(lot["kind"]):
 				continue
@@ -795,9 +822,10 @@ func build_blocker(def_id: String, tile: Vector2i, ignoring: int = 0) -> String:
 		for pawn in people():
 			if tile == pawn.tile or tile == pawn.committed_tile():
 				return "%s is standing there" % _first_name(pawn)
-	var cost := Economy.object_cost(def_id) if ignoring == 0 else 0  # moving is free
-	if cost > household.coins:
-		return "it costs %s and you have %s" % [Economy.format(cost), Economy.format(household.coins)]
+	var price := Economy.build_price(def_id, household.stock) if ignoring == 0 else { "coins": 0, "uses": {} }  # moving is free
+	if int(price["coins"]) > household.coins:
+		var uses := Economy.stock_text(price["uses"])
+		return "it costs %s%s and you have %s" % [Economy.format(int(price["coins"])), (" and " + uses) if uses != "" else "", Economy.format(household.coins)]
 	return ""
 
 
@@ -805,7 +833,10 @@ func build_place(def_id: String, tile: Vector2i) -> Dictionary:
 	var blocker := build_blocker(def_id, tile)
 	if blocker != "":
 		return { "ok": false, "message": "Can't build here: %s" % blocker }
-	household.coins -= Economy.object_cost(def_id)
+	var price := Economy.build_price(def_id, household.stock)
+	household.coins -= int(price["coins"])
+	for resource_id in price["uses"]:
+		household.add_stock(str(resource_id), -int(price["uses"][resource_id]))
 	world.add_object(def_id, tile)
 	_reroute_blocked_walks()
 	return { "ok": true, "message": "" }
@@ -1185,7 +1216,7 @@ func _step_job(pawn: Pawn) -> void:
 	# Using it: refill the needs it satisfies until they are all full or time is up.
 	var object_def := placed.def()
 	var satisfies: Dictionary = object_def.get("satisfies", {})
-	var all_full := true
+	var all_full := not object_def.has("gathers")  # gathering goes on until the time is up
 	for need_id in satisfies:
 		if not pawn.needs.has(need_id):
 			continue
@@ -1193,6 +1224,10 @@ func _step_job(pawn: Pawn) -> void:
 		pawn.needs[need_id] = value
 		if value < Needs.FULL:
 			all_full = false
+	var drains: Dictionary = object_def.get("drains", {})
+	for need_id in drains:  # hard work tires and soils a person
+		if pawn.needs.has(need_id):
+			pawn.needs[need_id] = maxf(0.0, float(pawn.needs[need_id]) - float(drains[need_id]) / 60.0)
 	pawn.job_minutes += 1
 	if pawn.illness != "" and pawn.illness in object_def.get("cures", []) and pawn.job_minutes >= int(object_def.get("cure_minutes", 60)):
 		_recover(pawn)
@@ -1201,11 +1236,45 @@ func _step_job(pawn: Pawn) -> void:
 		Mood.add_event(pawn, "used:%s" % placed.def_id, GameClock.tick)
 		if satisfies.has("hunger"):
 			Pregnancy.after_eating(pawn)
+		if object_def.has("gathers"):
+			_collect(pawn, object_def)
 		if placed.def_id == "grave":
 			var rested := Mortality.lay_to_rest(self, placed.tile, pawn)
 			if rested != "" and household.get_pawn(pawn.id) != null:
 				health_notice.emit(rested)
 		_end_job(pawn)
+
+
+## A gatherer finishes: what they brought in goes on the household's stockpile.
+func _collect(pawn: Pawn, object_def: Dictionary) -> void:
+	if household.get_pawn(pawn.id) == null:
+		return
+	var gathers: Dictionary = object_def.get("gathers", {})
+	var brought: Dictionary = {}
+	for resource_id in gathers:
+		var amount := int(gathers[resource_id])
+		if pawn.traits.has("lazy"):
+			amount = maxi(1, amount - 1)
+		household.add_stock(str(resource_id), amount)
+		brought[str(resource_id)] = amount
+	Mood.add_event(pawn, "gathered", GameClock.tick)
+	health_notice.emit("%s gathered %s." % [_first_name(pawn), Economy.stock_text(brought)])
+
+
+## What the shop would pay for all of one resource in the stockpile (0 if there is none).
+func sale_price(resource_id: String) -> int:
+	return Economy.sell_price(resource_id, household.stock_of(resource_id), events.sell_multiplier())
+
+
+## Sells everything of a resource at the shop counter. Returns { "ok", "message" }.
+func sell_stock(resource_id: String) -> Dictionary:
+	var amount := household.stock_of(resource_id)
+	if amount <= 0:
+		return { "ok": false, "message": "You have no %s to sell" % Economy.resource_name(resource_id).to_lower() }
+	var earned := sale_price(resource_id)
+	household.add_stock(resource_id, -amount)
+	household.coins += earned
+	return { "ok": true, "message": "Sold %d %s for %s" % [amount, Economy.resource_name(resource_id).to_lower(), Economy.format(earned)] }
 
 
 ## Walk up to the other person, then spend time together; the one who asked drives it for both.
