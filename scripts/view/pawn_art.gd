@@ -60,12 +60,12 @@ static func facing_kind(facing: Vector2i) -> int:
 ## hat for peasants, a felt cap for burghers, a feathered hat or a circlet for the gentry, a
 ## linen coif for many women), counter work brings an apron, and some men are bearded.
 static func outfit_for(pawn: Pawn) -> Dictionary:
-	var seed := hash(pawn.display_name)
+	var seed := hash(pawn.seed_name())
 	var roll := func(salt: int) -> float: return ObjectArt.hash01(seed, salt, 211)
 	var stage := Life.stage_id(pawn)
 	if stage == "":
 		stage = "adult" if pawn.adult else "child"
-	var outfit := { "headwear": "", "apron": false, "belt": stage in ["youth", "adult", "elder"], "beard": 0, "trim": false, "pouch": false,
+	var outfit := { "wedding": pawn.wed_until > GameClock.tick or pawn.job_kind == "wed", "headwear": "", "apron": false, "belt": stage in ["youth", "adult", "elder"], "beard": 0, "trim": false, "pouch": false,
 		"ill": pawn.illness != "", "stage": stage, "grey": 0.0, "balding": false, "stick": false, "crying": false }
 	if pawn.is_infant():
 		outfit["crying"] = Babies.is_crying(pawn)
@@ -115,6 +115,10 @@ static func draw(ci: CanvasItem, look: Dictionary, facing: Vector2i, u: float, p
 	var bottom := Color(str(look.get("bottom", "#4a3d32")))
 	var style := int(look.get("hair_style", 0)) % HAIR_STYLES
 	var stage := str(outfit.get("stage", "adult"))
+	var wedding := bool(outfit.get("wedding", false))
+	if wedding:  # wedding clothes: pale linen
+		top = top.lerp(Color(0.96, 0.94, 0.88), 0.78)
+		bottom = bottom.lerp(Color(0.90, 0.88, 0.82), 0.5)
 	var build: Dictionary = BUILDS.get(stage, BUILDS["adult"])
 	var body := float(build["torso"])
 	var elder := stage == "elder"
@@ -239,6 +243,14 @@ static func draw(ci: CanvasItem, look: Dictionary, facing: Vector2i, u: float, p
 			else:
 				ci.draw_arc((head + Vector2(sx * 0.8, 1.5)) * u, (hair_radius - 0.5) * u, PI * 1.08, PI * 1.92, 12, GOLD, maxf(1.0, 1.6 * u))
 				ci.draw_circle((head + Vector2(sx * 3.0, -6.6)) * u, 1.4 * u, Color(0.75, 0.18, 0.22))
+
+	if wedding and kind != NORTH:  # a garland of little flowers over the brow
+		for i in 7:
+			var angle := PI * (1.12 + 0.76 * i / 6.0)
+			var spot := head + Vector2(cos(angle) * (hair_radius - 0.4), sin(angle) * (hair_radius - 0.6) + 1.0)
+			if side:
+				spot = head + Vector2(sx * (cos(angle) * 2.0 + 1.0), sin(angle) * (hair_radius - 0.6) + 1.0)
+			ci.draw_circle(spot * u, 1.5 * u, [Color(0.98, 0.98, 0.95), Color(0.95, 0.62, 0.72), Color(0.99, 0.86, 0.40)][i % 3])
 
 	# Eyes: two from the front, one in profile, none from behind.
 	if kind == SOUTH and lying:  # eyes shut

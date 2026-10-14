@@ -133,3 +133,30 @@ static func goods_text(goods: Dictionary) -> String:
 		if int(goods.get(tool_id, 0)) > 0:
 			parts.append("%d %s" % [int(goods[tool_id]), Skills.tool_name(tool_id).to_lower()])
 	return ", ".join(parts)
+
+
+## What a shop charges for something on its shelves (a tool from the rack, a stocked good at the
+## counter), 0 when it does not sell it.
+static func shop_price(item_id: String) -> int:
+	if Skills.is_tool_id(item_id):
+		return Skills.tool_price(item_id)
+	if bool(DataRegistry.get_def("resources", item_id).get("stocked", false)):
+		return resource_price(item_id)
+	return 0
+
+
+## Goods the counter of a shop sells (data/resources.json, "stocked").
+static func stocked_ids() -> Array[String]:
+	var ids: Array[String] = []
+	for def in DataRegistry.get_list("resources"):
+		if bool(def.get("stocked", false)):
+			ids.append(str(def["id"]))
+	return ids
+
+
+## "a ring", "an axe".
+static func item_phrase(item_id: String) -> String:
+	if Skills.is_tool_id(item_id):
+		return Skills.tool_phrase(item_id)
+	var label := resource_name(item_id).to_lower()
+	return ("an " if label.substr(0, 1) in ["a", "e", "i", "o", "u"] else "a ") + label

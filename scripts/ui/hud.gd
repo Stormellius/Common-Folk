@@ -263,7 +263,7 @@ func show_pawn(pawn: Pawn, activity: String, job: String = "", relations: Array[
 	if pawn == null:
 		return
 	_needs_name.text = pawn.display_name
-	_needs_age.text = Life.describe_age(pawn)
+	_needs_age.text = Life.describe_age(pawn) + (", née %s" % pawn.maiden_name.get_slice(" ", 1) if pawn.maiden_name != "" and pawn.maiden_name != pawn.display_name else "")
 	var trait_names: Array[String] = []
 	for trait_id in pawn.traits:
 		trait_names.append(str(DataRegistry.get_def("traits", trait_id).get("name", trait_id)))

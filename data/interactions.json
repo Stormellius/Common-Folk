@@ -111,5 +111,21 @@
     "willing_below": { "social": 95 },
     "unwilling": "isn't in the mood for a lesson",
     "opinion": { "gain": 3 }
+  },
+  {
+    "id": "propose",
+    "name": "Propose",
+    "action": "Propose to {name} (needs a ring)",
+    "doing": "Proposing marriage",
+    "pose": "close",
+    "max_use_minutes": 8,
+    "adults_only": true,
+    "requires_attraction": true,
+    "romantic": true,
+    "proposes": true,
+    "min_romance": 55,
+    "min_opinion": 40,
+    "opinion": { "gain": 6 },
+    "romance": { "gain": 8 }
   }
 ]

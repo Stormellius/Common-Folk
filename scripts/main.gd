@@ -168,6 +168,47 @@ func _start_demo_fire() -> void:
 		Fire.ignite(world, best.tile)
 
 
+## For looking at a wedding: your selected person engages a townsperson of their town and the two
+## go to the chapel, with whoever is free; time runs on until the vows are about to be said.
+func _start_demo_wedding() -> void:
+	var bride := sim.household.selected()
+	var chosen: Pawn = null
+	for candidate in sim.town.pawns:
+		if candidate.adult and candidate.partner_id == 0 and not candidate.is_infant() and candidate.age < 50 \
+				and sim.attracted(bride, candidate) and sim.attracted(candidate, bride) and not Relations.are_kin(bride, candidate) \
+				and str(world.town_of_lot(candidate.home_lot).get("id", "")) == str(world.home_town().get("id", "")):
+			chosen = candidate
+			break
+	if chosen == null:
+		return
+	Romance.begin_dating(sim, bride, chosen)
+	Romance.engage(sim, bride, chosen)
+	bride.bond_since -= 5 * GameClock.MINUTES_PER_DAY
+	chosen.bond_since = bride.bond_since
+	bride.set_opinion(chosen.id, 60.0)
+	chosen.set_opinion(bride.id, 60.0)
+	for member in sim.household.pawns:
+		member.needs["rest"] = 90.0
+	var bed_spot := Romance._free_spot_in(sim, WorldState.HOME_LOT)
+	if bed_spot == Vector2i(-1, -1):
+		bed_spot = world.lot.position + Vector2i(2, 2)
+	world.add_object("bed", bed_spot)  # somewhere for the new husband or wife to sleep
+	var result := Romance.order_wedding(sim, bride, chosen)
+	if not bool(result["ok"]):
+		push_warning(str(result["message"]))
+		return
+	for minute in 400:
+		if bride.job_stage == "using" and chosen.job_stage == "using":
+			break
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+	for person in sim.people():
+		person.step_ticks_done = person.step_ticks_total  # everyone is where they were headed
+	var chapel := Romance._chapel_for(sim, bride, chosen)
+	if not chapel.is_empty():
+		camera.position = Vector2((chapel["rect"] as Rect2i).get_center() + Vector2i(0, 0)) * MapView.TILE_SIZE
+
+
 func _pick_seed() -> int:
 	var given := _launch_option("seed")
 	if given != "":
@@ -184,6 +225,8 @@ func _apply_launch_options() -> void:
 		GameClock.set_time(int(_launch_option("day")), hour)
 	if _launch_option("fire") != "" and sim != null and sim.household.selected() != null:
 		_start_demo_fire()
+	if _launch_option("wedding") != "" and sim != null and sim.household.selected() != null:
+		_start_demo_wedding()
 	if _launch_option("speed") != "":
 		GameClock.set_speed(int(_launch_option("speed")))
 	if _launch_option("look") != "":

@@ -9,44 +9,54 @@ const TEST_MOD_DIR := "user://mods/smoke_test_mod"
 const TEST_SAVE := "user://smoke_test_save.json"
 
 var _failures := 0
+var _only := ""  # --only=marriage runs just that section
 
 
 func _ready() -> void:
-	_test_registry()
-	_test_mod_loading()
-	_test_clock()
-	_test_generator()
-	_test_map_view()
-	_test_hud()
-	_test_pathfinding()
-	_test_pawn_movement()
-	_test_household()
-	_test_actions()
-	_test_needs()
-	_test_building()
-	_test_town()
-	_test_region()
-	_test_economy()
-	_test_work_sites()
-	_test_skills()
-	_test_social()
-	_test_romance()
-	_test_events()
-	_test_realm()
-	_test_faith_and_illness()
-	_test_conflict()
-	_test_accidents()
-	_test_pregnancy()
-	_test_death()
-	_test_life_and_death()
-	_test_mood()
-	_test_save_and_load()
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--only="):
+			_only = arg.trim_prefix("--only=")
+	_section("registry", _test_registry)
+	_section("mod_loading", _test_mod_loading)
+	_section("clock", _test_clock)
+	_section("generator", _test_generator)
+	_section("map_view", _test_map_view)
+	_section("hud", _test_hud)
+	_section("pathfinding", _test_pathfinding)
+	_section("pawn_movement", _test_pawn_movement)
+	_section("household", _test_household)
+	_section("actions", _test_actions)
+	_section("needs", _test_needs)
+	_section("building", _test_building)
+	_section("town", _test_town)
+	_section("region", _test_region)
+	_section("economy", _test_economy)
+	_section("work_sites", _test_work_sites)
+	_section("skills", _test_skills)
+	_section("social", _test_social)
+	_section("romance", _test_romance)
+	_section("marriage", _test_marriage)
+	_section("events", _test_events)
+	_section("realm", _test_realm)
+	_section("faith_and_illness", _test_faith_and_illness)
+	_section("conflict", _test_conflict)
+	_section("accidents", _test_accidents)
+	_section("pregnancy", _test_pregnancy)
+	_section("death", _test_death)
+	_section("life_and_death", _test_life_and_death)
+	_section("mood", _test_mood)
+	_section("save_and_load", _test_save_and_load)
 	print("")
 	if _failures == 0:
 		print("ALL CHECKS PASSED")
 	else:
 		print("%d CHECK(S) FAILED" % _failures)
 	get_tree().quit(1 if _failures > 0 else 0)
+
+
+func _section(name: String, run: Callable) -> void:
+	if _only == "" or _only == name:
+		run.call()
 
 
 func _check(condition: bool, label: String) -> void:
@@ -1335,7 +1345,7 @@ func _interaction_entries(sim: Simulation, from: Pawn, to: Pawn) -> Dictionary:
 func _test_work_sites() -> void:
 	print("Work sites, resources and materials")
 	var ids := Economy.resource_ids()
-	_check(str(ids) == str(["wood", "stone", "grain", "fish", "herbs"]), "there are five resources (%s)" % str(ids))
+	_check(str(ids) == str(["wood", "stone", "grain", "fish", "herbs", "ring"]), "there are five resources and the rings (%s)" % str(ids))
 	_check(Economy.resource_price("wood") == 2 and Economy.sell_price("wood", 10) == 14 and Economy.sell_price("wood", 10, 1.3) == 18, "the shop pays a share of the price, and more on a market day")
 
 	# The region has sites at every town's edge.
@@ -2332,6 +2342,171 @@ func _test_romance() -> void:
 			newborns.append(pawn)
 	_check(newborns.size() == 2 and newborns[0].parents == [mum.id, dad.id] and Relations.are_kin(newborns[0], newborns[1]) and Relations.are_kin(newborns[0], mum), "a baby knows its parents, and its twin is its sibling")
 	GameClock.reset()
+
+
+func _minutes(sim: Simulation, minutes: int, until: Callable = Callable()) -> void:
+	for i in minutes:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		if until.is_valid() and until.call():
+			return
+
+
+func _test_marriage() -> void:
+	print("Rings, engagements and weddings")
+	var setup := _romance_setup()
+	var world: WorldState = setup["world"]
+	var household: Household = setup["household"]
+	var town: Household = setup["town"]
+	var sim: Simulation = setup["sim"]
+	var anna: Pawn = setup["anna"]
+	var ben: Pawn = setup["ben"]
+	var cara: Pawn = setup["cara"]
+	var dan: Pawn = setup["dan"]
+	var notices: Array[String] = []
+	sim.health_notice.connect(func(text: String) -> void: notices.append(text))
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 11
+
+	# A shop counter sells rings.
+	world.lots.append({ "id": "lot_7", "kind": "shop", "name": "Shop", "template": "shop", "facing": "south", "rect": Rect2i(60, 24, 10, 8), "public": true, "town": "t1" })
+	var counter := world.add_object("counter", Vector2i(64, 26))
+	household.coins = 60
+	var counter_entries := PawnActions.list_for(sim, anna, counter.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "buy:ring")
+	_check(counter_entries.size() == 1 and "Buy a ring (20d)" in str(counter_entries[0]["label"]) and counter_entries[0]["enabled"], "a shop counter sells rings (%s)" % str(counter_entries))
+	_check(PawnActions.perform(sim, anna, "buy:ring", counter.tile)["ok"] and household.stock_of("ring") == 1 and household.coins == 40, "and buying one takes 20d")
+	household.add_stock("ring", -1)
+	var forge_recipe := DataRegistry.get_def("recipes", "forge_ring")
+	_check(str(forge_recipe.get("station", "")) == "forge" and int(forge_recipe.get("min_level", 0)) >= 2, "a smith of some skill can forge one")
+
+	# Asking: it takes a couple, time together, trust and a ring.
+	_check("not seeing" in sim.interaction_blocker(anna, dan, "propose"), "only a couple can propose (%s)" % sim.interaction_blocker(anna, dan, "propose"))
+	anna.set_opinion(dan.id, 60.0)
+	dan.set_opinion(anna.id, 60.0)
+	anna.tile = Vector2i(10, 12)
+	anna.step_to = anna.tile
+	dan.tile = Vector2i(11, 12)
+	dan.step_to = dan.tile
+	Romance.begin_dating(sim, anna, dan)
+	_check("long enough" in sim.interaction_blocker(anna, dan, "propose"), "not on the first day (%s)" % sim.interaction_blocker(anna, dan, "propose"))
+	anna.partner_since -= 3 * GameClock.MINUTES_PER_DAY
+	dan.partner_since = anna.partner_since
+	anna.romance[dan.id] = 70.0
+	dan.romance[anna.id] = 70.0
+	_check("ring" in sim.interaction_blocker(anna, dan, "propose"), "nor without a ring (%s)" % sim.interaction_blocker(anna, dan, "propose"))
+	household.add_stock("ring", 1)
+	dan.romance[anna.id] = 30.0
+	_check("isn't ready" in sim.interaction_blocker(anna, dan, "propose"), "nor if they are not ready (%s)" % sim.interaction_blocker(anna, dan, "propose"))
+	dan.romance[anna.id] = 70.0
+	_check(sim.interaction_blocker(anna, dan, "propose") == "", "but with all of that she can")
+	var labels := PawnActions.list_for(sim, anna, dan.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "interact:propose:%d" % dan.id)
+	_check(labels.size() == 1 and "Propose to Dan" in str(labels[0]["label"]), "his menu offers it")
+	var started := PawnActions.perform(sim, anna, "interact:propose:%d" % dan.id, dan.tile)
+	_check(started["ok"], "she proposes")
+	notices.clear()
+	_minutes(sim, 40, func() -> bool: return anna.job_kind == "" and anna.bond != "")
+	_check(anna.bond == "engaged" and dan.bond == "engaged" and Romance.is_engaged(anna, dan), "he says yes: they are engaged")
+	_check(household.stock_of("ring") == 0 and notices.any(func(t: String) -> bool: return "engaged" in t), "the ring is spent and the household told (%s)" % str(notices))
+	_check(anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "got_engaged") and Romance.tie_name(anna, dan) == "Fiancé" and Romance.tie_name(dan, anna) == "Fiancée", "they are glad of it, and called fiancé and fiancée")
+	_check(not Mood.evaluate(anna, household, GameClock.tick)["parts"].filter(func(part: Dictionary) -> bool: return part["id"] == "engaged").is_empty(), "and engaged is a good thing to be")
+	_check("already engaged" in Romance.proposal_blocker(sim, anna, dan), "nobody proposes twice")
+
+	# A wedding needs time, a chapel, an hour of the day and room to live together.
+	_check("only just" in Romance.wedding_blocker(sim, anna, dan), "the wedding waits a day (%s)" % Romance.wedding_blocker(sim, anna, dan))
+	anna.bond_since -= 3 * GameClock.MINUTES_PER_DAY
+	dan.bond_since = anna.bond_since
+	GameClock.set_time(6, 21)
+	_check("hour" in Romance.wedding_blocker(sim, anna, dan), "and not at night (%s)" % Romance.wedding_blocker(sim, anna, dan))
+	GameClock.set_time(6, 10)
+	_check("chapel" in Romance.wedding_blocker(sim, anna, dan), "nor where there is no chapel (%s)" % Romance.wedding_blocker(sim, anna, dan))
+	world.lots.append({ "id": "lot_9", "kind": "chapel", "name": "Chapel", "template": "chapel", "facing": "south", "rect": Rect2i(50, 14, 12, 10), "public": true, "town": "t1" })
+	for y in range(14, 24):
+		for x in range(50, 62):
+			world.set_floor(Vector2i(x, y), "flagstone")
+	world.add_object("altar", Vector2i(55, 15))
+	_check(Romance.wedding_blocker(sim, anna, dan) == "", "with a chapel, the morning and a bed at home, it can be done (%s)" % Romance.wedding_blocker(sim, anna, dan))
+	var entries := PawnActions.list_for(sim, anna, dan.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "wed:%d" % dan.id)
+	_check(entries.size() == 1 and entries[0]["enabled"] and "Marry Dan" in str(entries[0]["label"]), "the menu offers to marry him at the chapel")
+	var breakups := PawnActions.list_for(sim, anna, dan.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("breakup:"))
+	_check(breakups.size() == 1 and "engagement" in str(breakups[0]["label"]), "or to break off the engagement")
+
+	# The day itself: guests come, the vows are said.
+	cara.set_opinion(anna.id, 50.0)
+	anna.set_opinion(cara.id, 50.0)
+	var death_age_before := Life.death_age(anna)
+	var outfit_seed_before := anna.seed_name()
+	var wedding := PawnActions.perform(sim, anna, "wed:%d" % dan.id, dan.tile)
+	_check(wedding["ok"] and anna.job_kind == "wed" and dan.job_kind == "wed", "the couple set off for the chapel")
+	_check(ben.job_kind == "guest" and cara.job_kind == "guest", "the household and a friend go too (%s, %s)" % [ben.job_kind, cara.job_kind])
+	_check("wedding" in sim.describe_activity(ben) and "married" in sim.describe_activity(anna).to_lower(), "and the panel says so (%s / %s)" % [sim.describe_activity(ben), sim.describe_activity(anna)])
+	notices.clear()
+	_minutes(sim, 120, func() -> bool: return anna.bond == "married")
+	_check(anna.bond == "married" and dan.bond == "married" and Romance.is_married(anna, dan), "they say their vows and are married")
+	_minutes(sim, 3)
+	_check(ben.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "at_wedding") and cara.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "at_wedding"), "the guests enjoyed it")
+	_check(ben.job_kind == "" and cara.job_kind == "" and anna.job_kind == "" and dan.job_kind == "", "and everyone is free again")
+	_check(anna.home_lot == dan.home_lot and household.get_pawn(dan.id) != null and town.get_pawn(dan.id) == null, "he has moved in with her and joined the household")
+	_check(anna.display_name == "Anna Hollis" and anna.maiden_name == "Anna Marsh" and dan.display_name == "Dan Hollis", "the wife has taken the husband's name (%s, née %s)" % [anna.display_name, anna.maiden_name])
+	_check(Life.death_age(anna) == death_age_before and anna.seed_name() == outfit_seed_before, "which changes nothing about how she is made")
+	_check(anna.wed_until > GameClock.tick and PawnArt.outfit_for(anna)["wedding"] and not PawnArt.outfit_for(ben)["wedding"], "and she is in wedding clothes for the day")
+	_check(notices.any(func(t: String) -> bool: return "Anna and Dan are married" in t), "the household hears of it (%s)" % str(notices))
+	_check(Romance.tie_name(anna, dan) == "Husband" and Romance.tie_name(dan, anna) == "Wife" and anna.partner_status == "partners", "they are husband and wife")
+
+	# A marriage is for life.
+	_check(Romance.break_up(sim, anna, dan) == "" and anna.bond == "married", "a married couple cannot simply break up")
+	var married_entries := PawnActions.list_for(sim, anna, dan.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("breakup:") or str(e["id"]).begins_with("wed:"))
+	_check(married_entries.is_empty(), "and the menu does not offer it")
+	_check("share a home" in Romance.move_home_blocker(sim, dan) or "already" in Romance.move_home_blocker(sim, dan), "nor does one move out")
+	var saved := Pawn.from_dict(anna.to_dict())
+	_check(saved.bond == "married" and saved.maiden_name == "Anna Marsh" and saved.wed_until == anna.wed_until and saved.bond_since == anna.bond_since, "marriage and a maiden name are saved")
+	Romance.on_death(sim, dan)
+	_check(anna.bond == "" and anna.partner_id == 0 and anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "widowed"), "if he dies she is a widow, free to marry again")
+
+	# Engagements can be broken off.
+	var erin := Pawn.new()
+	erin.display_name = "Erin Fox"
+	erin.gender = "female"
+	erin.age = 24
+	erin.adult = true
+	var finn := Pawn.new()
+	finn.display_name = "Finn Reed"
+	finn.gender = "male"
+	finn.age = 26
+	finn.adult = true
+	household.add_pawn(erin)
+	household.add_pawn(finn)
+	Romance.begin_dating(sim, erin, finn)
+	Romance.engage(sim, erin, finn)
+	var broke := Romance.break_up(sim, erin, finn)
+	_check("parted" in broke and erin.bond == "" and finn.bond == "" and erin.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "engagement_off"), "a broken engagement leaves nobody engaged")
+
+	# Same-sex couples take a name by the same rule.
+	var gil := Pawn.new()
+	gil.display_name = "Gil Archer"
+	gil.gender = "male"
+	gil.id = 70
+	var hal := Pawn.new()
+	hal.display_name = "Hal Brewer"
+	hal.gender = "male"
+	hal.id = 71
+	Romance._take_surname(gil, hal)
+	_check(gil.display_name == "Gil Archer" and hal.display_name == "Hal Archer" and hal.maiden_name == "Hal Brewer", "two men marrying: the later one takes the other's name")
+
+	# The town's own couples marry without anyone asking.
+	var gwen := _townsperson("Gwen Tanner", "female", 30, 0)
+	var hugh := _townsperson("Hugh Cooper", "male", 32, 0)
+	gwen.home_lot = "lot_1"
+	hugh.home_lot = "lot_1"
+	town.add_pawn(gwen)
+	town.add_pawn(hugh)
+	Romance.begin_dating(sim, gwen, hugh, "partners")
+	gwen.partner_since -= 5 * GameClock.MINUTES_PER_DAY
+	hugh.partner_since = gwen.partner_since
+	for day in 80:
+		Romance._marry_townsfolk(sim, rng)
+		if gwen.bond == "married":
+			break
+	_check(gwen.bond == "married" and hugh.bond == "married" and gwen.display_name == "Gwen Cooper" and gwen.wed_until == 0, "a townsfolk couple under one roof marry by themselves (%s)" % gwen.display_name)
 
 
 func _test_events() -> void:

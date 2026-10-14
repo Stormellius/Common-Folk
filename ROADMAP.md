@@ -1,6 +1,6 @@
 # Common Folk: roadmap
 
-Milestones 1 to 18 are done. This file keeps the plan for 12 to 18 as it was built, and what comes next (19 to 25). Each milestone ended with the game playable, the smoke test passing and older saves still loading.
+Milestones 1 to 19 are done. This file keeps the plan for 12 to 19 as it was built, and what comes next (20 to 25). Each milestone ended with the game playable, the smoke test passing and older saves still loading.
 
 ## What the people are called
 
@@ -75,11 +75,18 @@ Folk are born, grow up, grow old and die, as in the Sims, with a medieval face o
 - Tools are **bought** at the tool rack of any shop, smithy or workshop, or **made** at a forge or workbench from wood and stone (recipes are data: `recipes.json`). Towns now have a smithy and, in the bigger ones, a carpenter's workshop with jobs for a smith and a carpenter
 - The panel shows a person's skills with a bar to the next level, the tool in their hand, their talents and family trade; the tool in hand is drawn
 
+## Milestone 19: Marriage and weddings (done)
+
+- **Rings**: bought at a shop counter, or forged by a smith of some skill. Proposing needs one
+- **Engagement**: a couple who have been together a while and trust each other can be asked; the ring is spent, both are glad of it, and they are fiancé and fiancée until the wedding. An engagement can be broken off
+- **A wedding at the chapel**: choose "Marry {name} at the chapel" (mornings and afternoons, a day after the proposal). The couple walk to the altar in wedding clothes with a flower garland, the household and the friends and kin who are free come and stand in the chapel, the vows are said, and everyone leaves happier (and the guests a little less lonely)
+- **A married household**: the couple share a home (the one with a spare bed takes the other in, and a townsperson who marries one of your folk joins your household), the wife takes her husband's surname (a rule in the data; the name she was born with is kept and shows as "née"), and a marriage lasts until one of them dies, when the other is a widow or widower and free to marry again
+- The town's own couples who share a home marry by themselves, and you hear of it if you know them
+
 ## The plan from here
 
-Seven milestones, in the order that lets each one build on the last. Each ends with the game playable, the smoke test passing and older saves still loading.
+Six milestones, in the order that lets each one build on the last. Each ends with the game playable, the smoke test passing and older saves still loading.
 
-- **19 Marriage and weddings**: engagements and rings, a wedding at the chapel with guests, a married household and a married name
 - **20 Animals**: wild game to hunt, draught and pack animals and mounts that carry goods and people, pets and livestock
 - **21 Builders and rooms**: building as a job, with materials hauled to the site; rooms, roofs and the indoor/outdoor difference
 - **22 Traders and goods**: caravans on the roads, a wider list of goods made at workshops (flour and bread, planks, tools, cloth, iron) and sold

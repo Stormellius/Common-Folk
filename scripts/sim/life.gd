@@ -74,7 +74,7 @@ static func death_age(pawn: Pawn) -> int:
 	var span: Array = DataRegistry.get_def("life_stages", "elder").get("dies_between", [])
 	if span.size() < 2:
 		return 9999
-	var fate := ObjectArt.hash01(hash(pawn.display_name), pawn.id, 131)
+	var fate := ObjectArt.hash01(hash(pawn.seed_name()), pawn.id, 131)
 	return roundi(lerpf(float(span[0]), float(span[1]), fate))
 
 

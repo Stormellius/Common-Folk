@@ -32,7 +32,8 @@ const SELL_PREFIX := "sell:"         # "sell:<resource id>"
 const FIRE_ACTION := "fight_fire"
 const TREAT_PREFIX := "treat:"       # "treat:<patient's id>"
 const CRAFT_PREFIX := "craft:"       # "craft:<recipe id>:<object id>"
-const BUY_PREFIX := "buy:"           # "buy:<tool id>"
+const BUY_PREFIX := "buy:"           # "buy:<tool or good id>"
+const WED_PREFIX := "wed:"           # "wed:<fiancé(e)'s id>"
 const FUND_STEPS := [10, 50]
 
 
@@ -66,7 +67,7 @@ static func list_for(sim: Simulation, pawn: Pawn, tile: Vector2i) -> Array[Dicti
 	if placed != null and placed.def().has("offers_work"):
 		actions.append_array(_work_entries(sim, pawn, placed))
 	if placed != null and placed.def_id == "counter" and str(sim.world.lot_at(placed.tile).get("kind", "")) == "shop":
-		actions.append_array(_sell_entries(sim))
+		actions.append_array(_sell_entries(sim, pawn))
 	if placed != null and bool(placed.def().get("recipes", false)):
 		actions.append_array(_recipe_entries(sim, pawn, placed))
 	if placed != null and bool(placed.def().get("sells_tools", false)):
@@ -124,7 +125,11 @@ static func _romance_entries(sim: Simulation, pawn: Pawn, other: Pawn) -> Array[
 		entries.append(_entry(MOVE_PREFIX + "invite:%d" % other.id, "Ask %s to move in" % name, invite_blocker == "", invite_blocker))
 		var join_blocker := Romance.join_blocker(sim, pawn, other)
 		entries.append(_entry(MOVE_PREFIX + "join:%d" % other.id, "Move in with %s" % name, join_blocker == "", join_blocker))
-	entries.append(_entry(BREAKUP_PREFIX + str(other.id), "Break up with %s" % name))
+	if Romance.is_engaged(pawn, other):
+		var wedding_blocker := Romance.wedding_blocker(sim, pawn, other)
+		entries.append(_entry(WED_PREFIX + str(other.id), "Marry %s at the chapel" % name, wedding_blocker == "", wedding_blocker))
+	if not Romance.is_married(pawn, other):
+		entries.append(_entry(BREAKUP_PREFIX + str(other.id), ("Break off the engagement with %s" if Romance.is_engaged(pawn, other) else "Break up with %s") % name))
 	return entries
 
 
@@ -143,7 +148,7 @@ static func _baby_entries(sim: Simulation, pawn: Pawn, baby: Pawn) -> Array[Dict
 
 
 ## Selling what the household has gathered, at a shop counter: one entry for each resource held.
-static func _sell_entries(sim: Simulation) -> Array[Dictionary]:
+static func _sell_entries(sim: Simulation, pawn: Pawn) -> Array[Dictionary]:
 	var entries: Array[Dictionary] = []
 	for resource_id in Economy.resource_ids():
 		var amount := sim.household.stock_of(resource_id)
@@ -151,6 +156,11 @@ static func _sell_entries(sim: Simulation) -> Array[Dictionary]:
 			entries.append(_entry(SELL_PREFIX + resource_id, "Sell your %d %s (%s)" % [amount, Economy.resource_name(resource_id).to_lower(), Economy.format(sim.sale_price(resource_id))]))
 	if entries.is_empty():
 		entries.append(_entry("none", "Sell goods", false, "you have nothing gathered to sell"))
+	for item_id in Economy.stocked_ids():
+		var price := Economy.shop_price(item_id)
+		var short := price > sim.coins_of(pawn)
+		var reason := "only your own folk buy for the household" if sim.household.get_pawn(pawn.id) == null else ("can't afford it" if short else "")
+		entries.append(_entry(BUY_PREFIX + item_id, "Buy %s (%s)" % [Economy.item_phrase(item_id), Economy.format(price)], reason == "", reason))
 	return entries
 
 
@@ -286,7 +296,7 @@ static func _perform(sim: Simulation, pawn: Pawn, action_id: String, tile: Vecto
 	if action_id.begins_with(SELL_PREFIX):
 		return sim.sell_stock(action_id.trim_prefix(SELL_PREFIX))
 	if action_id.begins_with(BUY_PREFIX):
-		return sim.buy_tool(pawn, action_id.trim_prefix(BUY_PREFIX))
+		return sim.buy_item(pawn, action_id.trim_prefix(BUY_PREFIX))
 	if action_id.begins_with(CRAFT_PREFIX):
 		var craft_parts := action_id.trim_prefix(CRAFT_PREFIX).split(":")
 		var bench := sim.world.get_object(int(craft_parts[1])) if craft_parts.size() == 2 else null
@@ -299,6 +309,9 @@ static func _perform(sim: Simulation, pawn: Pawn, action_id: String, tile: Vecto
 			return { "ok": false, "message": "Can't move back: %s" % home_blocker }
 		sim.health_notice.emit(Romance.move_home(sim, pawn))
 		return { "ok": true, "message": "" }
+	if action_id.begins_with(WED_PREFIX):
+		var betrothed := sim.person(int(action_id.trim_prefix(WED_PREFIX)))
+		return Romance.order_wedding(sim, pawn, betrothed) if betrothed != null else { "ok": false, "message": "They are not here" }
 	if action_id.begins_with(DATE_PREFIX):
 		var date_partner := sim.person(int(action_id.trim_prefix(DATE_PREFIX)))
 		return Romance.order_date(sim, pawn, date_partner) if date_partner != null else { "ok": false, "message": "They are not here" }

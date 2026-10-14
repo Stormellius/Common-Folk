@@ -27,6 +27,7 @@ var revision := 0
 
 var _defs: Dictionary = {}   # kind -> { id -> entry }
 var _order: Dictionary = {}  # kind -> [ids in load order]
+var _lists: Dictionary = {}  # kind -> the defs in load order, built when first asked for
 
 
 func _ready() -> void:
@@ -38,6 +39,7 @@ func reload() -> void:
 	revision += 1
 	_defs.clear()
 	_order.clear()
+	_lists.clear()
 	loaded_mods.clear()
 	load_errors.clear()
 
@@ -67,9 +69,13 @@ func get_def(kind: String, id: String) -> Dictionary:
 
 ## All entries of a kind, in load order.
 func get_list(kind: String) -> Array:
+	var cached: Variant = _lists.get(kind)
+	if cached != null:
+		return cached
 	var result: Array = []
 	for id in get_ids(kind):
 		result.append(_defs[kind][id])
+	_lists[kind] = result
 	return result
 
 

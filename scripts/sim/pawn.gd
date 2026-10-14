@@ -114,6 +114,12 @@ var partner_status := ""
 var partner_since := 0
 var origin_lot := ""
 var parents: Array[int] = []
+## Marriage (see Romance): "" or "engaged" or "married" to `partner_id`, since which tick; the name they
+## were born with, kept once a wedding changes it; and the tick until which they are in wedding clothes.
+var bond := ""
+var bond_since := 0
+var maiden_name := ""
+var wed_until := 0
 ## Illness (see Illness): the tick until which someone is immune to each illness they have had
 ## (by illness id), the tick until which herbs are helping them recover, and how many minutes in a
 ## row they have stood in fire (see Fire).
@@ -142,6 +148,20 @@ var step_ticks_done := 0
 
 func is_infant() -> bool:
 	return age < Pregnancy.infant_age()
+
+
+## The name that fixes who this person is born to be (their looks' details, the age they will die
+## at): the one they were born with, so a wedding that changes their surname changes none of it.
+func seed_name() -> String:
+	return maiden_name if maiden_name != "" else display_name
+
+
+func given_name() -> String:
+	return display_name.get_slice(" ", 0)
+
+
+func surname() -> String:
+	return display_name.get_slice(" ", 1)
 
 
 func romance_for(other_id: int) -> float:
@@ -279,6 +299,10 @@ func to_dict() -> Dictionary:
 		"partner_since": partner_since,
 		"origin_lot": origin_lot,
 		"parents": Array(parents),
+		"bond": bond,
+		"bond_since": bond_since,
+		"maiden_name": maiden_name,
+		"wed_until": wed_until,
 		"immune": immune.duplicate(),
 		"treated_until": treated_until,
 		"fire_minutes": fire_minutes,
@@ -366,6 +390,10 @@ static func from_dict(data: Dictionary) -> Pawn:
 	pawn.origin_lot = str(data.get("origin_lot", ""))
 	for parent_id in data.get("parents", []):
 		pawn.parents.append(int(parent_id))
+	pawn.bond = str(data.get("bond", ""))
+	pawn.bond_since = int(data.get("bond_since", 0))
+	pawn.maiden_name = str(data.get("maiden_name", ""))
+	pawn.wed_until = int(data.get("wed_until", 0))
 	var saved_immune: Variant = data.get("immune", {})
 	if saved_immune is Dictionary:
 		for illness_id in saved_immune:

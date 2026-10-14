@@ -3,5 +3,6 @@
   { "id": "stone", "name": "Stone", "price": 3, "color": "#8d9096" },
   { "id": "grain", "name": "Grain", "price": 2, "color": "#d6b24a" },
   { "id": "fish",  "name": "Fish",  "price": 3, "color": "#7fa6c4" },
-  { "id": "herbs", "name": "Herbs", "price": 4, "color": "#6f9f55" }
+  { "id": "herbs", "name": "Herbs", "price": 4, "color": "#6f9f55" },
+  { "id": "ring", "name": "Ring", "price": 20, "color": "#e0c060", "stocked": true, "text": "A plain band for a betrothal." }
 ]

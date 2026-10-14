@@ -2,7 +2,7 @@
 
 A medieval life sim sandbox with a RimWorld look, made in Godot 4.4. You play one of your **folk** at a time in a generated region of towns that carries on without you. They work, court, raise children, grow old and die, and the family goes on.
 
-Milestones 1 to 18 are done; the plan from here is in [ROADMAP.md](ROADMAP.md). The data files and how to mod them are in [docs/DATA.md](docs/DATA.md).
+Milestones 1 to 19 are done; the plan from here is in [ROADMAP.md](ROADMAP.md). The data files and how to mod them are in [docs/DATA.md](docs/DATA.md).
 
 ## Run it
 
@@ -40,7 +40,7 @@ You control one of your folk. Left-click a person (or their portrait, or press T
 
 **Pregnancy and babies.** Pregnancy runs in three trimesters on the lifespan clock: morning sickness, cravings, a belly that shows, a heavy last stretch. Labour begins on its own and she goes to bed or the clinic's sickbed; someone staying with her is a midwife, and a hard birth can leave her weak or, rarely, kill her. There can be twins or triplets, and you name each baby. Babies sleep in a cradle and need feeding, soothing and washing; neglect one too long and the parish takes it. The town's couples have children too.
 
-**Love.** Flirt, kiss and ask out someone you are drawn to (orientation is a trait; family and people already taken are out of reach). Dating couples go on dates to the green, the tavern or the chapel. A partner can move in with you, or you can move in with them, and a break-up sends whoever moved in back home. The town's own people pair up, move in and have children without you.
+**Love.** Flirt, kiss and ask out someone you are drawn to (orientation is a trait; family and people already taken are out of reach). Dating couples go on dates to the green, the tavern or the chapel. A partner can move in with you, or you can move in with them, and a break-up sends whoever moved in back home. When you are ready, buy or forge a **ring** and propose; once engaged, hold the **wedding** at the chapel, with your household and friends as guests. The couple then share a home and a name, and stay married until death. The town's own people pair up, move in, marry and have children without you.
 
 **Work, resources and money.** A shared purse, jobs at the shop, tavern, clinic and green with shifts and wages, and **work sites** at the edge of every town: fields (grain ripens in summer and autumn), a woodlot, a quarry, an herb garden and, by the lake, a jetty. Take a job there, or right-click a chopping block, a field or a quarry face to gather for your own stockpile. What you gather can be sold at a shop counter (more on market day) or used in building: a bed takes wood, a stone wall stone, and what you lack is bought at the shop's price. Besides that, quarter-day tax on land, titles (freehold or leasehold), the Merchants' Guild and business lots of your own, decrees, and eviction if you cannot pay.
 

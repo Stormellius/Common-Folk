@@ -294,16 +294,16 @@ func order_craft(pawn: Pawn, placed: PlacedObject, recipe_id: String) -> Diction
 	return result
 
 
-## Buys a tool from a shop's rack with the household's money.
-func buy_tool(pawn: Pawn, tool_id: String) -> Dictionary:
-	var price := Skills.tool_price(tool_id)
-	if household.get_pawn(pawn.id) == null or not Skills.is_tool_id(tool_id):
+## Buys a tool from a shop's rack, or a stocked good (a ring) from its counter, with the household's money.
+func buy_item(pawn: Pawn, item_id: String) -> Dictionary:
+	var price := Economy.shop_price(item_id)
+	if household.get_pawn(pawn.id) == null or price <= 0:
 		return { "ok": false, "message": "Can't buy that" }
 	if price > coins_of(pawn):
 		return { "ok": false, "message": "Can't afford it (%s)" % Economy.format(price) }
 	spend(pawn, price)
-	household.add_stock(tool_id, 1)
-	return { "ok": true, "message": "%s bought %s for %s." % [_first_name(pawn), Skills.tool_phrase(tool_id), Economy.format(price)] }
+	household.add_stock(item_id, 1)
+	return { "ok": true, "message": "%s bought %s for %s." % [_first_name(pawn), Economy.item_phrase(item_id), Economy.format(price)] }
 
 
 ## Why `pawn` cannot do the interaction with `other` right now, or "" if they can. Both people
@@ -366,6 +366,10 @@ func _romance_blocker(pawn: Pawn, other: Pawn, interaction: Dictionary) -> Strin
 		return "%s is already seeing someone" % other_name
 	if bool(interaction.get("begins_dating", false)) and Romance.together(pawn, other):
 		return "already together"
+	if bool(interaction.get("proposes", false)):
+		var proposal := Romance.proposal_blocker(self, pawn, other)
+		if proposal != "":
+			return proposal
 	var needed := float(interaction.get("min_romance", 0.0))
 	if needed > 0.0:
 		if other.romance_for(pawn.id) < needed:
@@ -1014,6 +1018,13 @@ func describe_activity(pawn: Pawn) -> String:
 		var date_partner := person(pawn.job_partner)
 		var date_name := _first_name(date_partner) if date_partner != null else "someone"
 		text = "On a date with %s" % date_name if pawn.job_stage == "using" else "Going on a date with %s" % date_name
+	elif pawn.job_kind == "wed":
+		var spouse := person(pawn.job_partner)
+		var spouse_name := _first_name(spouse) if spouse != null else "someone"
+		text = "Marrying %s" % spouse_name if pawn.job_stage == "using" else "Going to be married to %s" % spouse_name
+	elif pawn.job_kind == "guest":
+		var bride := person(pawn.job_partner)
+		text = "At %s's wedding" % (_first_name(bride) if bride != null else "a") if pawn.job_stage == "waiting" else "Going to the wedding"
 	elif pawn.job_kind == "labour":
 		text = "In labour" if pawn.job_stage == "using" else "In labour, making for a bed"
 	elif pawn.job_kind == "attend":
@@ -1248,6 +1259,12 @@ func _step_job(pawn: Pawn) -> void:
 		return
 	if pawn.job_kind == "date":
 		_step_date(pawn)
+		return
+	if pawn.job_kind == "wed":
+		_step_wedding(pawn)
+		return
+	if pawn.job_kind == "guest":
+		_step_guest(pawn)
 		return
 	if pawn.job_kind == "labour":
 		_step_labour(pawn)
@@ -1496,6 +1513,10 @@ func _finish_interaction(pawn: Pawn, partner: Pawn, interaction: Dictionary) -> 
 			Romance.begin_dating(self, pawn, partner)
 			if household.get_pawn(pawn.id) != null or household.get_pawn(partner.id) != null:
 				health_notice.emit("%s and %s are courting." % [_first_name(pawn), _first_name(partner)])
+	if bool(interaction.get("proposes", false)) and not flopped:
+		var engaged := Romance.engage(self, pawn, partner)
+		if household.get_pawn(pawn.id) != null or household.get_pawn(partner.id) != null:
+			health_notice.emit(engaged)
 	var conception := float(interaction.get("conception_chance", 0.0))
 	if conception > 0.0 and not flopped:
 		Pregnancy.try_conceive(self, pawn, partner, conception, _rng)
@@ -1556,6 +1577,77 @@ func _step_date(pawn: Pawn) -> void:
 		_end_job(pawn)
 
 
+## A wedding: the bride and groom (`pawn` and `partner`) each make for their place by the altar.
+func begin_wedding(pawn: Pawn, partner: Pawn, tile: Vector2i, route: Array[Vector2i]) -> void:
+	_end_job(pawn)
+	pawn.path = route
+	pawn.job_kind = "wed"
+	pawn.job_stage = "walking"
+	pawn.job_tile = tile
+	pawn.job_partner = partner.id
+	pawn.job_minutes = 0
+
+
+## A guest (of the wedding of `lead_id`) goes to stand in the chapel.
+func begin_guest(pawn: Pawn, lead_id: int, tile: Vector2i, route: Array[Vector2i]) -> void:
+	_end_job(pawn)
+	pawn.path = route
+	pawn.job_kind = "guest"
+	pawn.job_stage = "walking"
+	pawn.job_tile = tile
+	pawn.job_partner = lead_id
+	pawn.job_minutes = 0
+
+
+func _step_wedding(pawn: Pawn) -> void:
+	var partner := person(pawn.job_partner)
+	if partner == null or partner.job_kind != "wed" or partner.job_partner != pawn.id or Romance.wedding_blocker_in_progress(pawn, partner):
+		_end_job(pawn)
+		return
+	if pawn.job_stage == "walking":
+		if pawn.is_moving() or not pawn.path.is_empty():
+			return
+		pawn.job_stage = "waiting"
+	if pawn.job_stage == "waiting":
+		if partner.job_stage in ["waiting", "using"] and _distance(pawn.tile, partner.tile) <= 2:
+			pawn.job_stage = "using"
+			pawn.job_minutes = 0
+			pawn.pose = "close"
+			pawn.facing = partner.tile - pawn.tile if partner.tile != pawn.tile else pawn.facing
+		return
+	pawn.job_minutes += 1
+	for need_id in ["social", "fun"]:
+		if pawn.needs.has(need_id):
+			pawn.needs[need_id] = minf(Needs.FULL, float(pawn.needs[need_id]) + 2.0)
+	if pawn.job_minutes >= int(Romance.config().get("wedding_minutes", 30)):
+		var wed := Romance.marry(self, pawn, partner)  # ending it ends the other's job too, so this is only done once
+		if household.get_pawn(pawn.id) != null or household.get_pawn(partner.id) != null:
+			health_notice.emit(wed)
+		_end_job(pawn)
+
+
+func _step_guest(pawn: Pawn) -> void:
+	var lead := person(pawn.job_partner)
+	if lead == null or lead.job_kind != "wed":  # the ceremony is over, or was called off
+		if lead != null and lead.bond == "married" and lead.wed_until > GameClock.tick:
+			Mood.add_event(pawn, "at_wedding", GameClock.tick)
+			for need_id in ["social", "fun"]:
+				if pawn.needs.has(need_id):
+					pawn.needs[need_id] = minf(Needs.FULL, float(pawn.needs[need_id]) + 25.0)
+		_end_job(pawn)
+		return
+	if pawn.job_stage == "walking":
+		if pawn.is_moving() or not pawn.path.is_empty():
+			return
+		pawn.job_stage = "waiting"
+		pawn.job_minutes = 0
+		pawn.facing = lead.tile - pawn.tile if lead.tile != pawn.tile else pawn.facing
+		return
+	pawn.job_minutes += 1
+	if pawn.job_minutes >= int(Romance.config().get("wedding_guest_wait_minutes", 90)):
+		_end_job(pawn)
+
+
 func _end_job(pawn: Pawn) -> void:
 	if pawn.job_kind == "work":
 		if pawn.job_stage == "using":
@@ -1567,7 +1659,7 @@ func _end_job(pawn: Pawn) -> void:
 		placed.user_id = 0
 	Skills.unequip(self, pawn)
 	pawn.job_recipe = ""
-	var partner: Pawn = person(pawn.job_partner) if pawn.job_kind in ["interact", "date"] else null
+	var partner: Pawn = person(pawn.job_partner) if pawn.job_kind in ["interact", "date", "wed"] else null
 	var partner_kind := pawn.job_kind
 	pawn.job_kind = ""
 	pawn.job_object = 0

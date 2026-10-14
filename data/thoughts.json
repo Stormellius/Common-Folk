@@ -104,5 +104,11 @@
   { "id": "skill_up",     "text": "Getting better at the work", "mood": 4,  "hours": 12, "on": "skill_up" },
   { "id": "learned",      "text": "Learned something useful", "mood": 4,  "hours": 12, "on": "learned" },
   { "id": "taught",       "text": "Passed on a trade",       "mood": 4,  "hours": 12, "on": "taught" },
-  { "id": "crafted",      "text": "Made something with their hands", "mood": 3, "hours": 6, "on": "crafted" }
+  { "id": "crafted",      "text": "Made something with their hands", "mood": 3, "hours": 6, "on": "crafted" },
+  { "id": "engaged",      "text": "Engaged to be married",   "mood": 7,  "when": { "bond": "engaged" }, "group": "partner" },
+  { "id": "married",      "text": "Happily married",         "mood": 8,  "when": { "bond": "married" }, "group": "partner" },
+  { "id": "got_engaged",  "text": "Engaged to {name}",       "mood": 16, "hours": 96, "on": "got_engaged" },
+  { "id": "wed",          "text": "Married {name}",          "mood": 22, "hours": 96, "on": "wed" },
+  { "id": "at_wedding",   "text": "Went to a wedding",       "mood": 8,  "hours": 24, "on": "at_wedding" },
+  { "id": "engagement_off", "text": "The engagement is off", "mood": -12, "hours": 96, "on": "engagement_off" }
 ]

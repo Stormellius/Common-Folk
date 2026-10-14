@@ -16,5 +16,21 @@
     "breakup_opinion": -45,
     "town_pair_chance": 0.012,
     "household_pair_chance": 0.3,
-    "town_move_in_chance": 0.3 }
+    "town_move_in_chance": 0.3,
+    "propose_romance": 55,
+    "propose_opinion": 40,
+    "propose_after_days": 2,
+    "engagement_days": 1,
+    "wedding_from_hour": 8,
+    "wedding_until_hour": 17,
+    "wedding_minutes": 30,
+    "wedding_guest_opinion": 25,
+    "wedding_guest_limit": 12,
+    "wedding_guest_wait_minutes": 90,
+    "wedding_romance": 20,
+    "wedding_opinion": 10,
+    "dress_hours": 24,
+    "surname": "wife_takes_husband",
+    "town_marry_after_days": 2,
+    "town_marry_chance": 0.12 }
 ]
