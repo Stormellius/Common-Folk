@@ -57,6 +57,7 @@ var _pause_note: Label
 var _display_option: OptionButton
 var _size_option: OptionButton
 var _scale_option: OptionButton
+var _volume_sliders: Dictionary = {}  # setting name -> HSlider
 var _vsync_box: CheckBox
 var _autosave_box: CheckBox
 var _name_intro: Label
@@ -642,6 +643,17 @@ func _build_settings() -> Control:
 	_scale_option.item_selected.connect(func(index: int) -> void: Settings.set_value("ui_scale", Settings.UI_SCALES[index]))
 	_setting_row(grid, "Interface size", _scale_option)
 
+	for entry in [["master_volume", "Volume"], ["music_volume", "Music"], ["ambience_volume", "Wind, rain and town"], ["effects_volume", "Work and effects"]]:
+		var slider := HSlider.new()
+		slider.min_value = 0.0
+		slider.max_value = 1.0
+		slider.step = 0.05
+		slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		var key: String = entry[0]
+		slider.value_changed.connect(func(value: float) -> void: Settings.set_value(key, value))
+		_volume_sliders[key] = slider
+		_setting_row(grid, entry[1], slider)
+
 	_vsync_box = CheckBox.new()
 	_vsync_box.toggled.connect(func(on: bool) -> void: Settings.set_value("vsync", on))
 	_setting_row(grid, "Vertical sync", _vsync_box)
@@ -674,6 +686,8 @@ func _refresh_settings() -> void:
 		if absf(Settings.UI_SCALES[i] - Settings.ui_scale) < absf(Settings.UI_SCALES[nearest] - Settings.ui_scale):
 			nearest = i
 	_scale_option.select(nearest)
+	for key in _volume_sliders:
+		(_volume_sliders[key] as HSlider).set_value_no_signal(float(Settings.get(key)))
 	_vsync_box.set_pressed_no_signal(Settings.vsync)
 	_autosave_box.set_pressed_no_signal(Settings.autosave)
 

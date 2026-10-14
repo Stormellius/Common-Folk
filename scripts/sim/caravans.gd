@@ -311,6 +311,7 @@ static func buy(sim: Simulation, pawn: Pawn, caravan: Caravan, good: String) -> 
 	caravan.stock[good] = int(caravan.stock[good]) - 1
 	sim.household.add_stock(good, 1)
 	Skills.practice(sim, pawn, "trading", 3.0)
+	sim.sound_made.emit("coin", Vector2i(-1, -1))
 	return { "ok": true, "message": "%s bought %s for %s." % [_first(pawn), Economy.item_phrase(good), Economy.format(price)] }
 
 
@@ -327,6 +328,7 @@ static func sell(sim: Simulation, pawn: Pawn, caravan: Caravan, good: String) ->
 	sim.household.coins += earned
 	caravan.demand[good] = int(caravan.demand[good]) - amount
 	Skills.practice(sim, pawn, "trading", 10.0)
+	sim.sound_made.emit("coin", Vector2i(-1, -1))
 	return { "ok": true, "message": "Sold %d %s to the caravan for %s." % [amount, Economy.resource_name(good).to_lower(), Economy.format(earned)] }
 
 

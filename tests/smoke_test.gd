@@ -41,6 +41,7 @@ func _ready() -> void:
 	_section("trade", _test_trade)
 	_section("dreams", _test_dreams)
 	_section("families", _test_families)
+	_section("audio", _test_audio)
 	_section("events", _test_events)
 	_section("realm", _test_realm)
 	_section("faith_and_illness", _test_faith_and_illness)
@@ -3743,6 +3744,227 @@ func _test_families() -> void:
 	var copy := WorldState.from_dict(JSON.parse_string(JSON.stringify(world.to_dict())))
 	_check(copy.chronicle == world.chronicle and copy.lot == world.lot, "and it survives a save, with the home lot")
 	_check(SaveGame.FORMAT_VERSION == 14, "saves are format 14")
+
+
+## The pitch of a sound in Hz, found by autocorrelation (the lag that repeats the wave best).
+func _pitch_of(samples: PackedFloat32Array, low: float, high: float) -> float:
+	var best_lag := 0
+	var best := -1.0
+	var from := int(Synth.RATE / high)
+	var to := int(Synth.RATE / low)
+	var start := mini(2000, samples.size() / 4)
+	var window := mini(4000, samples.size() - to - start)
+	for lag in range(from, to):
+		var total := 0.0
+		for i in range(start, start + window):
+			total += samples[i] * samples[i + lag]
+		if total > best:
+			best = total
+			best_lag = lag
+	return float(Synth.RATE) / float(best_lag)
+
+
+func _is_finite_sound(samples: PackedFloat32Array) -> bool:
+	for value in samples:
+		if is_nan(value) or is_inf(value) or absf(value) > 1.0001:
+			return false
+	return true
+
+
+func _test_audio() -> void:
+	print("Sound and music")
+	var rendered := true
+	var loud_enough := true
+	var seams := true
+	var ends := true
+	var recipes_ok := true
+	var names := []
+	for sound_id in SoundBank.ids():
+		var samples := SoundBank.render(sound_id)
+		names.append(sound_id)
+		rendered = rendered and samples.size() > 100 and _is_finite_sound(samples)
+		loud_enough = loud_enough and Synth.rms(samples) > 0.01
+		recipes_ok = recipes_ok and SoundBank.volume_of(sound_id) > 0.0
+		if SoundBank.is_loop(sound_id):
+			# the end runs on into the start: the step across the join is no bigger than steps inside the sound
+			var steps := 0.0
+			for i in range(1, samples.size()):
+				steps += absf(samples[i] - samples[i - 1])
+			var join := absf(samples[0] - samples[samples.size() - 1])
+			seams = seams and join <= 8.0 * steps / float(samples.size()) + 0.02
+		else:
+			ends = ends and absf(samples[0]) < 0.05 and absf(samples[samples.size() - 1]) < 0.05
+	_check(rendered and loud_enough and recipes_ok and names.size() >= 19, "every sound can be made, is audible and stays within range (%d sounds)" % names.size())
+	_check(seams, "the looping ones run round without a click")
+	_check(ends, "and the others begin and end quietly")
+	_check(SoundBank.render("wind") == SoundBank.render("wind") and SoundBank.render("nothing").is_empty(), "a sound is the same each time it is made, and an unknown one is silent")
+	var stream := Synth.to_stream(SoundBank.render("wind"), true)
+	_check(stream.loop_mode == AudioStreamWAV.LOOP_FORWARD and stream.mix_rate == Synth.RATE and stream.data.size() == SoundBank.render("wind").size() * 2 and not Synth.to_stream(SoundBank.render("chop")).loop_mode == AudioStreamWAV.LOOP_FORWARD, "streams loop only when they should (16-bit, mono)")
+
+	# Instruments sound at the pitch asked for.
+	var lute := Synth.note("lute", 57, 1.0)
+	var harp := Synth.note("harp", 69, 1.0)
+	var flute := Synth.note("flute", 64, 1.0)
+	var lute_pitch := _pitch_of(lute, 80.0, 400.0)
+	var harp_pitch := _pitch_of(harp, 300.0, 900.0)
+	var flute_pitch := _pitch_of(flute, 200.0, 600.0)
+	_check(absf(lute_pitch / 220.0 - 1.0) < 0.03 and absf(harp_pitch / 440.0 - 1.0) < 0.03 and absf(flute_pitch / 329.63 - 1.0) < 0.03, "a lute, harp and flute sound at the pitch of the note (%.0f, %.0f, %.0f Hz)" % [lute_pitch, harp_pitch, flute_pitch])
+	var early := Synth.rms(lute.slice(0, 4000))
+	var late := Synth.rms(lute.slice(lute.size() - 4000, lute.size()))
+	_check(early > 4.0 * late and Synth.peak(lute) <= 0.91, "and a plucked string dies away")
+
+	# The music.
+	var moods := DataRegistry.get_list("music")
+	var mood_ok := moods.size() >= 5
+	for def in moods:
+		mood_ok = mood_ok and Composer.MODES.has(str(def["mode"])) and int(def["bars"]) >= 8 and float(def["bpm"]) > 30.0 and not (def["progression"] as Array).is_empty()
+	_check(mood_ok, "every mood of music has a mode, a tempo and chords (%d moods)" % moods.size())
+	var first := Composer.compose("day", 1)
+	_check(first == Composer.compose("day", 1) and first != Composer.compose("day", 2) and Composer.compose("nonsense", 1).is_empty(), "the same mood and seed give the same piece, another seed another piece")
+	var scale_ok := true
+	var last_ok := false
+	var melody: Array[Dictionary] = []
+	for entry: Dictionary in first["notes"]:
+		if entry["instrument"] == "lute" and float(entry["gain"]) == 1.0:
+			melody.append(entry)
+			var steps: Array = Composer.MODES["ionian"]
+			scale_ok = scale_ok and posmod(int(entry["midi"]) - 50, 12) in steps
+	last_ok = not melody.is_empty() and posmod(int(melody[-1]["midi"]) - 50, 12) == 0 and float(melody[-1]["length"]) >= 2.0
+	_check(scale_ok and melody.size() > 30, "the tune keeps to its scale (%d notes)" % melody.size())
+	_check(last_ok and absf(float(first["seconds"]) - float(first["beats"]) * 60.0 / float(first["bpm"])) < 0.001, "and ends held, on the home note")
+	var jig := Composer.compose("festival", 1)
+	var has_drum := false
+	for entry: Dictionary in jig["notes"]:
+		has_drum = has_drum or entry["instrument"] == "drum"
+	_check(float(jig["bpm"]) > float(Composer.compose("sorrow", 1)["bpm"]) * 2.0 and has_drum, "a festival is quick and has a drum, a death slow")
+	var track := Composer.render(jig)
+	var sorrow_track := Composer.render(Composer.compose("sorrow", 1))
+	_check(track.size() == roundi(float(jig["seconds"]) * Synth.RATE) and _is_finite_sound(track) and Synth.rms(track) > 0.03 and Synth.peak(track) <= 0.86 and Synth.rms(sorrow_track) > 0.03, "a piece plays into one sound, audible and not clipping (%.0f s)" % float(jig["seconds"]))
+	var quick := 0.0
+	var slow := 0.0
+	for entry in Composer.improvise(1, 5, 20):
+		slow += float(entry["delay"])
+	for entry in Composer.improvise(9, 5, 20):
+		quick += float(entry["delay"])
+	var sour_novice := 0
+	var sour_master := 0
+	for seed_value in 30:
+		for entry in Composer.improvise(0, seed_value, 12):
+			sour_novice += 0 if posmod(int(entry["midi"]) - 57, 12) in Composer.MODES["dorian"] or posmod(int(entry["midi"]) - 57, 12) in Composer.MODES["mixolydian"] else 1
+		for entry in Composer.improvise(10, seed_value, 12):
+			sour_master += 0 if posmod(int(entry["midi"]) - 57, 12) in Composer.MODES["dorian"] or posmod(int(entry["midi"]) - 57, 12) in Composer.MODES["mixolydian"] else 1
+	_check(quick < slow * 0.8 and sour_master < sour_novice and Composer.improvise(3, 9, 8) == Composer.improvise(3, 9, 8), "a skilled player plays faster and with fewer sour notes than a novice (%d against %d)" % [sour_master, sour_novice])
+
+	# What there is to hear.
+	var summer_noon := Soundscape.levels({ "hour": 12.0, "season": "summer", "closeness": 1.0, "in_town": false })
+	var summer_night := Soundscape.levels({ "hour": 23.0, "season": "summer", "closeness": 1.0 })
+	var winter_night := Soundscape.levels({ "hour": 23.0, "season": "winter", "closeness": 1.0 })
+	_check(float(summer_noon["birds"]) > 0.5 and float(summer_noon["crickets"]) < 0.05 and float(summer_night["crickets"]) > 0.5 and float(summer_night["birds"]) < 0.05 and float(winter_night["crickets"]) == 0.0, "birds by day and crickets on summer nights, none in a winter night")
+	var rain := Soundscape.levels({ "hour": 12.0, "season": "spring", "wet": 0.9, "closeness": 1.0 })
+	var snow := Soundscape.levels({ "hour": 12.0, "season": "winter", "wet": 0.9, "snowing": true, "closeness": 1.0 })
+	_check(float(rain["rain"]) > 0.8 and float(rain["snow"]) == 0.0 and float(snow["snow"]) > 0.8 and float(snow["rain"]) == 0.0 and float(rain["birds"]) < float(summer_noon["birds"]) * 0.3 and float(rain["wind"]) > float(summer_noon["wind"]), "rain and snow are heard, the birds fall quiet and the wind rises")
+	var square := Soundscape.levels({ "hour": 11.0, "season": "spring", "in_town": true, "crowd": 1.0, "closeness": 1.0 })
+	var country := Soundscape.levels({ "hour": 11.0, "season": "spring", "in_town": false, "crowd": 1.0, "closeness": 1.0 })
+	var far := Soundscape.levels({ "hour": 11.0, "season": "spring", "in_town": true, "crowd": 1.0, "closeness": 0.0 })
+	_check(float(square["hubbub"]) > 0.5 and float(country["hubbub"]) == 0.0 and float(far["hubbub"]) == 0.0 and float(far["wind"]) < float(square["wind"]), "a town murmurs when you are in it and close, not from far away")
+	var by_fire := Soundscape.levels({ "hour": 20.0, "fire": 0.9, "water": 0.0, "closeness": 1.0 })
+	var by_lake := Soundscape.levels({ "hour": 20.0, "water": 0.8, "closeness": 1.0 })
+	var paused := Soundscape.levels({ "hour": 12.0, "season": "spring", "closeness": 1.0, "paused": true })
+	_check(float(by_fire["fire"]) > 0.7 and float(by_fire["water"]) == 0.0 and float(by_lake["water"]) > 0.7 and float(paused["birds"]) < float(Soundscape.levels({ "hour": 12.0, "season": "spring", "closeness": 1.0 })["birds"]) * 0.4, "fires and water are heard near, and a paused game is quiet")
+	_check(Soundscape.mood({ "hour": 9.0 }) == "day" and Soundscape.mood({ "hour": 19.0 }) == "evening" and Soundscape.mood({ "hour": 2.0 }) == "night" and Soundscape.mood({ "hour": 9.0, "festival": true }) == "festival" and Soundscape.mood({ "hour": 9.0, "festival": true, "sorrow": true }) == "sorrow", "the music follows the hour, and a festival or a death")
+
+	# The data hangs together.
+	var objects_ok := true
+	for def in DataRegistry.get_list("objects"):
+		for key in ["ambient", "work_sound"]:
+			if def.has(key):
+				objects_ok = objects_ok and DataRegistry.has_def("sounds", str(def[key]["id"]))
+		if def.has("instrument"):
+			objects_ok = objects_ok and str(def["instrument"]) in ["lute", "harp", "drum"] and str(def.get("skill", "")) == "music"
+	var instruments := 0
+	for def in DataRegistry.get_list("objects"):
+		instruments += 1 if def.has("instrument") else 0
+	_check(objects_ok and instruments == 3 and DataRegistry.has_def("thoughts", "played_harp"), "the objects that sound name real sounds, and there are three instruments")
+	var region := RegionGenerator.generate(42)
+	var harps := 0
+	var drums := 0
+	for placed in region.objects:
+		harps += 1 if placed.def_id == "harp" else 0
+		drums += 1 if placed.def_id == "drum" else 0
+	_check(harps >= 3 and drums >= 3, "the chapels have harps and the taverns drums (%d, %d)" % [harps, drums])
+
+	# Volume.
+	AudioMixer.setup()
+	_check(AudioServer.get_bus_index("Music") != -1 and AudioServer.get_bus_index("Ambience") != -1 and AudioServer.get_bus_index("Effects") != -1, "there are buses for music, ambience and effects")
+	var before := Settings.music_volume
+	Settings.set_value("music_volume", 0.0)
+	var muted := AudioServer.is_bus_mute(AudioServer.get_bus_index("Music"))
+	Settings.set_value("music_volume", 0.5)
+	var half := AudioServer.get_bus_volume_db(AudioServer.get_bus_index("Music"))
+	Settings.set_value("music_volume", before)
+	_check(muted and not AudioServer.is_bus_mute(AudioServer.get_bus_index("Music")) and absf(half - linear_to_db(0.5)) < 0.01, "the volume settings mute and set the buses")
+
+	# The director.
+	var game := _region_game(42)
+	var sim: Simulation = game["sim"]
+	var world: WorldState = game["world"]
+	var anna: Pawn = (game["household"] as Household).selected()
+	GameClock.set_time(2, 10)
+	var director := AudioDirector.new()
+	add_child(director)
+	director.bind(sim, null)
+	director.build_now()
+	_check(director.is_ready() and director._music_streams.size() == 5 and director._notes.has("lute:60") and director._notes.has("harp:70"), "the director makes every sound, piece of music and note")
+	director._think(0.25)
+	_check(director._music_mood == "day" and director._music[director._music_side].playing, "the day's music begins to play")
+	director._on_pawn_died("Someone", "died", "")
+	director._think(0.25)
+	_check(director._music_mood == "sorrow", "and gives way to a sad piece for a death")
+	director._follow_levels(30.0)
+	director._follow_music(10.0)
+	_check(director._layers["wind"].playing and director._music[director._music_side].volume_db > -40.0, "the wind blows and the music is up")
+	director.play_effect("chop", anna.tile, 1.0)
+	director.play_effect("coin", Vector2i(-1, -1))
+	var effect_playing := false
+	for player in director._pool:
+		effect_playing = effect_playing or player.playing
+	var global_playing := false
+	for player in director._global_pool:
+		global_playing = global_playing or player.playing
+	_check(effect_playing and global_playing, "a blow at a place and a coin anywhere are played")
+	var button := Button.new()
+	add_child(button)
+	for player in director._global_pool:
+		player.stop()
+	button.pressed.emit()
+	var clicked := false
+	for player in director._global_pool:
+		clicked = clicked or player.playing
+	_check(clicked, "every button clicks")
+	button.queue_free()
+	# Folk at work and at an instrument are heard.
+	var block := world.add_object("chopping_block", anna.tile + Vector2i(2, 0))
+	var harp_object := world.add_object("harp", anna.tile + Vector2i(0, 2))
+	anna.job_kind = "use"
+	anna.job_stage = "using"
+	anna.job_object = block.id
+	_check(director._work_sound_of(anna).get("id", "") == "chop", "a person at a chopping block makes the sound of chopping")
+	anna.job_object = harp_object.id
+	director._refresh_players()
+	_check(director._players.has(anna.id) and director._players[anna.id]["instrument"] == "harp", "a person at a harp is a player")
+	for player in director._pool:
+		player.stop()
+	GameClock.set_speed(1)
+	director._play_instruments(1.0)
+	var played := false
+	for player in director._pool:
+		played = played or player.playing
+	_check(played, "and plays a note")
+	anna.job_kind = ""
+	anna.job_stage = ""
+	director._refresh_players()
+	_check(director._players.is_empty(), "who stops when they stand up")
+	director.queue_free()
 
 
 func _test_events() -> void:

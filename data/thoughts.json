@@ -40,6 +40,8 @@
   { "id": "warmed_up",    "text": "Warmed by the fire",     "mood": 3,   "hours": 6,  "on": "used:hearth" },
   { "id": "washed",       "text": "Had a wash",             "mood": 3,   "hours": 8,  "on": "used:wash_basin" },
   { "id": "played_music", "text": "Played some music",      "mood": 5,   "hours": 10, "on": "used:lute" },
+  { "id": "played_harp",  "text": "Played the harp",        "mood": 6,   "hours": 10, "on": "used:harp" },
+  { "id": "played_drum",  "text": "Beat the drum",          "mood": 5,   "hours": 8,  "on": "used:drum" },
   { "id": "ate_out",      "text": "Ate out at the tavern", "mood": 5,   "hours": 8,  "on": "used:meal_table" },
   { "id": "had_a_drink",  "text": "Had a drink",            "mood": 4,   "hours": 6,  "on": "used:ale_barrel" },
   { "id": "bought_bread", "text": "Bought some bread",      "mood": 2,   "hours": 6,  "on": "used:food_shelf" },

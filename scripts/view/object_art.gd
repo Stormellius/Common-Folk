@@ -89,6 +89,10 @@ static func draw(ci: CanvasItem, def_id: String, u: float, t: float, occupied: b
 			_chamber_pot(ci, u)
 		"lute":
 			_lute(ci, u)
+		"harp":
+			_harp(ci, u)
+		"drum":
+			_drum(ci, u)
 		"table", "meal_table":
 			_table(ci, u)
 		"notice_board":
@@ -422,6 +426,42 @@ static func _lute(ci: CanvasItem, u: float) -> void:
 	_rect(ci, u, 13, -14, 5, 5, Color(0.28, 0.19, 0.11), 0.8)
 	_ellipse(ci, u, Vector2(-4, 3), Vector2(9.0, 10.0), Color(0.72, 0.46, 0.25), 1.2)
 	ci.draw_circle(Vector2(-3, 2) * u, 2.8 * u, Color(0.18, 0.11, 0.07))
+
+
+## A frame harp on a blue rug: a tall pillar, a curved neck and a slanting soundboard with strings between.
+static func _harp(ci: CanvasItem, u: float) -> void:
+	_rect(ci, u, -19, -13, 38, 26, Color(0.24, 0.32, 0.44), 1.2)  # a small rug
+	_rect(ci, u, -16, -10, 32, 20, Color(0.34, 0.44, 0.58), 0.0)
+	var wood := Color(0.55, 0.36, 0.20)
+	var board := PackedVector2Array([Vector2(-11, 9), Vector2(-8, 9), Vector2(11, -3), Vector2(8, -6)])
+	var scaled := PackedVector2Array()
+	for point in board:
+		scaled.append(point * u)
+	ci.draw_colored_polygon(scaled, wood.darkened(0.1))  # the soundboard
+	for step in 7:  # the strings run from the soundboard up to the neck
+		var along := float(step) / 6.0
+		var from := Vector2(lerpf(-9.5, 9.5, along), lerpf(8.0, -4.5, along))
+		var to := Vector2(lerpf(-9.5, 8.5, along), lerpf(-10.0, -6.5, along))
+		ci.draw_line(from * u, to * u, Color(0.92, 0.88, 0.74, 0.9), maxf(1.0, 0.7 * u))
+	_rect(ci, u, -12, -12, 4, 22, wood, 1.0)  # the pillar
+	var neck := PackedVector2Array([Vector2(-12, -12), Vector2(9, -8), Vector2(9, -5), Vector2(-9, -9)])
+	var neck_scaled := PackedVector2Array()
+	for point in neck:
+		neck_scaled.append(point * u)
+	ci.draw_colored_polygon(neck_scaled, wood.lightened(0.08))
+
+
+## A drum on a red rug: a round shell, a pale skin, lacing round the side and two sticks laid across.
+static func _drum(ci: CanvasItem, u: float) -> void:
+	_rect(ci, u, -19, -13, 38, 26, Color(0.46, 0.17, 0.15), 1.2)  # a small rug
+	_rect(ci, u, -16, -10, 32, 20, Color(0.60, 0.26, 0.21), 0.0)
+	_ellipse(ci, u, Vector2(0, 1), Vector2(11.0, 11.0), Color(0.50, 0.30, 0.18), 1.2)  # the shell
+	for step in 10:
+		var angle := TAU * float(step) / 10.0
+		ci.draw_line(Vector2(cos(angle), sin(angle)) * 9.0 * u + Vector2(0, 1) * u, Vector2(cos(angle + 0.3), sin(angle + 0.3)) * 11.0 * u + Vector2(0, 1) * u, Color(0.78, 0.66, 0.44), maxf(1.0, 0.8 * u))
+	_ellipse(ci, u, Vector2(0, 0), Vector2(8.5, 8.5), Color(0.88, 0.80, 0.64), 0.8)  # the skin
+	ci.draw_line(Vector2(9, -9) * u, Vector2(18, -14) * u, Color(0.70, 0.55, 0.34), maxf(1.0, 1.6 * u))
+	ci.draw_line(Vector2(12, -6) * u, Vector2(19, -9) * u, Color(0.70, 0.55, 0.34), maxf(1.0, 1.6 * u))
 
 
 ## A wall fills its whole tile, so a run of them reads as one solid wall and corners and

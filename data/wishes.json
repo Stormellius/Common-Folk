@@ -1,6 +1,10 @@
 [
   { "id": "play_lute", "text": "Play the lute", "deed": "used:lute", "hours": 30,
     "object": "lute", "do": { "use": "lute" }, "weights": { "talent:music": 3, "skill:music": 3 } },
+  { "id": "play_harp", "text": "Play the harp", "deed": "used:harp", "hours": 30,
+    "object": "harp", "do": { "use": "harp" }, "weights": { "talent:music": 3, "skill:music": 3 } },
+  { "id": "beat_the_drum", "text": "Beat the drum", "deed": "used:drum", "hours": 30,
+    "object": "drum", "do": { "use": "drum" } },
   { "id": "have_a_wash", "text": "Have a proper wash", "deed": "used:wash_basin", "hours": 24,
     "object": "wash_basin", "do": { "use": "wash_basin" }, "weights": { "trait:neat": 3 } },
   { "id": "sit_by_fire", "text": "Sit by the fire", "deed": "used:hearth", "hours": 24,

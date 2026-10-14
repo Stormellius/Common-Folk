@@ -47,7 +47,7 @@
       "#m.m.m.m.#",
       "#.......V#",
       "#n.n.n.na#",
-      "#........#",
+      "#.......d#",
       "####+#####"
     ] },
   { "id": "shop", "name": "Shop", "kind": "shop", "floor": "planks", "public": true,
@@ -74,7 +74,7 @@
     "grid": [
       "SSSSSSSSS",
       "S...A...S",
-      "S.......S",
+      "S.j.....S",
       "S.PP.PP.S",
       "S.......S",
       "S.PP.PP.S",
@@ -138,7 +138,7 @@
       "#..........V#",
       "#n.n.n.n.n.a#",
       "#.......r...#",
-      "#...........#",
+      "#.........d.#",
       "######+######"
     ] },
   { "id": "market_shop", "name": "Market shop", "kind": "shop", "floor": "planks", "public": true,
@@ -156,7 +156,7 @@
     "grid": [
       "SSSSSSS",
       "S..A..S",
-      "S.....S",
+      "S.j...S",
       "S.P.P.S",
       "S.....S",
       "S.P.P.S",

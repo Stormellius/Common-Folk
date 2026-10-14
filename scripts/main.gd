@@ -34,6 +34,7 @@ var _loaded_view: Dictionary = {}  # the camera of the save just loaded
 @onready var camera: CameraController = $Camera
 @onready var hud: Hud = $HUD
 @onready var menus: Menus = $Menus
+@onready var audio: AudioDirector = $Audio
 
 
 func _ready() -> void:
@@ -602,6 +603,7 @@ func _show_world(new_world: WorldState, household: Household, town: Household = 
 	fire_layer.bind(sim)
 	town_labels.bind(world)
 	build.bind(sim)
+	audio.bind(sim, camera)
 	hud.close_action_menu()
 	hud.set_household(household)
 	camera.set_world_size(Vector2(world.width, world.height) * MapView.TILE_SIZE)

@@ -10,6 +10,8 @@ extends RefCounted
 
 const THINK_COOLDOWN_TICKS := 30  # wait this long after finding nothing to fix a need with
 const OPTIONS_PER_NEED := 3       # how many nearest objects to try
+const NEED_REACH := 70            # how far someone goes to fill a need that is not pressing, tiles
+const NEED_DESPERATE := 20.0      # below this a need is pressing and no distance is too far
 const SOCIAL_RADIUS := 50         # how far someone lonely will go to find a person to talk to (towns are big)
 const GATHER_CHANCE := 0.04       # per minute, for an idle townsperson while an event draws a crowd
 const EVENT_EVERY := 10           # minutes between giving event thoughts and company
@@ -45,6 +47,9 @@ signal event_ended(event_name: String)
 signal realm_notice(text: String)
 ## Someone in the household fell ill, or got better.
 signal health_notice(text: String)
+## Something happened that has a sound (see SoundBank): its id and where, or (-1, -1) for a sound the
+## player should hear wherever the camera is (a chime, a coin).
+signal sound_made(sound_id: String, tile: Vector2i)
 ## The player took up another family of the town, or moved house (see Families); `name` is the family's.
 signal family_changed(name: String)
 ## Who is in the household changed without a death: a baby was born, or grew old enough to be controlled.
@@ -186,6 +191,7 @@ func step(motion_steps: int = 1) -> void:
 			for line in pawn.news:
 				health_notice.emit(line)
 			pawn.news.clear()
+			sound_made.emit("chime", Vector2i(-1, -1))
 
 
 ## Everyone in the world: the player's household first, then the town.
@@ -336,6 +342,7 @@ func buy_item(pawn: Pawn, item_id: String) -> Dictionary:
 		return { "ok": false, "message": "Can't afford it (%s)" % Economy.format(price) }
 	spend(pawn, price)
 	household.add_stock(item_id, 1)
+	sound_made.emit("coin", Vector2i(-1, -1))
 	return { "ok": true, "message": "%s bought %s for %s." % [_first_name(pawn), Economy.item_phrase(item_id), Economy.format(price)] }
 
 
@@ -1217,11 +1224,13 @@ func die(pawn: Pawn, cause: String) -> void:
 	var grave := _place_grave(spot)
 	if household.get_pawn(pawn.id) == null:  # someone from the town
 		town.dead.append({ "name": pawn.display_name, "cause": cause, "day": GameClock.get_day_number() })
+		sound_made.emit("toll", spot)
 		town.remove_pawn(pawn.id)
 		Mortality.after_death(self, pawn, cause, grave, _rng, false)
 		town_death.emit(pawn.display_name, cause)
 		return
 	household.dead.append({ "name": pawn.display_name, "cause": cause, "day": GameClock.get_day_number() })
+	sound_made.emit("toll", Vector2i(-1, -1))
 	household.remove_pawn(pawn.id)
 	Mortality.after_death(self, pawn, cause, grave, _rng, true)
 	var successor := household.selected()
@@ -1533,6 +1542,7 @@ func sell_stock(resource_id: String, seller: Pawn = null) -> Dictionary:
 	household.coins += earned
 	if seller != null:
 		Skills.practice(self, seller, "trading", 10.0)
+	sound_made.emit("coin", Vector2i(-1, -1))
 	return { "ok": true, "message": "Sold %d %s for %s" % [amount, Economy.resource_name(resource_id).to_lower(), Economy.format(earned)] }
 
 
@@ -1801,7 +1811,7 @@ func _plan_best(pawn: Pawn, candidates: Array[Vector2i]) -> Dictionary:
 	var origin := pawn.committed_tile()
 	var best := {}
 	for candidate in candidates:
-		if not world.is_walkable(candidate.x, candidate.y):
+		if not world.is_walkable(candidate.x, candidate.y) or (candidate != origin and _boxed_in(candidate)):
 			continue
 		var route: Array[Vector2i] = []
 		if candidate != origin:
@@ -1811,6 +1821,15 @@ func _plan_best(pawn: Pawn, candidates: Array[Vector2i]) -> Dictionary:
 		if best.is_empty() or route.size() < best["route"].size():
 			best = { "tile": candidate, "route": route }
 	return best
+
+
+## Whether every side of a tile is blocked, so nobody can get to it (looking for a way in would search the whole map).
+func _boxed_in(tile: Vector2i) -> bool:
+	for step in [Vector2i(0, 1), Vector2i(1, 0), Vector2i(0, -1), Vector2i(-1, 0)]:
+		var next: Vector2i = tile + step
+		if world.is_walkable(next.x, next.y):
+			return false
+	return true
 
 
 func _first_name(pawn: Pawn) -> String:
@@ -1837,8 +1856,9 @@ func _think(pawn: Pawn, minute: int) -> bool:
 				return true
 			continue
 		var options: Array[PlacedObject] = []
+		var reach := NEED_REACH if float(want[0]) > NEED_DESPERATE else 100000  # nobody crosses the country for a lute, but they will for a meal
 		for placed in _fillers(str(want[1])):
-			if placed.user_id == 0 and _may_use(pawn, placed) and price_of(placed.def_id) <= coins_of(pawn) and bool(placed.def().get("autonomous", true)):
+			if placed.user_id == 0 and _distance(pawn.tile, placed.tile) <= reach and _may_use(pawn, placed) and price_of(placed.def_id) <= coins_of(pawn) and bool(placed.def().get("autonomous", true)):
 				options.append(placed)
 		options.sort_custom(func(a: PlacedObject, b: PlacedObject) -> bool:
 			return _effort(pawn, a) < _effort(pawn, b))

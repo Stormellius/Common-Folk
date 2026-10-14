@@ -1,6 +1,6 @@
 # Common Folk: roadmap
 
-Milestones 1 to 24 are done. This file keeps the plan for 12 to 24 as it was built, and what comes next (25). Each milestone ended with the game playable, the smoke test passing and older saves still loading.
+Milestones 1 to 25 are done. This file keeps the plan for 12 to 25 as it was built, and what is left after them. Each milestone ended with the game playable, the smoke test passing and older saves still loading.
 
 ## What the people are called
 
@@ -127,11 +127,14 @@ Folk are born, grow up, grow old and die, as in the Sims, with a medieval face o
 - **Arrivals and moves**: an empty house is taken, with some chance each day, by a family from another town with no work, if its town is hiring (they leave their jobs and sell nothing: they just go), or by newcomers with a name not yet in the region. Families that have just settled stay put for a while
 - **The chronicle** (the last forty things that happened: deaths and who inherits, orphans, families coming and going, and which family you took up) is on the Town Families screen and in the save. Saves are format 14
 
-## The plan from here
+## Milestone 25: Sound and music (done)
 
-One milestone left. Each ends with the game playable, the smoke test passing and older saves still loading.
-
-- **25 Sound and music**: ambient sound, music, instruments to play
+- **Made by arithmetic** (`Synth`, `SoundBank`, `Composer`): no recorded audio. Noise filtered into wind, rain, snow hush and water; chirps, crickets, a crackling fire, a crowd's murmur; bells, a cry, a coin, an axe, a hammer; plucked strings by the Karplus-Strong method, a breathy pipe, a pad. What each sound is (a recipe and its numbers) is data in `data/sounds.json`. A worker thread makes them all at start, so the first seconds are quiet; it skips the work with no sound output
+- **Ambience** (`Soundscape`): eight looping layers whose levels come from the hour, season, weather, whether the camera is in a town, how near people, fires (hearths, forges, ovens, houses alight) and water are, and how close it is zoomed; a paused game is quieter. Plain functions of a context, so they are tested without a speaker
+- **Music** (`Composer`, `data/music.json`): pieces in a mode (ionian, dorian, phrygian, mixolydian, aeolian) with a tempo and a chord progression, built from phrases that walk the scale, land on the chord on strong beats and end held on the home note, over a bass, a pad and (for a festival) a drum. Five moods: day, evening, night, festival, sorrow; the music crossfades as the hour or the news changes. Each piece loops without a seam
+- **Work and instruments**: objects can say `ambient` and `work_sound`; people at a chopping block, quarry face, forge, workbench or building site make that sound when near the camera and the game is running at a walking pace. An object with an `instrument` (lute, harp, drum) is played by whoever uses it: a made-up tune, quicker and with fewer sour notes the better their music skill. The harp and drum are new objects (buildable, in the chapels and taverns)
+- **One-shots**: the chapel bell for a service, a toll for a death, a baby's cry, coins, a chime for a granted wish or a step toward an ambition, thunder in a heavy rain, a click on every button
+- **Settings**: volume, music, wind and town, work and effects, each a slider, kept between runs. Audio buses: Music, Ambience, Effects under Master
 
 ## Later
 

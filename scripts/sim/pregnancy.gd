@@ -297,6 +297,7 @@ static func _give_birth(sim: Simulation, mother: Pawn, rng: RandomNumberGenerato
 	mother.babies_due = 1
 	var recovery := roundi(_number("recovery_years", 0.25) * Life.days_per_year(sim.world) * GameClock.MINUTES_PER_DAY)
 	mother.recovered_at = GameClock.tick + recovery * (2 if hard else 1)
+	sim.sound_made.emit("baby", mother.tile)
 	for relative in _family_of(sim, mother):
 		Mood.add_event(relative, "birth", GameClock.tick)
 	Mood.add_event(mother, "gave_birth", GameClock.tick)
