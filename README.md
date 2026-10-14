@@ -1,6 +1,6 @@
 # Common Folk
 
-**Common Folk** is a medieval life sim sandbox with RimWorld-style looks: you live one person's life at a time in a randomly generated town that keeps running without you. The full plan is in the design document; this project is at **milestone 11 (Medieval layer)**.
+**Common Folk** is a medieval life sim sandbox with RimWorld-style looks: you live one person's life at a time in a randomly generated town that keeps running without you. The people you play are your **folk**. The plan from here is in [ROADMAP.md](ROADMAP.md); this project is at **milestone 12 (Interface)**.
 
 ## What works now
 
@@ -33,7 +33,10 @@
 - When the head of the household dies the eldest adult takes over and the Crown takes a tenth of the purse as death duty
 - Children: being intimate with a man gives a woman of the household a chance of conceiving. After 12 days everyone knows she is expecting (she eats and tires more and her mood lifts), in the last weeks she is heavy and stays off work, and after 45 days a baby is born into the household (a message names it; everyone is glad). She needs 15 days to recover before she can conceive again. A baby is carried by the household, cannot be selected or talked to and needs nothing, until it turns two. A year is 60 days, and everyone has a birthday: at 18 a child becomes an adult and finds their orientation. If only babies are left, the playthrough ends. Townswomen never conceive
 - Hover a tile to see what it is and whether it is walkable
-- Save and load (F5 / F9) with an autosave every midnight (`user://autosave.json`). Saves are written to a temporary file first and moved into place, a damaged or cut-off file is refused without changing anything, older saves (formats 1 to 8) still load, and the camera position and zoom come back. New world (N)
+- A title screen over a living town at dusk (Continue, New Game, Load Game, Settings, Quit). New Game picks how you begin and takes a seed: a number, any word (the same word always makes the same town), or nothing for a new one
+- Menus in the game's own look: carved wood panels with a gilt edge, parchment dialogs and book type (IM Fell English for headings, Alegreya for text). Esc opens the pause menu (Resume, Save, Load, Settings, Main Menu, Quit), H the list of keys, and the Menu button does the same as Esc
+- Save to named saves, as many as you like (`user://saves/`), as well as the quick save (F5) and the autosave every midnight. The load list shows each save's family, how many folk, the date in the game and when it was saved, and can delete one. Saves are written to a temporary file first and moved into place, a damaged or cut-off file is refused without changing anything, older saves (formats 1 to 8) still load, and the camera position and zoom come back
+- Settings, kept between runs in `user://settings.cfg`: windowed, fullscreen or borderless window (F11 switches), the window size, interface size, vsync, and the morning autosave
 - All content (tiles, seasons, needs, traits, buildings, the town's makeup) comes from JSON files in `data/`, and mods can add or replace it
 
 ## Run it
@@ -42,13 +45,13 @@
 2. Open Godot, click **Import**, choose this folder's `project.godot`, then press **F5** (or the play button).
 3. The first time, Godot builds its class cache. If you see "identifier not found" errors for `WorldState`, `MapView` and similar, close and reopen the project once.
 
-Options go after `--` on the command line, which is handy for testing and screenshots:
+An ordinary launch opens the title screen. Options go after `--` on the command line, which is handy for testing and screenshots; any of them goes straight into a game, and leaves the window as the command line made it (the window settings are not applied):
 
 ```
 godot --path . -- --seed=1234 --day=50 --hour=12 --zoom=0.5 --look=70,30 --speed=0
 ```
 
-`seed` is the world, `day` and `hour` set the date (day 0 is the first day, 15 days per season), `zoom` the camera zoom, `look` the tile to center on, and `speed` 0 to 3, `walk` a tile (such as `--walk=70,50`) to send the selected person to, and `menu` a tile to open the right-click menu on, `load=1` to load the newest save at start, `shot=path.png` to save a screenshot a moment after starting and quit, `weather` (`clear`, `cloudy`, `rain` or `snow`) to override the day's weather, `dying=1` to put the selected person minutes from starving, `needs` values for the selected person (such as `--needs=rest:10,hunger:30`), `build` to start in build mode with a tool (`--build=place:wall`, `floor:planks`, `remove`, `move`), `demohouse=1` to build a small room with the real build commands, and `together=1` to start the two-person interaction.
+`seed` is the world, `day` and `hour` set the date (day 0 is the first day, 15 days per season), `zoom` the camera zoom, `look` the tile to center on, and `speed` 0 to 3, `walk` a tile (such as `--walk=70,50`) to send the selected person to, and `menu` a tile to open the right-click menu on, `load=1` to load the newest save at start, `shot=path.png` to save a screenshot a moment after starting and quit, `weather` (`clear`, `cloudy`, `rain` or `snow`) to override the day's weather, `screen` to open a menu at the start (`pause`, `save`, `load`, `settings`, `new` or `game_over`), `title=1` to show the title screen anyway, `dying=1` to put the selected person minutes from starving, `needs` values for the selected person (such as `--needs=rest:10,hunger:30`), `build` to start in build mode with a tool (`--build=place:wall`, `floor:planks`, `remove`, `move`), `demohouse=1` to build a small room with the real build commands, and `together=1` to start the two-person interaction.
 
 ## Controls
 
@@ -58,7 +61,9 @@ godot --path . -- --seed=1234 --day=50 --hour=12 --zoom=0.5 --look=70,30 --speed
 | Left-click a person | Select that person |
 | Right-click | Menu of actions for the selected person at that spot (Walk here, Stop, object actions, and interactions when you click another person). Left-click a person to switch to them |
 | B | Build mode: pick a tool in the palette, left-click or drag to build, right-click or Esc to put it away |
-| Escape | Close the menu; in build mode, put the tool away, then leave build mode |
+| Escape | Close the right-click menu; in build mode, put the tool away, then leave build mode; otherwise open the pause menu |
+| H | Show or hide the list of keys |
+| F11 | Switch between the window and a borderless full screen |
 | Tab / Shift+Tab | Next / previous person (camera jumps to them) |
 | C | Center the camera on the selected person |
 | Mouse wheel | Zoom |
@@ -67,8 +72,8 @@ godot --path . -- --seed=1234 --day=50 --hour=12 --zoom=0.5 --look=70,30 --speed
 | 1, 2, 3 | Set speed |
 | G | Toggle grid |
 | Home | Recenter camera |
-| F5 / F9 | Quick save (`user://savegame.json`) / load the newest of the quick save and the autosave |
-| N | New random world |
+| F5 / F9 | Quick save (`user://savegame.json`) / load the newest save of any kind |
+| N | A new game (opens New Game) |
 
 ## How it is organized
 
@@ -76,6 +81,7 @@ The simulation never touches the screen, and the screen only reads the simulatio
 
 ```
 data/                  Base content as JSON (one file per kind of thing)
+fonts/                 IM Fell English and Alegreya, with their licenses (SIL Open Font License)
 mods/                  Mods, one folder each (example_mod is disabled by default)
 scenes/main.tscn       The only scene
 shaders/
@@ -85,6 +91,7 @@ scripts/
   autoload/            Global singletons
     data_registry.gd     Loads data/ and mods, answers "what is tile X?"
     game_clock.gd        Fixed ticks, speed, calendar
+    settings.gd          Player settings in user://settings.cfg: window, interface size, autosave
   sim/                 Game state and rules (no drawing here)
     world_state.gd       The map as plain data, turns into a Dictionary
     map_generator.gd     Seed -> terrain
@@ -110,6 +117,7 @@ scripts/
     path_finder.gd       A* over the tile map
     simulation.gd        Ticks the world; the commands views may give (order_move, order_use, build_place...)
     save_game.gd         Writes and reads the save file
+    save_slots.gd        Where saves live: named saves, the quick save, the autosave and what each one is
   view/                Drawing and input for the map
     map_view.gd          Feeds the world and season look to the terrain shader (drawn in chunks)
     day_night.gd         Tints the map by time of day and cloud; says how dark it is
@@ -129,11 +137,15 @@ scripts/
     cloud_shadows.gd     Cloud shadows over the whole map
     weather.gd           The day's weather; rain, snow and fireflies drawn over the screen
     camera_controller.gd Pan and zoom
-  ui/hud.gd            Flat dark panels: clock and speed buttons, household bar, tile info, help, messages
+  ui/ui_theme.gd       The look of every menu: drawn wood, parchment and gilt, and the fonts
+  ui/ui_root.gd        The root of a screen of interface: carries the theme, scales by the interface size
+  ui/hud.gd            While playing: clock and speed buttons, your folk, the panel about the one you control, tile info, help, messages
+  ui/menus.gd          Title screen, new game, load, save, settings, pause menu and the end of a playthrough
+  ui/season_glyph.gd   The little season picture beside the date
   ui/pawn_portrait.gd  Small person picture for the household bar
   ui/build_icon.gd     Palette pictures for the build mode buttons
   ui/action_menu.gd    The right-click pop-up list
-  main.gd              Wires it together and handles shortcuts
+  main.gd              Wires it together: the title screen, starting and loading games, the menus, shortcuts
 tests/                 Headless checks
 ```
 
@@ -214,6 +226,12 @@ godot --headless --path . res://tests/smoke_test.tscn
 This checks data loading, mods, the clock and calendar, world generation (same seed, same world), the town (lots keep apart, everything is reachable, houses are equipped, people live in families, private things stay private, a day in town, a death in town, saving it), pathfinding, pawn movement, the household, the right-click actions, needs and objects, coin and work (prices, build costs, shifts, wages, hiring, quitting), chatting and opinions, town events, starts, land, the guild, tax and succession, the chapel and Faith, illness and cures, raids, building, death, thoughts and mood, and the save round trip. Run it as a scene as shown; it needs the autoloads, which `--script` mode does not provide.
 
 ```
+godot --headless --path . res://tests/main_flow.tscn
+```
+
+This runs the real game from the title screen the way a player would: a new game, the pause menu, saving to a named save, back to the title screen and loading it again.
+
+```
 godot --headless --path . res://tests/balance_check.tscn
 ```
 
@@ -229,7 +247,9 @@ Everything else is drawn by code too, in one style: dark outlines, a soft drop s
 
 Firelight is a `PointLight2D` on each object with a `light` in `objects.json`, brighter the darker it is (`DayNight.darkness`), and every wall but a door carries a thin `LightOccluder2D` along its middle, so the inner face of a wall is lit and the light stops there. The terrain is drawn in 16 by 16 tile chunks (`CHUNK_TILES` in `map_view.gd`) so each light only has to be worked out where it reaches. Weather, smoke and fireflies run on a clock that stops while the game is paused; cloud cover and wind come from `Weather`'s static values, and `DayNight` dims the day by `Weather.gloom`.
 
-This is a procedural approximation of the RimWorld look. The real thing relies on hand-painted textures and sprites, so characters, furniture and buildings can later become sprites drawn on top (made in Krita or Aseprite, or from a free pack): replace `PawnArt.draw()`, `ObjectArt.draw()` or `FloorArt.draw()` and leave the rest alone. The day and night tint (a `CanvasModulate` node) and the firelight will apply to sprites automatically. To stop the dark nights, set the night colors in `day_night.gd` closer to white. The HUD colors are constants at the top of `scripts/ui/hud.gd`.
+This is a procedural approximation of the RimWorld look. The real thing relies on hand-painted textures and sprites, so characters, furniture and buildings can later become sprites drawn on top (made in Krita or Aseprite, or from a free pack): replace `PawnArt.draw()`, `ObjectArt.draw()` or `FloorArt.draw()` and leave the rest alone. The day and night tint (a `CanvasModulate` node) and the firelight will apply to sprites automatically. To stop the dark nights, set the night colors in `day_night.gd` closer to white.
+
+The menus get their look from `scripts/ui/ui_theme.gd`: the colors are constants at the top, and the wood, parchment, button and check-box textures are drawn by the functions at the bottom. Labels and panels pick a look by type variation (`HeaderLabel`, `CapsLabel`, `InkLabel`, `ParchmentPanel`...). The fonts are IM Fell English by Igino Marini and Alegreya by Huerta Tipográfica, both under the SIL Open Font License (the license files are in `fonts/`); the book face is also used for the names over people's heads.
 
 ## Known limits
 
@@ -237,4 +257,4 @@ Weather is only a look: rain does not make anyone wet or cold, and the weather d
 
 ## Next
 
-The planned roadmap (milestones 1 to 11) is complete. What it leaves out, roughly in the order it would matter: building is instant, with no builders, materials, rooms or roofs (a house is walls, a door and a floor, paid for in coin); you can hold one business lot and nobody works it; there is no marriage, and a baby cannot be played until it is two; townspeople cannot be clicked or controlled; and art is still drawn by code, to be swapped for sprites.
+Milestones 13 to 16 are planned in [ROADMAP.md](ROADMAP.md): life and death, pregnancy and babies, work sites and resources, and accidents. What the first eleven left out, roughly in the order it would matter: building is instant, with no builders, materials, rooms or roofs (a house is walls, a door and a floor, paid for in coin); you can hold one business lot and nobody works it; there is no marriage, and a baby cannot be played until it is two; townspeople cannot be clicked or controlled; and art is still drawn by code, to be swapped for sprites.

@@ -1,0 +1,694 @@
+class_name Menus
+extends CanvasLayer
+## The game's menus: the title screen, starting a new game, loading and saving, settings, the
+## pause menu and the end of a playthrough. Built in code like the HUD and styled by UiTheme.
+## The menus only ask: main.gd listens to the signals and does the work.
+##
+## One screen shows at a time. Load, Save, Settings and New Game go back to wherever they were
+## opened from (the title screen or the pause menu); Esc goes back too, or closes the pause menu.
+
+signal new_game_requested(world_seed: int, start_id: String)
+signal load_requested(path: String)
+signal save_requested(slot_name: String)
+## Leave the game for the title screen.
+signal title_requested
+signal quit_requested
+## Save Game was picked in the pause menu: main fills in a name and calls open_save.
+signal save_screen_requested
+## Every menu was closed: the game can carry on.
+signal closed
+
+const CREDIT := "Type: IM Fell English by Igino Marini and Alegreya by Huerta Tipográfica, under the SIL Open Font License"
+
+var _root: UiRoot
+var _shade: ColorRect
+var _screens: Dictionary = {}  # screen name -> Control
+var _current := ""
+var _back_to := "title"
+var _confirm_back := ""
+var _confirm_action := Callable()
+var _confirm_text: Label
+var _confirm_yes: Button
+var _continue_button: Button
+var _continue_note: Label
+## One button per way of beginning, by start id; kept so tests can reach them.
+var _start_buttons: Dictionary = {}
+var _start_picked := ""
+var _begin_button: Button
+var _seed_field: LineEdit
+var _load_list: VBoxContainer
+var _load_error: Label
+var _save_list: VBoxContainer
+var _save_error: Label
+var _save_field: LineEdit
+var _save_button: Button
+var _save_overwrite := false
+var _game_over_text: Label
+var _pause_note: Label
+var _display_option: OptionButton
+var _size_option: OptionButton
+var _scale_option: OptionButton
+var _vsync_box: CheckBox
+var _autosave_box: CheckBox
+
+
+func _ready() -> void:
+	layer = 20  # over the HUD
+	_root = UiRoot.new()
+	add_child(_root)
+	_shade = ColorRect.new()
+	_shade.color = Color(0.03, 0.02, 0.015, 0.6)
+	_shade.mouse_filter = Control.MOUSE_FILTER_STOP  # the game behind a dialog cannot be clicked
+	_root.add_child(_shade)
+	_shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_screens["title"] = _build_title()
+	_screens["pause"] = _build_pause()
+	_screens["new"] = _build_new_game()
+	_screens["load"] = _build_load()
+	_screens["save"] = _build_save()
+	_screens["settings"] = _build_settings()
+	_screens["confirm"] = _build_confirm()
+	_screens["game_over"] = _build_game_over()
+	_show("")
+
+
+func is_open() -> bool:
+	return _current != ""
+
+
+## Which screen is showing ("" for none).
+func current() -> String:
+	return _current
+
+
+## The title screen. `continue_text` describes the newest save ("" if there is none).
+func show_title(continue_text: String) -> void:
+	_back_to = "title"
+	_continue_button.disabled = continue_text == ""
+	_continue_note.text = continue_text
+	_continue_note.visible = continue_text != ""
+	_show("title")
+
+
+## The pause menu, with a line about where the game stands.
+func show_pause(note: String) -> void:
+	_back_to = "pause"
+	_pause_note.text = note
+	_show("pause")
+
+
+## The end of a playthrough: what happened, and where to go from here.
+func show_game_over(text: String) -> void:
+	_back_to = "game_over"
+	_game_over_text.text = text
+	_show("game_over")
+
+
+## Straight to the new game screen (N in the game, or New Game on the title screen).
+func open_new_game() -> void:
+	if _current == "":
+		_back_to = "pause"
+	_start_picked = ""
+	for id in _start_buttons:
+		_start_buttons[id].set_pressed_no_signal(false)
+	var starts: Array = DataRegistry.get_list("starts")
+	if not starts.is_empty():
+		_pick_start(str(starts[0]["id"]))
+	_seed_field.text = ""
+	_show("new")
+
+
+## The save screen; `default_name` fills the name field.
+func open_save(default_name: String) -> void:
+	if _current == "":
+		_back_to = "pause"
+	_save_field.text = default_name
+	_save_error.visible = false
+	_save_overwrite = false
+	_save_button.text = "Save"
+	_refresh_save_list()
+	_show("save")
+
+
+func open_load() -> void:
+	if _current == "":
+		_back_to = "pause"
+	_refresh_load_list()
+	_show("load")
+
+
+## A save could not be loaded: say why on the load screen.
+func show_load_error(text: String) -> void:
+	_refresh_load_list()
+	_load_error.text = "Could not load that save: %s." % text
+	_load_error.visible = true
+	_show("load")
+
+
+## The game could not be saved: say why on the save screen.
+func show_save_error(text: String) -> void:
+	_save_error.text = text
+	_save_error.visible = true
+
+
+func open_settings() -> void:
+	if _current == "":
+		_back_to = "pause"
+	_refresh_settings()
+	_show("settings")
+
+
+func close() -> void:
+	_show("")
+	closed.emit()
+
+
+func _show(screen: String) -> void:
+	for name in _screens:
+		_screens[name].visible = name == screen
+	_shade.visible = screen != "" and screen != "title"
+	_current = screen
+	if screen == "" and get_viewport() != null:
+		get_viewport().gui_release_focus()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if _current == "" or not (event is InputEventKey and event.pressed and not event.echo):
+		return
+	get_viewport().set_input_as_handled()  # nothing reaches the game while a menu is open
+	if event.keycode != KEY_ESCAPE:
+		return
+	match _current:
+		"pause":
+			close()
+		"confirm":
+			_show(_confirm_back)
+		"title", "game_over":
+			pass
+		_:
+			_show(_back_to)
+
+
+# --- screens ---------------------------------------------------------------------
+
+func _build_title() -> Control:
+	var screen := Control.new()
+	screen.mouse_filter = Control.MOUSE_FILTER_STOP  # the town behind is only to look at
+	_root.add_child(screen)
+	screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var fade := TextureRect.new()  # darkens the left side so the words stand out
+	var gradient := Gradient.new()
+	gradient.offsets = PackedFloat32Array([0.0, 0.45, 0.8])
+	gradient.colors = PackedColorArray([Color(0.03, 0.02, 0.015, 0.9), Color(0.03, 0.02, 0.015, 0.65), Color(0.03, 0.02, 0.015, 0.0)])
+	var texture := GradientTexture2D.new()
+	texture.gradient = gradient
+	texture.width = 256
+	texture.height = 8
+	fade.texture = texture
+	fade.stretch_mode = TextureRect.STRETCH_SCALE
+	fade.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	screen.add_child(fade)
+	fade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 10)
+	screen.add_child(column)
+	column.set_anchors_and_offsets_preset(Control.PRESET_CENTER_LEFT, Control.PRESET_MODE_MINSIZE, 90)
+	column.grow_vertical = Control.GROW_DIRECTION_BOTH
+	var title := Label.new()
+	title.theme_type_variation = "TitleLabel"
+	title.text = "Common Folk"
+	column.add_child(title)
+	var tagline := Label.new()
+	tagline.theme_type_variation = "HeaderLabel"
+	tagline.text = "A life among the folk of a medieval town"
+	column.add_child(tagline)
+	var gap := Control.new()
+	gap.custom_minimum_size = Vector2(0, 26)
+	column.add_child(gap)
+	_continue_button = _title_button(column, "Continue", func() -> void: load_requested.emit(SaveSlots.newest()))
+	_continue_note = Label.new()
+	_continue_note.theme_type_variation = "DimLabel"
+	column.add_child(_continue_note)
+	_title_button(column, "New Game", open_new_game_from_title)
+	_title_button(column, "Load Game", func() -> void:
+		_refresh_load_list()
+		_show("load"))
+	_title_button(column, "Settings", func() -> void:
+		_refresh_settings()
+		_show("settings"))
+	_title_button(column, "Quit", func() -> void: quit_requested.emit())
+
+	var credit := Label.new()
+	credit.theme_type_variation = "DimLabel"
+	credit.add_theme_font_size_override("font_size", 11)
+	credit.text = CREDIT
+	screen.add_child(credit)
+	credit.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE, 12)
+	credit.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	credit.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	return screen
+
+
+func open_new_game_from_title() -> void:
+	_back_to = "title"
+	open_new_game()
+
+
+func _title_button(column: VBoxContainer, text: String, action: Callable) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.custom_minimum_size = Vector2(300, 46)
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.add_theme_font_size_override("font_size", 22)
+	button.pressed.connect(action)
+	column.add_child(button)
+	return button
+
+
+func _build_pause() -> Control:
+	var parts := _card("Paused", 380.0)
+	var box: VBoxContainer = parts[1]
+	_pause_note = _ink_label("", "InkDim")
+	_pause_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(_pause_note)
+	for entry in [
+		["Resume", close],
+		["Save Game", func() -> void: save_screen_requested.emit()],
+		["Load Game", func() -> void:
+			_refresh_load_list()
+			_show("load")],
+		["Settings", func() -> void:
+			_refresh_settings()
+			_show("settings")],
+		["Main Menu", func() -> void: _confirm("Leave this game for the title screen? Anything since your last save will be lost.", "Leave", func() -> void: title_requested.emit())],
+		["Quit to Desktop", func() -> void: _confirm("Quit the game? Anything since your last save will be lost.", "Quit", func() -> void: quit_requested.emit())],
+	]:
+		var button := Button.new()
+		button.text = entry[0]
+		button.custom_minimum_size = Vector2(0, 40)
+		button.pressed.connect(entry[1])
+		box.add_child(button)
+	return parts[0]
+
+
+
+func _build_new_game() -> Control:
+	var parts := _card("A New Life", 600.0)
+	var box: VBoxContainer = parts[1]
+	box.add_child(_ink_label("How do you begin?", "InkLabel"))
+	var group := ButtonGroup.new()
+	for def in DataRegistry.get_list("starts"):
+		var id := str(def["id"])
+		var button := Button.new()
+		button.toggle_mode = true
+		button.button_group = group
+		button.custom_minimum_size = Vector2(540, 90)
+		var margin := MarginContainer.new()
+		margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		for side in ["margin_left", "margin_right"]:
+			margin.add_theme_constant_override(side, 14)
+		for side in ["margin_top", "margin_bottom"]:
+			margin.add_theme_constant_override(side, 7)
+		button.add_child(margin)
+		margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		var lines := VBoxContainer.new()
+		lines.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		lines.add_theme_constant_override("separation", 0)
+		margin.add_child(lines)
+		var name := Label.new()
+		name.theme_type_variation = "HeaderLabel"
+		name.text = str(def.get("name", id))
+		name.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		lines.add_child(name)
+		var text := Label.new()
+		text.text = str(def.get("text", ""))
+		text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		text.add_theme_font_size_override("font_size", 14)
+		text.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		lines.add_child(text)
+		button.pressed.connect(func() -> void: _pick_start(id))
+		box.add_child(button)
+		_start_buttons[id] = button
+	var seed_row := HBoxContainer.new()
+	seed_row.add_theme_constant_override("separation", 8)
+	box.add_child(seed_row)
+	var seed_label := _ink_label("World seed", "InkLabel")
+	seed_label.custom_minimum_size = Vector2(110, 0)
+	seed_row.add_child(seed_label)
+	_seed_field = LineEdit.new()
+	_seed_field.placeholder_text = "Leave empty for a new world"
+	_seed_field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	seed_row.add_child(_seed_field)
+	var roll := Button.new()
+	roll.text = "Roll"
+	roll.pressed.connect(func() -> void: _seed_field.text = str(randi() % 1000000))
+	seed_row.add_child(roll)
+	_begin_button = Button.new()
+	_begin_button.text = "Begin"
+	_begin_button.pressed.connect(func() -> void:
+		if _start_picked != "":
+			new_game_requested.emit(seed_from_text(_seed_field.text), _start_picked))
+	box.add_child(_button_row([_back_button(), _begin_button]))
+	return parts[0]
+
+
+## A seed typed by the player: a number is used as it is, any other text is turned into one (so
+## "Thornbury" always makes the same town), and nothing at all rolls a new one.
+static func seed_from_text(text: String) -> int:
+	var clean := text.strip_edges()
+	if clean == "":
+		return randi()
+	if clean.is_valid_int():
+		return int(clean)
+	return absi(hash(clean))
+
+
+func _pick_start(id: String) -> void:
+	_start_picked = id
+	for start_id in _start_buttons:
+		_start_buttons[start_id].set_pressed_no_signal(start_id == id)
+	if _begin_button != null:
+		_begin_button.disabled = false
+
+
+func _build_load() -> Control:
+	var parts := _card("Load a Game", 640.0)
+	var box: VBoxContainer = parts[1]
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(600, 320)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	box.add_child(scroll)
+	_load_error = _ink_label("", "InkLabel")
+	_load_error.add_theme_color_override("font_color", Color(0.55, 0.12, 0.08))
+	_load_error.visible = false
+	box.add_child(_load_error)
+	_load_list = VBoxContainer.new()
+	_load_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_load_list.add_theme_constant_override("separation", 6)
+	scroll.add_child(_load_list)
+	box.add_child(_button_row([_back_button()]))
+	return parts[0]
+
+
+func _refresh_load_list() -> void:
+	_clear(_load_list)
+	_load_error.visible = false
+	var saves := SaveSlots.all()
+	if saves.is_empty():
+		_load_list.add_child(_ink_label("No saved games yet.", "InkDim"))
+	for entry in saves:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		_load_list.add_child(row)
+		var words := VBoxContainer.new()
+		words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		words.add_theme_constant_override("separation", 0)
+		row.add_child(words)
+		var title := _ink_label(str(entry["title"]), "InkLabel")
+		title.add_theme_font_override("font", UiTheme.bold_font())
+		words.add_child(title)
+		words.add_child(_ink_label(describe_save(entry), "InkDim"))
+		var path := str(entry["path"])
+		var load_button := Button.new()
+		load_button.text = "Load"
+		load_button.pressed.connect(func() -> void: load_requested.emit(path))
+		row.add_child(load_button)
+		var delete_button := Button.new()
+		delete_button.text = "Delete"
+		delete_button.pressed.connect(func() -> void:
+			if delete_button.text != "Sure?":
+				delete_button.text = "Sure?"
+				return
+			SaveSlots.remove(path)
+			_refresh_load_list())
+		row.add_child(delete_button)
+		_load_list.add_child(_ink_rule())
+
+
+## "The Brook family, 3 folk  ·  Spring 3, Y1, 12:00  ·  saved 14 Oct 2026, 05:43"
+static func describe_save(entry: Dictionary) -> String:
+	var meta: Dictionary = entry.get("meta", {})
+	var parts: Array[String] = []
+	if meta.has("family"):
+		var folk := int(meta.get("folk", 0))
+		parts.append("The %s family, %d folk" % [str(meta["family"]), folk] if folk > 0 else "The %s family" % str(meta["family"]))
+	if meta.has("date"):
+		parts.append("%s, %s" % [str(meta["date"]), str(meta.get("time", ""))])
+	if parts.is_empty():
+		parts.append("An older save")
+	parts.append("saved %s" % _when(int(entry.get("modified", 0))))
+	return "  ·  ".join(parts)
+
+
+static func _when(unix_time: int) -> String:
+	var bias := int(Time.get_time_zone_from_system().get("bias", 0)) * 60
+	var date := Time.get_datetime_dict_from_unix_time(unix_time + bias)
+	var months := ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+	return "%d %s %d, %02d:%02d" % [date["day"], months[clampi(int(date["month"]) - 1, 0, 11)], date["year"], date["hour"], date["minute"]]
+
+
+func _build_save() -> Control:
+	var parts := _card("Save the Game", 600.0)
+	var box: VBoxContainer = parts[1]
+	box.add_child(_ink_label("Name this save", "InkLabel"))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	box.add_child(row)
+	_save_field = LineEdit.new()
+	_save_field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_save_field.max_length = 60
+	_save_field.text_changed.connect(func(_text: String) -> void:
+		_save_overwrite = false
+		_save_button.text = "Save")
+	_save_field.text_submitted.connect(func(_text: String) -> void: _on_save_pressed())
+	row.add_child(_save_field)
+	_save_button = Button.new()
+	_save_button.text = "Save"
+	_save_button.custom_minimum_size = Vector2(140, 0)
+	_save_button.pressed.connect(_on_save_pressed)
+	row.add_child(_save_button)
+	_save_error = _ink_label("", "InkLabel")
+	_save_error.add_theme_color_override("font_color", Color(0.55, 0.12, 0.08))
+	_save_error.visible = false
+	box.add_child(_save_error)
+	box.add_child(_ink_label("Or pick one of your saves to write over it:", "InkDim"))
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(560, 200)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	box.add_child(scroll)
+	_save_list = VBoxContainer.new()
+	_save_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(_save_list)
+	box.add_child(_button_row([_back_button()]))
+	return parts[0]
+
+
+func _on_save_pressed() -> void:
+	var slot_name := _save_field.text.strip_edges()
+	if slot_name == "":
+		return
+	if FileAccess.file_exists(SaveSlots.slot_path(slot_name)) and not _save_overwrite:
+		_save_overwrite = true
+		_save_button.text = "Write over it?"
+		return
+	save_requested.emit(slot_name)
+
+
+func _refresh_save_list() -> void:
+	_clear(_save_list)
+	var any := false
+	for entry in SaveSlots.all():
+		if entry["kind"] != "slot":
+			continue
+		any = true
+		var button := Button.new()
+		button.text = "%s   —   %s" % [str(entry["title"]), describe_save(entry)]
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.theme_type_variation = "MenuItemButton"
+		button.add_theme_color_override("font_color", UiTheme.DARK_INK)
+		button.add_theme_color_override("font_hover_color", UiTheme.DARK_INK)
+		button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		var title := str(entry["title"])
+		button.pressed.connect(func() -> void:
+			_save_field.text = title
+			_save_overwrite = false
+			_on_save_pressed())
+		_save_list.add_child(button)
+	if not any:
+		_save_list.add_child(_ink_label("None yet.", "InkDim"))
+
+
+func _build_settings() -> Control:
+	var parts := _card("Settings", 560.0)
+	var box: VBoxContainer = parts[1]
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 16)
+	grid.add_theme_constant_override("v_separation", 10)
+	box.add_child(grid)
+
+	_display_option = OptionButton.new()
+	for key in Settings.DISPLAY_MODES:
+		_display_option.add_item(Settings.DISPLAY_MODES[key])
+		_display_option.set_item_metadata(_display_option.item_count - 1, key)
+	_display_option.item_selected.connect(func(index: int) -> void:
+		Settings.set_value("display_mode", str(_display_option.get_item_metadata(index)))
+		_refresh_settings())
+	_setting_row(grid, "Display", _display_option)
+
+	_size_option = OptionButton.new()
+	for window_size in Settings.WINDOW_SIZES:
+		_size_option.add_item("%d × %d" % [window_size.x, window_size.y])
+	_size_option.item_selected.connect(func(index: int) -> void: Settings.set_value("window_size", Settings.WINDOW_SIZES[index]))
+	_setting_row(grid, "Window size", _size_option)
+
+	_scale_option = OptionButton.new()
+	for factor in Settings.UI_SCALES:
+		_scale_option.add_item("%d%%" % roundi(factor * 100.0))
+	_scale_option.item_selected.connect(func(index: int) -> void: Settings.set_value("ui_scale", Settings.UI_SCALES[index]))
+	_setting_row(grid, "Interface size", _scale_option)
+
+	_vsync_box = CheckBox.new()
+	_vsync_box.toggled.connect(func(on: bool) -> void: Settings.set_value("vsync", on))
+	_setting_row(grid, "Vertical sync", _vsync_box)
+
+	_autosave_box = CheckBox.new()
+	_autosave_box.toggled.connect(func(on: bool) -> void: Settings.set_value("autosave", on))
+	_setting_row(grid, "Autosave every morning", _autosave_box)
+
+	box.add_child(_ink_label("F11 switches between the window and a borderless full screen.", "InkDim"))
+	box.add_child(_button_row([_back_button("Done")]))
+	return parts[0]
+
+
+func _setting_row(grid: GridContainer, text: String, control: Control) -> void:
+	var label := _ink_label(text, "InkLabel")
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_child(label)
+	control.custom_minimum_size = Vector2(220, 0)
+	grid.add_child(control)
+
+
+func _refresh_settings() -> void:
+	for i in _display_option.item_count:
+		if str(_display_option.get_item_metadata(i)) == Settings.display_mode:
+			_display_option.select(i)
+	_size_option.select(maxi(0, Settings.WINDOW_SIZES.find(Settings.window_size)))
+	_size_option.disabled = Settings.display_mode != "windowed"
+	var nearest := 0
+	for i in Settings.UI_SCALES.size():
+		if absf(Settings.UI_SCALES[i] - Settings.ui_scale) < absf(Settings.UI_SCALES[nearest] - Settings.ui_scale):
+			nearest = i
+	_scale_option.select(nearest)
+	_vsync_box.set_pressed_no_signal(Settings.vsync)
+	_autosave_box.set_pressed_no_signal(Settings.autosave)
+
+
+func _build_confirm() -> Control:
+	var parts := _card("Are You Sure?", 460.0)
+	var box: VBoxContainer = parts[1]
+	_confirm_text = _ink_label("", "InkLabel")
+	_confirm_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_confirm_text.custom_minimum_size = Vector2(400, 0)
+	box.add_child(_confirm_text)
+	var stay := Button.new()
+	stay.text = "Stay"
+	stay.pressed.connect(func() -> void: _show(_confirm_back))
+	_confirm_yes = Button.new()
+	_confirm_yes.pressed.connect(func() -> void: _confirm_action.call())
+	box.add_child(_button_row([stay, _confirm_yes]))
+	return parts[0]
+
+
+func _confirm(text: String, yes: String, action: Callable) -> void:
+	_confirm_back = _current
+	_confirm_text.text = text
+	_confirm_yes.text = yes
+	_confirm_action = action
+	_show("confirm")
+
+
+func _build_game_over() -> Control:
+	var parts := _card("The Line Has Ended", 520.0)
+	var box: VBoxContainer = parts[1]
+	_game_over_text = _ink_label("", "InkLabel")
+	_game_over_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_game_over_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_game_over_text.custom_minimum_size = Vector2(460, 0)
+	box.add_child(_game_over_text)
+	var load_button := Button.new()
+	load_button.text = "Load a Save"
+	load_button.pressed.connect(func() -> void:
+		_refresh_load_list()
+		_show("load"))
+	var new_button := Button.new()
+	new_button.text = "New Game"
+	new_button.pressed.connect(open_new_game)
+	var title_button := Button.new()
+	title_button.text = "Main Menu"
+	title_button.pressed.connect(func() -> void: title_requested.emit())
+	box.add_child(_button_row([load_button, new_button, title_button]))
+	return parts[0]
+
+
+# --- small parts -------------------------------------------------------------------
+
+## A parchment dialog in the middle of the screen with a heading: [panel, the box to fill].
+func _card(title: String, width: float) -> Array:
+	var panel := PanelContainer.new()
+	panel.theme_type_variation = "ParchmentPanel"
+	panel.custom_minimum_size = Vector2(width, 0)
+	_root.add_child(panel)
+	panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 10)
+	panel.add_child(box)
+	var heading := _ink_label(title, "InkHeader")
+	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(heading)
+	box.add_child(_ink_rule())
+	return [panel, box]
+
+
+func _ink_label(text: String, variation: String) -> Label:
+	var label := Label.new()
+	label.theme_type_variation = variation
+	label.text = text
+	return label
+
+
+func _ink_rule() -> HSeparator:
+	var rule := HSeparator.new()
+	var line := StyleBoxLine.new()
+	line.color = Color(UiTheme.DARK_INK_DIM, 0.55)
+	line.thickness = 1
+	rule.add_theme_stylebox_override("separator", line)
+	return rule
+
+
+func _back_button(text: String = "Back") -> Button:
+	var button := Button.new()
+	button.text = text
+	button.pressed.connect(func() -> void: _show(_back_to))
+	return button
+
+
+## Buttons side by side at the foot of a dialog, the last one on the right.
+func _button_row(buttons: Array) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	row.alignment = BoxContainer.ALIGNMENT_END
+	for button in buttons:
+		button.custom_minimum_size = Vector2(maxf(button.custom_minimum_size.x, 130), 38)
+		row.add_child(button)
+	return row
+
+
+func _clear(container: Container) -> void:
+	for child in container.get_children():
+		container.remove_child(child)
+		child.queue_free()

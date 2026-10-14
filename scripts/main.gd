@@ -1,17 +1,21 @@
 extends Node2D
-## Ties the pieces together: creates or loads a world, hands it to the views,
-## and handles keyboard shortcuts. Game rules do not belong here; they go in scripts/sim.
+## Ties the pieces together: the title screen, creating or loading a world, handing it to the
+## views, the menus and keyboard shortcuts. Game rules do not belong here; they go in scripts/sim.
 
 const MAP_WIDTH := 128
 const MAP_HEIGHT := 96
-const SAVE_PATH := "user://savegame.json"
-const AUTOSAVE_PATH := "user://autosave.json"
+const SAVE_PATH := SaveSlots.QUICK
+const AUTOSAVE_PATH := SaveSlots.AUTO
 
 var world: WorldState
 var sim: Simulation
 var _menu_pawn_id := -1     # who the open right-click menu is for
 var _menu_tile := Vector2i.ZERO  # and which tile it was opened on
 var _loading := false           # true while a save is being put in place (no autosave then)
+## False on the title screen, where the town behind is only to look at.
+var _in_game := false
+var _speed_before_menu := 1     # the speed to go back to when the menus close
+var _loaded_view: Dictionary = {}  # the camera of the save just loaded
 
 @onready var map_view: MapView = $MapView
 @onready var floor_layer: FloorLayer = $FloorLayer
@@ -25,6 +29,7 @@ var _loading := false           # true while a save is being put in place (no au
 @onready var tile_cursor: TileCursor = $TileCursor
 @onready var camera: CameraController = $Camera
 @onready var hud: Hud = $HUD
+@onready var menus: Menus = $Menus
 
 
 func _ready() -> void:
@@ -35,24 +40,53 @@ func _ready() -> void:
 	hud.pawn_chosen.connect(_on_pawn_chosen)
 	hud.build_toggled.connect(build.set_active)
 	hud.build_tool_chosen.connect(build.set_tool)
-	hud.start_chosen.connect(_on_start_chosen)
+	hud.menu_requested.connect(_open_pause)
 	build.mode_changed.connect(hud.set_build_mode)
 	build.tool_cleared.connect(hud.clear_build_selection)
 	build.message.connect(func(text: String) -> void: hud.show_message(text))
+	menus.new_game_requested.connect(_on_new_game_requested)
+	menus.load_requested.connect(_on_load_requested)
+	menus.save_screen_requested.connect(func() -> void: menus.open_save(_default_save_name()))
+	menus.save_requested.connect(_on_save_requested)
+	menus.title_requested.connect(_show_title)
+	menus.quit_requested.connect(func() -> void: get_tree().quit())
+	menus.closed.connect(_on_menus_closed)
 	GameClock.ticked.connect(_on_tick)
 	GameClock.day_changed.connect(_on_day_changed)
-	_start_new_world(_pick_seed(), _launch_option("start"))
-	_apply_launch_options()
-	if _launch_option("start") == "" and _launch_option("seed") == "" and _launch_option("load") == "":
-		_ask_how_to_begin()  # an ordinary launch: choose a start first
+	if _skips_title():
+		_begin_game()
+		_start_new_world(_pick_seed(), _launch_option("start"))
+		_apply_launch_options()
+	else:
+		_show_title()
+	if _launch_option("screen") != "":
+		_open_menu(func() -> void: _open_screen(_launch_option("screen")))
+	if _launch_option("shot") != "":
+		_take_screenshot(_launch_option("shot"))
 	if not DataRegistry.load_errors.is_empty():
 		hud.show_message("Data problem: %s" % DataRegistry.load_errors[0], 6.0)
+
+
+## Any option on the command line (a seed, a start, a save to load, a screenshot...) goes straight
+## into a game, unless --title=1 asks for the title screen anyway.
+func _skips_title() -> bool:
+	return not OS.get_cmdline_user_args().is_empty() and _launch_option("title") == ""
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
+	if event.keycode == KEY_F11:
+		Settings.toggle_fullscreen()
+		get_viewport().set_input_as_handled()
+		return
+	if not _in_game or menus.is_open():
+		return
 	match event.keycode:
+		KEY_ESCAPE:
+			_open_pause()
+		KEY_H:
+			hud.toggle_help()
 		KEY_SPACE:
 			GameClock.toggle_pause()
 		KEY_1, KEY_KP_1:
@@ -74,8 +108,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_HOME:
 			camera.center_on_world()
 		KEY_N:
-			_start_new_world(randi())
-			_ask_how_to_begin()
+			_open_menu(menus.open_new_game)
 		KEY_F5:
 			_save()
 		KEY_F9:
@@ -98,7 +131,9 @@ func _unhandled_input(event: InputEvent) -> void:
 ## start = how to begin (bought, inherited or arrived; without it, and without seed or load, a start screen asks),
 ## shot = save a screenshot to this path a moment after starting, then quit,
 ## demohouse = build a small walled room with a door and a floor on the lot, using the real build commands,
-## weather = clear, cloudy, rain or snow instead of the seeded weather (only changes the look).
+## weather = clear, cloudy, rain or snow instead of the seeded weather (only changes the look),
+## title = 1 to show the title screen even with other options given,
+## screen = a menu to open at the start: pause, save, load, settings, new or game_over.
 ## Handy for screenshots and testing.
 func _launch_option(name: String) -> String:
 	var prefix := "--%s=" % name
@@ -160,8 +195,6 @@ func _apply_launch_options() -> void:
 	if _launch_option("zoom") != "":
 		var zoom_level := clampf(float(_launch_option("zoom")), CameraController.ZOOM_MIN, CameraController.ZOOM_MAX)
 		camera.zoom = Vector2(zoom_level, zoom_level)
-	if _launch_option("shot") != "":
-		_take_screenshot(_launch_option("shot"))
 
 
 ## Saves the picture after a few frames and quits (for documentation and checking the look).
@@ -192,17 +225,144 @@ func _build_demo_house() -> void:
 	sim.build_place("hearth", origin + Vector2i(7, 2))
 
 
-## Pauses on a fresh world and shows the three ways of beginning.
-func _ask_how_to_begin() -> void:
-	GameClock.set_speed(0)
-	hud.show_start_choice(DataRegistry.get_list("starts"))
+# --- the title screen and the menus ----------------------------------------------
 
-
-func _on_start_chosen(start_id: String) -> void:
-	hud.hide_start_choice()
-	_start_new_world(world.world_seed, start_id)
+## The title screen, over a town to look at: a fresh world at dusk, its people going about their
+## evening while the camera drifts slowly over the rooftops.
+func _show_title() -> void:
+	_in_game = false
+	build.set_active(false)
+	hud.close_action_menu()
+	_start_new_world(randi(), "bought")
+	GameClock.set_time(randi() % 60, 20)
 	GameClock.set_speed(1)
-	hud.show_message("New world (seed %d)" % world.world_seed)
+	hud.visible = false
+	tile_cursor.visible = false
+	camera.zoom = Vector2(0.8, 0.8)
+	camera.center_on_world()
+	camera.drift = Vector2(16, 6)
+	camera.input_enabled = false
+	menus.show_title(_describe_newest_save())
+
+
+## From the title screen (or the end screen) into a game: the HUD comes back and the camera is
+## the player's again.
+func _begin_game() -> void:
+	_in_game = true
+	hud.visible = true
+	tile_cursor.visible = true
+	camera.drift = Vector2.ZERO
+	camera.input_enabled = true
+	camera.zoom = Vector2.ONE
+
+
+## Opens a menu over the game: the clock stops and the camera is left alone until it closes.
+func _open_menu(open: Callable) -> void:
+	if not menus.is_open():
+		_speed_before_menu = GameClock.speed_level
+		GameClock.set_speed(0)
+		camera.input_enabled = false
+		hud.close_action_menu()
+		build.set_active(false)
+	open.call()
+
+
+func _open_pause() -> void:
+	var date := GameClock.get_date()
+	var note := "%s %d, year %d  ·  %s" % [date["season_name"], date["day"], date["year"], GameClock.get_time_text()]
+	_open_menu(func() -> void: menus.show_pause(note))
+
+
+## For --screen: one of the menus by name.
+func _open_screen(screen: String) -> void:
+	match screen:
+		"save":
+			menus.open_save(_default_save_name())
+		"load":
+			menus.open_load()
+		"settings":
+			menus.open_settings()
+		"new":
+			menus.open_new_game()
+		"game_over":
+			menus.show_game_over("Gisela Brook starved.\n\nYour folk have all passed on, after 12 days.")
+		_:
+			_open_pause()
+
+
+func _on_menus_closed() -> void:
+	if _in_game:
+		camera.input_enabled = true
+		GameClock.set_speed(_speed_before_menu)
+
+
+func _on_new_game_requested(world_seed: int, start_id: String) -> void:
+	_begin_game()
+	_start_new_world(world_seed, start_id)
+	menus.close()
+	GameClock.set_speed(1)
+	hud.show_message("A new life begins. The world's seed is %d." % world.world_seed, 4.0)
+
+
+func _on_load_requested(path: String) -> void:
+	var error := _load_path(path)
+	if error != "":
+		menus.show_load_error(error)
+		return
+	_begin_game()
+	menus.close()
+	_restore_view_after_load()
+	if sim.is_game_over():
+		_open_menu(func() -> void: menus.show_game_over("This household has died out."))
+		return
+	GameClock.set_speed(1)
+
+
+func _on_save_requested(slot_name: String) -> void:
+	SaveSlots.make_dir()
+	var err := _write_save(SaveSlots.slot_path(slot_name), slot_name)
+	if err != OK:
+		menus.show_save_error("Could not save: %s" % error_string(err))
+		return
+	menus.close()
+	hud.show_message("Saved \"%s\"" % slot_name)
+
+
+## "The Brook family, Spring 3, year 1", as a name for a new save.
+func _default_save_name() -> String:
+	var date := GameClock.get_date()
+	return "The %s family, %s %d, year %d" % [_family_name(), date["season_name"], date["day"], date["year"]]
+
+
+func _family_name() -> String:
+	var head := sim.household.get_pawn(sim.realm.head_id) if sim != null else null
+	if head == null and sim != null:
+		head = sim.household.selected()
+	return head.display_name.get_slice(" ", 1) if head != null else "Nobody's"
+
+
+## What a save says about itself in the load list: whose it is and when in the game.
+func _save_meta(slot_name: String) -> Dictionary:
+	var date := GameClock.get_date()
+	return {
+		"name": slot_name,
+		"family": _family_name(),
+		"folk": sim.household.playable().size(),
+		"date": "%s %d, year %d" % [date["season_name"], date["day"], date["year"]],
+		"time": GameClock.get_time_text(),
+		"seed": world.world_seed,
+	}
+
+
+## For the title screen's Continue button: the newest save, described.
+func _describe_newest_save() -> String:
+	var path := SaveSlots.newest()
+	if path == "":
+		return ""
+	var meta := SaveSlots.read_meta(path)
+	if meta.has("family"):
+		return "The %s family, %s" % [str(meta["family"]), str(meta.get("date", ""))]
+	return "Your last save"
 
 
 func _start_new_world(world_seed: int, start_id: String = "") -> void:
@@ -225,7 +385,6 @@ func _show_world(new_world: WorldState, household: Household, town: Household = 
 	sim.town_death.connect(_on_town_death)
 	sim.event_started.connect(_on_event_started)
 	sim.event_ended.connect(_on_event_ended)
-	hud.show_game_over("")
 	map_view.set_world(world)
 	tile_cursor.set_world(world)
 	floor_layer.bind(world)
@@ -244,7 +403,7 @@ func _show_world(new_world: WorldState, household: Household, town: Household = 
 
 
 func _process(_delta: float) -> void:
-	if sim != null:
+	if sim != null and _in_game:
 		hud.update_household_status(sim.household)
 		var chosen := sim.household.selected()
 		hud.show_pawn(chosen, sim.describe_activity(chosen) if chosen != null else "", sim.job_text(chosen) if chosen != null else "", sim.relationship_lines(chosen) if chosen != null else [])
@@ -254,30 +413,35 @@ func _process(_delta: float) -> void:
 
 
 func _on_pawn_died(person: String, cause: String, successor: String) -> void:
+	if not _in_game:
+		return  # the town behind the title screen
 	hud.set_household(sim.household)
 	if successor != "":
 		hud.show_message("%s %s. You now control %s." % [person, cause, successor], 6.0)
 		_on_pawn_chosen(sim.household.selected_id)
 	else:
-		GameClock.set_speed(0)
 		var days := GameClock.get_day_number() + 1
-		hud.show_game_over("%s %s.\n\nThe household has died out, after %d days.\n\nN: new world     F9: load a save" % [person, cause, days])
+		_open_menu(func() -> void: menus.show_game_over("%s %s.\n\nYour folk have all passed on, after %d days." % [person, cause, days]))
 
 
 func _on_town_death(person: String, cause: String) -> void:
-	hud.show_message("%s of the town %s." % [person, cause], 5.0)
+	if _in_game:
+		hud.show_message("%s of the town %s." % [person, cause], 5.0)
 
 
 func _on_event_started(_event_name: String, text: String) -> void:
-	hud.show_message(text, 5.0)
+	if _in_game:
+		hud.show_message(text, 5.0)
 
 
 func _on_realm_notice(text: String) -> void:
-	hud.show_message(text, 6.0)
+	if _in_game:
+		hud.show_message(text, 6.0)
 
 
 func _on_event_ended(event_name: String) -> void:
-	hud.show_message("%s is over." % event_name, 3.0)
+	if _in_game:
+		hud.show_message("%s is over." % event_name, 3.0)
 
 
 func _on_tick(_tick: int) -> void:
@@ -323,56 +487,74 @@ func _center_on_selected() -> void:
 		camera.center_on_world()
 
 
+## F5: the quick save.
 func _save() -> void:
-	var err := _write_save(SAVE_PATH)
+	var err := _write_save(SAVE_PATH, "Quick save")
 	if err == OK:
 		hud.show_message("Game saved")
 	else:
 		hud.show_message("Save failed: %s" % error_string(err))
 
 
-## A new day: keep a spare copy in case something goes wrong. Skipped when nobody is left.
+## A new day: keep a spare copy in case something goes wrong (unless turned off in Settings).
+## Skipped when nobody is left, and on the title screen.
 func _on_day_changed(_day: int) -> void:
-	if sim == null or sim.is_game_over() or _loading:
+	if sim == null or not _in_game or sim.is_game_over() or _loading or not Settings.autosave:
 		return
-	if _write_save(AUTOSAVE_PATH) == OK:
+	if _write_save(AUTOSAVE_PATH, "Autosave") == OK:
 		hud.show_message("Autosaved", 1.5)
 
 
-func _write_save(path: String) -> Error:
+func _write_save(path: String, slot_name: String) -> Error:
 	var view := { "camera": [camera.position.x, camera.position.y], "zoom": camera.zoom.x }
-	return SaveGame.save(path, world, sim.household, view, sim.town, sim.events, sim.realm)
+	var err := SaveGame.save(path, world, sim.household, view, sim.town, sim.events, sim.realm)
+	if err == OK:
+		SaveSlots.write_meta(path, _save_meta(slot_name))
+	return err
 
 
-## F9: loads whichever of the quick save and the autosave is newer.
+## F9: loads the newest save of any kind.
 func _load() -> void:
-	var path := SaveGame.newest([SAVE_PATH, AUTOSAVE_PATH])
-	if path == "":
-		hud.show_message("Load failed: no save file found")
+	var path := SaveSlots.newest()
+	var error := _load_path(path) if path != "" else "no save file found"
+	if error != "":
+		hud.show_message("Load failed: %s" % error)
 		return
+	_begin_game()
+	_restore_view_after_load()
+	if sim.is_game_over():
+		_open_menu(func() -> void: menus.show_game_over("This household has died out."))
+	var date := GameClock.get_date()
+	hud.show_message("Loaded %s: %s %d, %s" % [SaveSlots.read_meta(path).get("name", "your save"), date["season_name"], date["day"], GameClock.get_time_text()])
+
+
+## Puts a saved game in place. Returns "" or what went wrong.
+func _load_path(path: String) -> String:
 	var result := SaveGame.load_from(path)
-	if result["ok"]:
-		var loaded_world: WorldState = result["world"]
-		var household: Household = result["household"]
-		if household == null:  # a save from before there were people
-			household = HouseholdGenerator.create(loaded_world)
-		if loaded_world.objects.is_empty():  # a save from before there were things
-			CampGenerator.place(loaded_world, household)
-		_loading = true
-		_show_world(loaded_world, household, result["town"], result["realm"])
-		sim.events.load_dict(result["events"])
-		_loading = false
-		var view: Dictionary = result["view"]
-		if view.has("camera") and view["camera"] is Array and view["camera"].size() == 2:
-			camera.position = Vector2(float(view["camera"][0]), float(view["camera"][1]))
-			var saved_zoom := clampf(float(view.get("zoom", 1.0)), CameraController.ZOOM_MIN, CameraController.ZOOM_MAX)
-			camera.zoom = Vector2(saved_zoom, saved_zoom)
-		if sim.is_game_over():
-			hud.show_game_over("This household has died out.\n\nN: new world     F9: load a save")
-		var date := GameClock.get_date()
-		hud.show_message("Loaded %s: %s %d, %s" % ["the autosave" if path == AUTOSAVE_PATH else "your save", date["season_name"], date["day"], GameClock.get_time_text()])
-	else:
-		hud.show_message("Load failed: %s" % result["error"])
+	if not result["ok"]:
+		return str(result["error"])
+	var loaded_world: WorldState = result["world"]
+	var household: Household = result["household"]
+	if household == null:  # a save from before there were people
+		household = HouseholdGenerator.create(loaded_world)
+	if loaded_world.objects.is_empty():  # a save from before there were things
+		CampGenerator.place(loaded_world, household)
+	_loading = true
+	_show_world(loaded_world, household, result["town"], result["realm"])
+	sim.events.load_dict(result["events"])
+	_loading = false
+	_loaded_view = result["view"]
+	return ""
+
+
+
+## The camera where it was when the game was saved.
+func _restore_view_after_load() -> void:
+	var view := _loaded_view
+	if view.has("camera") and view["camera"] is Array and view["camera"].size() == 2:
+		camera.position = Vector2(float(view["camera"][0]), float(view["camera"][1]))
+		var saved_zoom := clampf(float(view.get("zoom", 1.0)), CameraController.ZOOM_MIN, CameraController.ZOOM_MAX)
+		camera.zoom = Vector2(saved_zoom, saved_zoom)
 
 
 func _on_tile_hovered(tile: Vector2i) -> void:

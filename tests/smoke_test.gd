@@ -229,21 +229,72 @@ func _test_hud() -> void:
 	_check(hud._build_tabs["Floors"].visible and not hud._build_tabs["Structure"].visible, "tabs switch")
 	hud.set_build_mode(false)
 	_check(not hud._build_panel.visible and not hud._build_button.button_pressed, "turning it off hides the palette")
-	# The start screen.
-	var picked: Array[String] = []
-	hud.start_chosen.connect(func(id: String) -> void: picked.append(id))
-	_check(not hud.is_start_choice_open(), "the start screen is hidden until asked for")
-	hud.show_start_choice(DataRegistry.get_list("starts"))
-	_check(hud.is_start_choice_open() and hud._start_buttons.size() == 3, "it shows a button for each way of beginning")
-	hud._start_buttons["arrived"].pressed.emit()
-	_check(picked == ["arrived"], "picking one reports it")
-	hud.hide_start_choice()
-	_check(not hud.is_start_choice_open(), "and it can be put away")
 	hud.set_realm("Burgher, Freehold")
 	_check(hud._realm_label.visible and hud._realm_label.text == "Burgher, Freehold", "the realm lines show under the purse")
+	_check(not hud._help_panel.visible, "the help panel starts hidden")
+	hud.toggle_help()
+	_check(hud._help_panel.visible, "H shows the keys")
 	GameClock.reset()
 	GameClock.set_speed(1)
 	hud.queue_free()
+	_test_menus()
+
+
+func _test_menus() -> void:
+	print("Menus, saves and settings")
+	var menus := Menus.new()
+	add_child(menus)
+	_check(not menus.is_open(), "no menu shows until asked for")
+	menus.show_title("The Brook family, Spring 3, year 1")
+	_check(menus.current() == "title" and not menus._continue_button.disabled and menus._continue_note.text.begins_with("The Brook"), "the title screen offers to continue the newest save")
+	menus.show_title("")
+	_check(menus._continue_button.disabled, "and cannot continue when there is no save")
+	var begun: Array = []
+	menus.new_game_requested.connect(func(world_seed: int, start_id: String) -> void: begun.append([world_seed, start_id]))
+	menus.open_new_game_from_title()
+	_check(menus.current() == "new" and menus._start_buttons.size() == 3, "New Game shows a button for each way of beginning")
+	menus._start_buttons["arrived"].pressed.emit()
+	menus._seed_field.text = "1234"
+	menus._begin_button.pressed.emit()
+	_check(begun == [[1234, "arrived"]], "Begin reports the start and the seed")
+	_check(Menus.seed_from_text("77") == 77 and Menus.seed_from_text("Thornbury") == Menus.seed_from_text("Thornbury") and Menus.seed_from_text("Thornbury") >= 0, "a typed seed is a number, or any word always makes the same one")
+	var back := InputEventKey.new()
+	back.keycode = KEY_ESCAPE
+	back.pressed = true
+	menus._unhandled_input(back)
+	_check(menus.current() == "title", "Esc goes back to where the screen was opened from")
+	var closes := [0]
+	menus.closed.connect(func() -> void: closes[0] += 1)
+	menus.show_pause("Spring 3")
+	menus.open_settings()
+	menus._unhandled_input(back)
+	_check(menus.current() == "pause", "settings opened from the pause menu go back to it")
+	menus._unhandled_input(back)
+	_check(not menus.is_open() and closes[0] == 1, "and Esc on the pause menu closes it, so the game carries on")
+	menus.queue_free()
+
+	_check(SaveSlots.slot_path("The Brook family, Spring 3") == "user://saves/The_Brook_family__Spring_3.json" and SaveSlots.slot_path("../../etc") == "user://saves/______etc.json" and SaveSlots.slot_path("  ") == "user://saves/save.json", "a save's name always makes a safe file name in the saves folder")
+	SaveSlots.make_dir()
+	var path := SaveSlots.slot_path("Smoke test slot")
+	var world := MapGenerator.generate(3, 32, 24)
+	_check(SaveGame.save(path, world) == OK and SaveSlots.write_meta(path, { "name": "Smoke test slot", "family": "Brook", "folk": 3, "date": "Spring 3, year 1", "time": "12:00" }) == OK, "a named save is written with what it is beside it")
+	var found := {}
+	for entry in SaveSlots.all():
+		if entry["path"] == path:
+			found = entry
+	_check(found.get("kind") == "slot" and found.get("title") == "Smoke test slot" and found["meta"].get("family") == "Brook", "the list of saves shows it by its name, with its family")
+	_check("The Brook family, 3 folk" in Menus.describe_save(found) and "Spring 3, year 1, 12:00" in Menus.describe_save(found), "and describes it")
+	SaveSlots.remove(path)
+	_check(not FileAccess.file_exists(path) and not FileAccess.file_exists(path + ".meta"), "deleting a save takes its description with it")
+
+	var scale_before := Settings.ui_scale
+	var changes: Array[String] = []
+	Settings.changed.connect(func(key: String) -> void: changes.append(key))
+	Settings.set_value("ui_scale", 1.3)
+	_check(Settings.ui_scale == 1.3 and changes == ["ui_scale"], "changing a setting applies it and says so")
+	var stored := ConfigFile.new()
+	_check(stored.load(Settings.PATH) == OK and is_equal_approx(float(stored.get_value("display", "ui_scale")), 1.3), "and keeps it in the settings file")
+	Settings.set_value("ui_scale", scale_before)
 
 
 ## A 12x8 meadow with a wall of water down column 6 that has one gap at row 7,
@@ -2474,11 +2525,14 @@ func _test_death() -> void:
 	one.needs["hunger"] = 10.0
 	hud.update_household_status(living)
 	_check(hud._chip_marks[one.id].color == Hud.BAND_COLORS["critical"] and "Hunger" in hud._chips[one.id].tooltip_text, "a person with a critical need gets a red chip that says which")
-	hud.show_game_over("The end")
-	_check(hud._game_over_panel.visible and hud._game_over_label.text == "The end", "the end screen shows its message")
-	hud.show_game_over("")
-	_check(not hud._game_over_panel.visible, "and hides again")
 	hud.queue_free()
+	var menus := Menus.new()
+	add_child(menus)
+	menus.show_game_over("The end")
+	_check(menus.current() == "game_over" and menus._game_over_text.text == "The end", "the end screen shows its message")
+	menus.close()
+	_check(not menus.is_open(), "and goes away")
+	menus.queue_free()
 
 
 func _mood_person(traits: Array[String] = []) -> Pawn:
