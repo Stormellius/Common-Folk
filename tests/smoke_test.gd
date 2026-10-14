@@ -34,6 +34,7 @@ func _ready() -> void:
 	_test_realm()
 	_test_faith_and_illness()
 	_test_conflict()
+	_test_accidents()
 	_test_pregnancy()
 	_test_death()
 	_test_life_and_death()
@@ -3242,6 +3243,265 @@ func _test_building() -> void:
 	controller._unhandled_input(escape)
 	_check(not controller.active, "Esc with no tool leaves build mode")
 	controller.queue_free()
+
+
+func _test_accidents() -> void:
+	print("Fire, accidents at work and plague")
+	GameClock.set_time(3, 12)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 21
+	var setup := _romance_setup()
+	var sim: Simulation = setup["sim"]
+	var world: WorldState = setup["world"]
+	var household: Household = setup["household"]
+	var town: Household = setup["town"]
+	var anna: Pawn = setup["anna"]
+	var ben: Pawn = setup["ben"]
+	var cara: Pawn = setup["cara"]
+	var dan: Pawn = setup["dan"]
+	world.lots[0]["name"] = "Cooper house"
+	var bed := world.add_object("bed", Vector2i(30, 20))
+	var stone := world.add_object("stone_wall", Vector2i(31, 20))
+	var plain := Vector2i(33, 20)
+	world.set_floor(Vector2i(32, 20), "planks")
+	world.set_floor(Vector2i(34, 20), "flagstone")
+
+	# What burns.
+	_check(Fire.flammability(world, bed.tile) > 0.7 and Fire.flammability(world, stone.tile) == 0.0 and Fire.flammability(world, Vector2i(32, 20)) > 0.5 and Fire.flammability(world, Vector2i(34, 20)) == 0.0 and Fire.flammability(world, plain) == 0.0, "beds and planks burn, stone and bare ground do not")
+	_check(not Fire.ignite(world, stone.tile) and not Fire.ignite(world, plain) and Fire.ignite(world, bed.tile) and not Fire.ignite(world, bed.tile), "only something that can burn catches, and only once")
+	var bed_fuel := int(world.fires[bed.tile]["fuel"])
+	world.set_floor(Vector2i(32, 20), "straw")
+	Fire.ignite(world, Vector2i(32, 20))
+	_check(int(world.fires[Vector2i(32, 20)]["fuel"]) > bed_fuel, "straw burns longer than a bed (%d against %d)" % [int(world.fires[Vector2i(32, 20)]["fuel"]), bed_fuel])
+	world.fires.clear()
+
+	# Spread and burning out.
+	for x in range(26, 30):
+		world.add_object("bed", Vector2i(x, 24))
+	world.add_object("stone_wall", Vector2i(30, 24))
+	world.add_object("bed", Vector2i(31, 24))
+	Fire.ignite(world, Vector2i(26, 24))
+	var notices: Array[String] = []
+	for minute in 150:
+		GameClock.advance_one_tick()
+		notices.append_array(Fire.step(sim, rng))
+		if world.fires.is_empty():
+			break
+	var burned_beds := 0
+	for x in range(26, 30):
+		burned_beds += 1 if world.object_at(Vector2i(x, 24)) == null else 0
+	_check(world.fires.is_empty() and burned_beds >= 2, "a fire spreads from bed to bed and burns out (%d of four beds gone)" % burned_beds)
+	_check(world.object_at(Vector2i(30, 24)) != null and world.object_at(Vector2i(31, 24)) != null, "but not past a stone wall")
+
+	# Sparks from a hearth.
+	var hearth := world.add_object("hearth", Vector2i(40, 20))
+	var spark_bed := world.add_object("bed", Vector2i(41, 20))
+	DataRegistry.get_def("accidents", "fire")["spark_chance_per_day"] = 100000.0
+	GameClock.set_time(3, 12)
+	Fire.step(sim, rng)  # minute 720: a multiple of ten
+	DataRegistry.get_def("accidents", "fire")["spark_chance_per_day"] = 0.006
+	_check(world.fires.has(spark_bed.tile), "a hearth can throw a spark onto a bed beside it")
+	world.fires.clear()
+	_check(float(DataRegistry.get_def("accidents", "fire")["spark_chance_per_day"]) < 0.02, "though it is rare")
+
+	# People and fire.
+	var victim := Pawn.new()
+	victim.display_name = "Vic Tim"
+	victim.age = 30
+	victim.tile = Vector2i(10, 20)
+	victim.step_to = victim.tile
+	household.add_pawn(victim)
+	world.add_object("bed", Vector2i(10, 20))
+	Fire.ignite(world, Vector2i(10, 20))
+	var told := Fire.step(sim, rng)
+	_check(victim.illness == "burns" and victim.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "burned") and "burned" in " ".join(told), "someone caught in the flames is burned (%s)" % str(told))
+	for i in 4:
+		Fire.step(sim, rng)
+	_check(victim.is_dying() and victim.dying_cause == "burned to death", "and if they stay they die of it")
+	world.fires.clear()
+	household.remove_pawn(victim.id)
+	world.remove_object(world.object_at(Vector2i(10, 20)).id)
+
+	# Running from it, and putting it out.
+	anna.tile = Vector2i(5, 6)
+	anna.step_to = anna.tile
+	ben.tile = Vector2i(9, 9)
+	ben.step_to = ben.tile
+	var table := world.add_object("table", Vector2i(6, 5))
+	Fire.ignite(world, table.tile)
+	_check(Fire.nearest(world, anna.tile, 3) == table.tile and Fire.nearest(world, Vector2i(30, 30), 3) == Vector2i(-1, -1), "folk know when a fire is close")
+	var fuel_before := int(world.fires[table.tile]["fuel"])
+	sim._react_to_fire(anna)
+	_check(anna.has_orders() and Fire.nearest(world, anna.goal_tile(), 4).x < 0, "someone beside a fire runs from it")
+	sim._react_to_fire(ben)
+	_check(ben.job_kind == "extinguish" and "fire" in sim.describe_activity(ben).to_lower(), "an idle grown-up farther off goes to put it out (%s)" % sim.describe_activity(ben))
+	var menu_entries := PawnActions.list_for(sim, ben, table.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "fight_fire")
+	_check(menu_entries.size() == 1 and menu_entries[0]["enabled"], "the right-click menu offers to beat out the flames")
+	for i in 60:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		if world.fires.is_empty():
+			break
+	_check(world.fires.is_empty() and world.object_at(table.tile) != null and int(fuel_before) > 0, "he beats it out before it takes the table")
+	for i in 5:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+	_check(ben.job_kind == "" and ben.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "fought_fire"), "and is proud of it")
+	_check(anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "saw_fire"), "while the one who ran was frightened")
+
+	# A fire is saved.
+	Fire.ignite(world, table.tile)
+	_check(SaveGame.save(TEST_SAVE, world, household, {}) == OK, "a map on fire is saved")
+	var loaded := SaveGame.load_from(TEST_SAVE)
+	_check(loaded["ok"] and loaded["world"].fires.has(table.tile) and int(loaded["world"].fires[table.tile]["fuel"]) == int(world.fires[table.tile]["fuel"]), "and the fire is still burning when it is loaded")
+	DirAccess.remove_absolute(TEST_SAVE)
+	world.fires.clear()
+
+	# Accidents at work.
+	var tree_def: Dictionary = DataRegistry.get_def("objects", "chopping_block").duplicate(true)
+	tree_def["accident"]["chance_per_hour"] = 6000.0
+	tree_def["accident"]["death_share"] = 0.0
+	anna.job_kind = "use"
+	anna.job_stage = "using"
+	var hurt := Accidents.roll(sim, anna, tree_def, rng)
+	_check(anna.illness == "injury" and anna.job_kind == "" and "falling tree" in hurt and anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "hurt_at_work"), "a falling tree can hurt a woodcutter (%s)" % hurt)
+	tree_def["accident"]["death_share"] = 1.0
+	var killed := Accidents.roll(sim, ben, tree_def, rng)
+	_check(ben.is_dying() and ben.dying_cause == "was killed by a falling tree", "or kill one")
+	var jetty_def: Dictionary = DataRegistry.get_def("objects", "fishing_spot")
+	_check(float(jetty_def["accident"]["death_share"]) >= 0.5 and float(jetty_def["accident"]["chance_per_hour"]) < 0.01 and float(DataRegistry.get_def("objects", "quarry_face")["accident"]["chance_per_hour"]) < 0.05, "a fall from the jetty is mostly fatal and all of these are rare")
+	ben.dying_cause = ""
+	ben.dying_since = 0
+	ben.pose = ""
+	var incidents := 0
+	var normal_def: Dictionary = DataRegistry.get_def("objects", "chopping_block")
+	for i in 2000:
+		cara.illness = ""
+		cara.pose = ""
+		cara.dying_cause = ""
+		incidents += 1 if Accidents.roll(sim, cara, normal_def, rng) != "" or cara.illness != "" or cara.is_dying() else 0
+	_check(incidents < 8, "most days at the woodlot pass without incident (%d in 2000 minutes)" % incidents)
+	cara.illness = ""
+	cara.pose = ""
+	cara.dying_cause = ""
+
+	# Injuries mend.
+	GameClock.set_time(100, 0)
+	anna.illness = "injury"
+	anna.ill_since = GameClock.tick
+	anna.needs["rest"] = 90.0
+	var days := 0
+	while anna.illness != "" and days < 60 and not anna.is_dying():
+		GameClock.set_time(100 + days, 0)
+		sim._roll_illness([anna] as Array[Pawn])
+		days += 1
+	_check(anna.illness == "" and days < 40, "an injury heals in time (%d days)" % days)
+	_check("burns" in DataRegistry.get_def("objects", "sickbed")["cures"] and "injury" in DataRegistry.get_def("objects", "sickbed")["cures"], "and the clinic's sickbeds treat burns and injuries")
+
+	# Plague.
+	var plague := Illness.def("plague")
+	_check(bool(plague["contagious"]) and float(plague["chance_per_day"]) < 0.001 and int(plague["fatal_after_days"]) <= 6, "the plague is rare, contagious and deadly")
+	dan.tile = Vector2i(40, 30)
+	dan.step_to = dan.tile
+	cara.tile = Vector2i(41, 30)
+	cara.step_to = cara.tile
+	var far := Pawn.new()
+	far.display_name = "Far Away"
+	far.age = 30
+	far.tile = Vector2i(60, 30)
+	far.step_to = far.tile
+	far.home_lot = "lot_2"
+	town.add_pawn(far)
+	for pawn in [dan, cara, far]:
+		pawn.illness = ""
+		pawn.immune.clear()
+		pawn.needs["hygiene"] = 80.0
+	dan.illness = "plague"
+	dan.ill_since = GameClock.tick
+	var heard: Array[String] = []
+	sim.health_notice.connect(func(text: String) -> void: heard.append(text))
+	var catches := 0
+	var rounds := 0
+	for attempt in 80:
+		rounds += 1
+		for caught in Illness.spread(sim, rng, 10):
+			sim._announce_illness(caught)
+			catches += 1
+		if cara.illness == "plague":
+			break
+	_check(cara.illness == "plague" and far.illness == "", "the plague passes to those close by, and not to those far off (after %d rounds)" % rounds)
+	_check(heard.any(func(text: String) -> bool: return "plague" in text and "Testford" in text), "and word of it reaches you (%s)" % str(heard))
+	var filthy := Pawn.new()
+	filthy.display_name = "Dirty Dick"
+	filthy.age = 30
+	filthy.tile = Vector2i(40, 31)
+	filthy.step_to = filthy.tile
+	filthy.home_lot = "lot_2"
+	filthy.needs["hygiene"] = 5.0
+	town.add_pawn(filthy)
+	var clean := Pawn.new()
+	clean.display_name = "Clean Kate"
+	clean.age = 30
+	clean.tile = Vector2i(39, 30)
+	clean.step_to = clean.tile
+	clean.home_lot = "lot_2"
+	clean.needs["hygiene"] = 90.0
+	town.add_pawn(clean)
+	var dirty_first := 0
+	var clean_first := 0
+	for trial in 200:
+		filthy.illness = ""
+		clean.illness = ""
+		dan.illness = "plague"
+		Illness.spread(sim, rng, 10)
+		dirty_first += 1 if filthy.illness == "plague" else 0
+		clean_first += 1 if clean.illness == "plague" else 0
+	_check(dirty_first > clean_first * 2, "the dirty catch it far more readily (%d against %d)" % [dirty_first, clean_first])
+	cara.illness = "plague"
+	sim._recover(cara)
+	_check(cara.illness == "" and Illness.is_immune(cara, "plague"), "those who recover cannot catch it again for a while")
+	dan.illness = "plague"
+	cara.tile = dan.tile + Vector2i(1, 0)
+	var again := 0
+	for trial in 100:
+		again += Illness.spread(sim, rng, 10).filter(func(p: Pawn) -> bool: return p.id == cara.id).size()
+	_check(again == 0, "the immune are passed over")
+
+	# Herbs.
+	dan.illness = "plague"
+	anna.tile = dan.tile + Vector2i(1, 1)
+	anna.step_to = anna.tile
+	household.stock = {}
+	_check("no herbs" in sim.treat_blocker(anna, dan), "nursing needs herbs (%s)" % sim.treat_blocker(anna, dan))
+	household.stock = { "herbs": 2 }
+	var nurse_entries := PawnActions.list_for(sim, anna, dan.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "treat:%d" % dan.id)
+	_check(nurse_entries.size() == 1 and nurse_entries[0]["enabled"] and "Nurse" in str(nurse_entries[0]["label"]), "an ill person's menu offers to nurse them with herbs")
+	var base_chance := Illness.recovery_chance(plague, dan)
+	var nursed := PawnActions.perform(sim, anna, "treat:%d" % dan.id, dan.tile)
+	_check(nursed["ok"] and household.stock_of("herbs") == 1 and Illness.recovery_chance(plague, dan) > base_chance + 0.2, "a herb helps them recover (%.2f to %.2f)" % [base_chance, Illness.recovery_chance(plague, dan)])
+	_check("already" in sim.treat_blocker(anna, dan) and dan.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "cared_for"), "once is enough, and they are grateful")
+	var healthy := Pawn.new()
+	healthy.tile = anna.tile
+	_check("not ill" in sim.treat_blocker(anna, healthy), "the well need no nursing")
+	anna.tile = Vector2i(5, 6)
+	_check(not sim.treat(anna, cara)["ok"], "and it is not done from afar")
+
+	# Saved.
+	dan.immune = { "plague": 99999 }
+	dan.treated_until = 4242
+	dan.fire_minutes = 2
+	var save_world := _romance_setup()
+	var saved_dan: Pawn = save_world["dan"]
+	saved_dan.immune = { "plague": 99999 }
+	saved_dan.treated_until = 4242
+	saved_dan.fire_minutes = 2
+	saved_dan.job_target = Vector2i(3, 4)
+	SaveGame.save(TEST_SAVE, save_world["world"], save_world["household"], {}, save_world["town"])
+	var reloaded := SaveGame.load_from(TEST_SAVE)
+	var back_dan: Pawn = reloaded["town"].get_pawn(saved_dan.id)
+	_check(reloaded["ok"] and back_dan != null and back_dan.immune == { "plague": 99999 } and back_dan.treated_until == 4242 and back_dan.fire_minutes == 2 and back_dan.job_target == Vector2i(3, 4), "immunity, nursing and what they were doing survive a save")
+	DirAccess.remove_absolute(TEST_SAVE)
+	GameClock.reset()
 
 
 func _test_death() -> void:

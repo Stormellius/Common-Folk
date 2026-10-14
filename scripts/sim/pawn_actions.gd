@@ -29,6 +29,8 @@ const MOVE_PREFIX := "move:"         # "move:invite:<id>" (they move in with you
 const BREAKUP_PREFIX := "breakup:"   # "breakup:<partner's id>"
 const MOVE_HOME := "move_home"
 const SELL_PREFIX := "sell:"         # "sell:<resource id>"
+const FIRE_ACTION := "fight_fire"
+const TREAT_PREFIX := "treat:"       # "treat:<patient's id>"
 const FUND_STEPS := [10, 50]
 
 
@@ -68,6 +70,9 @@ static func list_for(sim: Simulation, pawn: Pawn, tile: Vector2i) -> Array[Dicti
 		for amount in FUND_STEPS:
 			var short: bool = amount > sim.household.coins
 			actions.append(_entry(FUND_PREFIX + str(amount), "Give %s to the town's defense fund (now %s)" % [Economy.format(amount), Economy.format(sim.realm.fund)], not short, "you only have %s" % Economy.format(sim.household.coins) if short else ""))
+	if sim.world.fires.has(tile):
+		var fire_blocker := sim.extinguish_blocker(pawn, tile)
+		actions.append(_entry(FIRE_ACTION, "Beat out the flames", fire_blocker == "", fire_blocker))
 	actions.append_array(_land_entries(sim, tile))
 	actions.append(_walk_entry(sim, pawn, tile))
 	if sim.household.get_pawn(pawn.id) != null and pawn.home_lot != WorldState.HOME_LOT:
@@ -89,6 +94,9 @@ static func list_for(sim: Simulation, pawn: Pawn, tile: Vector2i) -> Array[Dicti
 			var plead_blocker := Mortality.plead_blocker(sim, pawn, other)
 			actions.append(_entry(PLEAD_PREFIX + str(other.id), "Plead with Death for %s" % other.display_name.get_slice(" ", 0), plead_blocker == "", plead_blocker))
 			continue
+		if other.illness != "" and sim.household.get_pawn(pawn.id) != null:
+			var treat_blocker := sim.treat_blocker(pawn, other)
+			actions.append(_entry(TREAT_PREFIX + str(other.id), "Nurse %s with herbs" % other.display_name.get_slice(" ", 0), treat_blocker == "", treat_blocker))
 		actions.append_array(_romance_entries(sim, pawn, other))
 		for interaction in DataRegistry.get_list("interactions"):
 			var blocker := sim.interaction_blocker(pawn, other, str(interaction["id"]))
@@ -237,6 +245,16 @@ static func _perform(sim: Simulation, pawn: Pawn, action_id: String, tile: Vecto
 		if dying == null:
 			return { "ok": false, "message": "Death has already taken them" }
 		return sim.order_plead(pawn, dying)
+	if action_id == FIRE_ACTION:
+		return sim.order_extinguish(pawn, tile)
+	if action_id.begins_with(TREAT_PREFIX):
+		var patient := sim.person(int(action_id.trim_prefix(TREAT_PREFIX)))
+		if patient == null:
+			return { "ok": false, "message": "They are not here" }
+		var nursed := sim.treat(pawn, patient)
+		if nursed["ok"]:
+			sim.health_notice.emit(str(nursed["message"]))
+		return nursed
 	if action_id.begins_with(SELL_PREFIX):
 		return sim.sell_stock(action_id.trim_prefix(SELL_PREFIX))
 	if action_id == MOVE_HOME:

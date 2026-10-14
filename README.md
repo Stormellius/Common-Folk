@@ -2,7 +2,7 @@
 
 A medieval life sim sandbox with a RimWorld look, made in Godot 4.4. You play one of your **folk** at a time in a generated region of towns that carries on without you. They work, court, raise children, grow old and die, and the family goes on.
 
-Milestones 1 to 16 are done; the plan from here is in [ROADMAP.md](ROADMAP.md). The data files and how to mod them are in [docs/DATA.md](docs/DATA.md).
+Milestones 1 to 17 are done; the plan from here is in [ROADMAP.md](ROADMAP.md). The data files and how to mod them are in [docs/DATA.md](docs/DATA.md).
 
 ## Run it
 
@@ -44,7 +44,9 @@ You control one of your folk. Left-click a person (or their portrait, or press T
 
 **Work, resources and money.** A shared purse, jobs at the shop, tavern, clinic and green with shifts and wages, and **work sites** at the edge of every town: fields (grain ripens in summer and autumn), a woodlot, a quarry, an herb garden and, by the lake, a jetty. Take a job there, or right-click a chopping block, a field or a quarry face to gather for your own stockpile. What you gather can be sold at a shop counter (more on market day) or used in building: a bed takes wood, a stone wall stone, and what you lack is bought at the shop's price. Besides that, quarter-day tax on land, titles (freehold or leasehold), the Merchants' Guild and business lots of your own, decrees, and eviction if you cannot pay.
 
-**Town life.** Festivals, market days, cold snaps and services; fevers and the clinic; the chapel and faith; raids worked out off-screen against the town's defence. People chat and quarrel and remember it.
+**Town life.** Festivals, market days, cold snaps and services; the chapel and faith; raids worked out off-screen against the town's defence. People chat and quarrel and remember it.
+
+**Danger.** A hearth can throw a spark, and fire spreads through timber, beds, straw and planks (stone does not burn). Folk run from flames and grown-ups nearby beat them out; anyone caught in them is burned, and burns kill. Work at the woodlot, quarry and jetty has its accidents: a falling tree, a rockfall, a fall into the water. Fevers come with the cold and the plague, rare and deadly, passes between people who stand close, worse among the filthy; the recovered are immune for a while. The clinic's sickbeds heal injuries and fevers, and herbs from the garden nurse the sick through. A fallen person can still be pleaded for.
 
 **Building.** On your own lot: furniture, timber and stone walls, doors, floors, business fittings and garden decor, with coin costs, refunds and live route updates.
 
@@ -67,7 +69,7 @@ godot --path . -- --seed=1234 --day=50 --hour=12 --zoom=0.5 --look=240,160 --spe
 | `weather` | `clear`, `cloudy`, `rain` or `snow` |
 | `load=1`, `title=1`, `screen` | Load the newest save, show the title anyway, open a menu (`pause`, `save`, `load`, `settings`, `new`, `name`, `game_over`) |
 | `build`, `demohouse`, `together` | Start in build mode (`place:wall`, `floor:planks`, `remove`, `move`), build a small room, start a two-person interaction |
-| `fall`, `ghost`, `dying` | See Death come, a ghost walk, someone starving |
+| `fall`, `ghost`, `dying`, `fire` | See Death come, a ghost walk, someone starving, something alight |
 | `shot=path.png` | Save a screenshot a moment after starting and quit |
 
 ## How it is organised

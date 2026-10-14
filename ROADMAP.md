@@ -1,6 +1,6 @@
 # Common Folk: roadmap
 
-Milestones 1 to 11 are in the README's history; this is the plan from milestone 12 on (16 is done). Each milestone ends with the game playable, the smoke test passing and older saves still loading.
+Milestones 1 to 11 are in the README's history; this is the plan from milestone 12 on (17 is done). Each milestone ends with the game playable, the smoke test passing and older saves still loading.
 
 ## What the people are called
 
@@ -59,12 +59,12 @@ Folk are born, grow up, grow old and die, as in the Sims, with a medieval face o
 - Surplus sells at a shop counter, at a better price on market day
 - Still to come: traders from other towns who buy and sell on the roads
 
-## Milestone 17: Accidents
+## Milestone 17: Accidents (done)
 
-- **Fire**: a hearth can throw a spark. Fire spreads to wood (timber walls, beds, straw, plank floors), folk nearby beat it out on their own, and anyone caught in it can be burned to death. Stone does not burn
-- **Work accidents**, rare: a falling tree at the woodlot, a fall at the quarry, which injure or kill
+- **Fire**: a hearth can throw a spark. Fire spreads to what burns (timber walls, beds, straw, plank floors; each says how much), folk run from it and grown-ups nearby beat it out on their own, and anyone caught in it is burned and can die. Stone does not burn. Right-click a flame to fight it
+- **Work accidents**, rare: a falling tree at the woodlot, a rockfall at the quarry, which injure or kill
 - **Drowning**, very rare, while fishing
-- **Plague**: an illness that spreads from person to person when they are close, worse in a crowd and between towns; the clinic and keeping clean help. Rare, and deadly
+- **Plague**: an illness that spreads from person to person when they are close, worse among the filthy; the recovered are immune for a while, herbs nurse the sick through, and the sickbeds heal injuries. Rare, and deadly
 
 ## Later
 

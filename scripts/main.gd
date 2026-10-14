@@ -21,6 +21,7 @@ var _loaded_view: Dictionary = {}  # the camera of the save just loaded
 @onready var shadow_layer: ShadowLayer = $ShadowLayer
 @onready var smoke_layer: SmokeLayer = $SmokeLayer
 @onready var death_layer: DeathLayer = $DeathLayer
+@onready var fire_layer: FireLayer = $FireLayer
 @onready var town_labels: TownLabels = $TownLabels
 @onready var cloud_shadows: CloudShadows = $CloudShadows
 @onready var weather: Weather = $Weather
@@ -145,7 +146,8 @@ func _unhandled_input(event: InputEvent) -> void:
 ## lifespan = how fast people age in a new game (an id from data/lifespans.json; normal if not given),
 ## fall = minutes: the selected person fell that long ago and lies dying (to see Death come),
 ## ghost = 1: a townsperson has died, and their ghost walks tonight,
-## screen = a menu to open at the start: pause, save, load, settings, new or game_over.
+## screen = a menu to open at the start: pause, save, load, settings, new, name or game_over,
+## fire = 1: the nearest thing that can burn to the selected person catches alight.
 ## Handy for screenshots and testing.
 func _launch_option(name: String) -> String:
 	var prefix := "--%s=" % name
@@ -153,6 +155,17 @@ func _launch_option(name: String) -> String:
 		if arg.begins_with(prefix):
 			return arg.trim_prefix(prefix)
 	return ""
+
+
+## For --fire=1: sets the nearest thing that can burn, within reach of the selected person, alight.
+func _start_demo_fire() -> void:
+	var origin := sim.household.selected().tile
+	var best: PlacedObject = null
+	for placed in world.objects:
+		if Fire.flammability(world, placed.tile) > 0.0 and (best == null or Vector2(placed.tile - origin).length() < Vector2(best.tile - origin).length()):
+			best = placed
+	if best != null:
+		Fire.ignite(world, best.tile)
 
 
 func _pick_seed() -> int:
@@ -169,6 +182,8 @@ func _apply_launch_options() -> void:
 	if _launch_option("day") != "" or _launch_option("hour") != "":
 		var hour := int(_launch_option("hour")) if _launch_option("hour") != "" else 6
 		GameClock.set_time(int(_launch_option("day")), hour)
+	if _launch_option("fire") != "" and sim != null and sim.household.selected() != null:
+		_start_demo_fire()
 	if _launch_option("speed") != "":
 		GameClock.set_speed(int(_launch_option("speed")))
 	if _launch_option("look") != "":
@@ -426,6 +441,7 @@ func _show_world(new_world: WorldState, household: Household, town: Household = 
 	object_layer.bind(sim)
 	pawn_layer.bind(sim)
 	death_layer.bind(sim)
+	fire_layer.bind(sim)
 	town_labels.bind(world)
 	build.bind(sim)
 	hud.close_action_menu()

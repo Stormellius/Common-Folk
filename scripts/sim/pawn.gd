@@ -87,6 +87,7 @@ var job_interaction := ""    # id from data/interactions.json
 var job_object := 0          # id of the PlacedObject being used
 var job_stage := ""          # "walking" on the way there, "using" once started
 var job_tile := Vector2i.ZERO  # where the person stands while using it
+var job_target := Vector2i.ZERO  # what they are working on, when it is a tile (a fire to put out)
 var job_minutes := 0         # how long the use has gone on
 ## "" standing, or "lie" while sleeping. Set by the simulation, read by the view.
 var pose := ""
@@ -113,6 +114,12 @@ var partner_status := ""
 var partner_since := 0
 var origin_lot := ""
 var parents: Array[int] = []
+## Illness (see Illness): the tick until which someone is immune to each illness they have had
+## (by illness id), the tick until which herbs are helping them recover, and how many minutes in a
+## row they have stood in fire (see Fire).
+var immune: Dictionary = {}
+var treated_until := 0
+var fire_minutes := 0
 ## Ticks to wait before looking for something to do about a need again.
 var think_cooldown := 0
 
@@ -261,6 +268,9 @@ func to_dict() -> Dictionary:
 		"partner_since": partner_since,
 		"origin_lot": origin_lot,
 		"parents": Array(parents),
+		"immune": immune.duplicate(),
+		"treated_until": treated_until,
+		"fire_minutes": fire_minutes,
 		"look": look.duplicate(),
 		"tile": _vec_to_array(tile),
 		"facing": _vec_to_array(facing),
@@ -279,6 +289,7 @@ func to_dict() -> Dictionary:
 		"job_object": job_object,
 		"job_stage": job_stage,
 		"job_tile": _vec_to_array(job_tile),
+		"job_target": _vec_to_array(job_target),
 		"job_minutes": job_minutes,
 		"pose": pose,
 		"think": think_cooldown,
@@ -338,6 +349,12 @@ static func from_dict(data: Dictionary) -> Pawn:
 	pawn.origin_lot = str(data.get("origin_lot", ""))
 	for parent_id in data.get("parents", []):
 		pawn.parents.append(int(parent_id))
+	var saved_immune: Variant = data.get("immune", {})
+	if saved_immune is Dictionary:
+		for illness_id in saved_immune:
+			pawn.immune[str(illness_id)] = int(saved_immune[illness_id])
+	pawn.treated_until = int(data.get("treated_until", 0))
+	pawn.fire_minutes = int(data.get("fire_minutes", 0))
 	var saved_look: Variant = data.get("look", {})
 	pawn.look = saved_look.duplicate() if saved_look is Dictionary else {}
 	if pawn.look.has("hair_style"):
@@ -372,6 +389,7 @@ static func from_dict(data: Dictionary) -> Pawn:
 	pawn.job_object = int(data.get("job_object", 0))
 	pawn.job_stage = str(data.get("job_stage", ""))
 	pawn.job_tile = _array_to_vec(data.get("job_tile", [0, 0]))
+	pawn.job_target = _array_to_vec(data.get("job_target", [0, 0]))
 	pawn.job_minutes = int(data.get("job_minutes", 0))
 	pawn.pose = str(data.get("pose", ""))
 	pawn.think_cooldown = int(data.get("think", 0))

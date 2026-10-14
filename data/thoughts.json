@@ -95,5 +95,10 @@
   { "id": "moved_away",   "text": "{name} has moved out",     "mood": -5,  "hours": 48,  "on": "moved_away" },
   { "id": "partnered",    "text": "Has someone special",      "mood": 4,   "when": { "partner": true }, "group": "partner" },
   { "id": "flirt_flop",   "text": "Flirting fell flat",       "mood": -4,  "hours": 8,   "on": "flirt_flop" },
-  { "id": "gathered",     "text": "A hard day's gathering",   "mood": 2,   "hours": 6,   "on": "gathered", "never_for": ["lazy"] }
+  { "id": "gathered",     "text": "A hard day's gathering",   "mood": 2,   "hours": 6,   "on": "gathered", "never_for": ["lazy"] },
+  { "id": "burned",       "text": "Burned in a fire",         "mood": -14, "hours": 72,  "on": "burned" },
+  { "id": "saw_fire",     "text": "A fire close by",          "mood": -5,  "hours": 6,   "on": "saw_fire" },
+  { "id": "fought_fire",  "text": "Helped put out a fire",    "mood": 6,   "hours": 24,  "on": "fought_fire" },
+  { "id": "hurt_at_work", "text": "Hurt at work",             "mood": -8,  "hours": 48,  "on": "hurt_at_work" },
+  { "id": "cared_for",    "text": "Nursed with herbs",        "mood": 6,   "hours": 24,  "on": "cared_for" }
 ]

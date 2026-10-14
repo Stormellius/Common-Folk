@@ -51,6 +51,7 @@ signal household_changed
 signal babies_born(ids: Array[int])
 ## Ids of the needs in play; see Needs.
 var active_needs: Array[String] = []
+var _announced := {}  # contagious illnesses the player has been told about
 var _fillers_by_need := {}  # need id -> the objects that can fill it
 var _fillers_dirty := true
 var _has_infants := true  # whether anyone is a baby, worked out each minute; babies are carried along as people walk
@@ -114,6 +115,14 @@ func step(motion_steps: int = 1) -> void:
 		health_notice.emit(notice)
 	for notice in Babies.step(self):
 		health_notice.emit(notice)
+	for notice in Fire.step(self, _rng):
+		health_notice.emit(notice)
+	if minute % 10 == 0:
+		for caught in Illness.spread(self, _rng, 10):
+			_announce_illness(caught)
+	if not world.fires.is_empty():
+		for pawn in people():
+			_react_to_fire(pawn)
 	var everyone := people()
 	if minute == 0:
 		Relations.drift(everyone)
@@ -787,6 +796,11 @@ func _step_work(pawn: Pawn) -> void:
 				pawn.facing = step
 		return
 	pawn.job_minutes += 1
+	var station := DataRegistry.get_def("objects", str(job.get("station", "")))
+	if station.has("accident"):
+		var accident := Accidents.roll(self, pawn, station, _rng)
+		if accident != "":
+			health_notice.emit(accident)
 
 
 ## Wages for the minutes worked, and a good feeling if it was at least an hour.
@@ -942,6 +956,8 @@ func describe_activity(pawn: Pawn) -> String:
 		text = str(placed.def().get("doing", "Busy"))
 	elif placed != null:
 		text = "Heading to the %s" % placed.display_name().to_lower()
+	elif pawn.job_kind == "extinguish":
+		text = "Beating out a fire" if pawn.job_stage == "using" else "Running to put out a fire"
 	elif pawn.job_kind == "date":
 		var date_partner := person(pawn.job_partner)
 		var date_name := _first_name(date_partner) if date_partner != null else "someone"
@@ -1175,6 +1191,9 @@ func _step_job(pawn: Pawn) -> void:
 	if pawn.job_kind == "plead":
 		_step_plead(pawn)
 		return
+	if pawn.job_kind == "extinguish":
+		_step_extinguish(pawn)
+		return
 	if pawn.job_kind == "date":
 		_step_date(pawn)
 		return
@@ -1228,6 +1247,12 @@ func _step_job(pawn: Pawn) -> void:
 	for need_id in drains:  # hard work tires and soils a person
 		if pawn.needs.has(need_id):
 			pawn.needs[need_id] = maxf(0.0, float(pawn.needs[need_id]) - float(drains[need_id]) / 60.0)
+	if object_def.has("accident"):
+		var accident := Accidents.roll(self, pawn, object_def, _rng)
+		if accident != "":
+			health_notice.emit(accident)
+		if pawn.job_kind == "" or pawn.is_dying():
+			return
 	pawn.job_minutes += 1
 	if pawn.illness != "" and pawn.illness in object_def.get("cures", []) and pawn.job_minutes >= int(object_def.get("cure_minutes", 60)):
 		_recover(pawn)
@@ -1259,6 +1284,34 @@ func _collect(pawn: Pawn, object_def: Dictionary) -> void:
 		brought[str(resource_id)] = amount
 	Mood.add_event(pawn, "gathered", GameClock.tick)
 	health_notice.emit("%s gathered %s." % [_first_name(pawn), Economy.stock_text(brought)])
+
+
+## Why `nurse` cannot treat `patient` with herbs now, or "".
+func treat_blocker(nurse: Pawn, patient: Pawn) -> String:
+	if patient.illness == "":
+		return "%s is not ill" % _first_name(patient)
+	if household.get_pawn(nurse.id) == null:
+		return "not possible"
+	if household.stock_of("herbs") < 1:
+		return "you have no herbs"
+	if patient.treated_until > GameClock.tick:
+		return "already nursed"
+	if nurse.age < 12 or nurse.is_dying() or nurse.id == patient.id and patient.is_dying():
+		return "not possible"
+	if _distance(nurse.tile, patient.tile) > 3:
+		return "too far away"
+	return ""
+
+
+## Uses a herb to help someone recover for a few days. Returns { "ok", "message" }.
+func treat(nurse: Pawn, patient: Pawn) -> Dictionary:
+	var blocker := treat_blocker(nurse, patient)
+	if blocker != "":
+		return { "ok": false, "message": "Can't nurse them: %s" % blocker }
+	household.add_stock("herbs", -1)
+	patient.treated_until = GameClock.tick + 3 * GameClock.MINUTES_PER_DAY
+	Mood.add_event(patient, "cared_for", GameClock.tick)
+	return { "ok": true, "message": "%s nurses %s with herbs." % [_first_name(nurse), _first_name(patient)] }
 
 
 ## What the shop would pay for all of one resource in the stockpile (0 if there is none).
@@ -1517,6 +1570,110 @@ func _on_world_changed(_tile: Vector2i) -> void:
 	_fillers_dirty = true
 
 
+# --- fire ---------------------------------------------------------------------------
+
+## Every minute while something burns: those close to the flames run from them, and an idle adult
+## within reach goes to beat them out.
+func _react_to_fire(pawn: Pawn) -> void:
+	if pawn.is_dying() or (pawn.is_infant() and pawn.carried_by != 0) or pawn.job_kind == "extinguish" or pawn.job_kind == "labour":
+		return
+	var danger := Fire.nearest(world, pawn.tile, int(Fire.config().get("flee_radius", 3)))
+	if danger.x >= 0:
+		if pawn.job_kind != "" or pawn.has_orders():
+			_end_job(pawn)
+		_flee(pawn, danger)
+		Mood.add_event(pawn, "saw_fire", GameClock.tick)
+		return
+	if pawn.adult and not pawn.is_busy() and not _needs_break(pawn) and pawn.age >= 14:
+		var near := Fire.nearest(world, pawn.tile, int(Fire.config().get("fight_radius", 12)))
+		if near.x >= 0:
+			order_extinguish(pawn, near)
+
+
+## Runs from a fire to open ground a few tiles away from every flame.
+func _flee(pawn: Pawn, from_fire: Vector2i) -> void:
+	var origin := pawn.committed_tile()
+	var best := Vector2i(-1, -1)
+	var best_cost := INF
+	for radius in range(4, 9):
+		for dy in range(-radius, radius + 1):
+			for dx in range(-radius, radius + 1):
+				if maxi(absi(dx), absi(dy)) != radius:
+					continue
+				var tile := origin + Vector2i(dx, dy)
+				if not world.is_walkable(tile.x, tile.y) or Fire.nearest(world, tile, 4).x >= 0:
+					continue
+				var cost := Vector2(tile - from_fire).length() * -1.0 + Vector2(dx, dy).length() * 0.5
+				if cost < best_cost:
+					best_cost = cost
+					best = tile
+		if best.x >= 0:
+			break
+	if best.x >= 0:
+		order_move(pawn, best)
+
+
+## Why `pawn` cannot go and put out a fire, or "".
+func extinguish_blocker(pawn: Pawn, fire_tile: Vector2i) -> String:
+	if pawn.is_dying() or pawn.is_infant():
+		return "not possible"
+	if pawn.age < 12:
+		return "too young"
+	if Pregnancy.in_labour(pawn):
+		return "%s is in labour" % _first_name(pawn)
+	if not world.fires.has(fire_tile):
+		return "nothing is burning there"
+	if _plan_beside(pawn, fire_tile).is_empty():
+		return "can't get close"
+	return ""
+
+
+## Sends `pawn` to beat out the fire at `fire_tile`.
+func order_extinguish(pawn: Pawn, fire_tile: Vector2i) -> Dictionary:
+	var blocker := extinguish_blocker(pawn, fire_tile)
+	if blocker != "":
+		return { "ok": false, "message": "Can't fight the fire: %s" % blocker }
+	var plan := _plan_beside(pawn, fire_tile)
+	_end_job(pawn)
+	pawn.path = plan["route"]
+	pawn.job_kind = "extinguish"
+	pawn.job_stage = "walking"
+	pawn.job_tile = plan["tile"]
+	pawn.job_target = fire_tile
+	pawn.job_minutes = 0
+	return { "ok": true, "message": "" }
+
+
+func _step_extinguish(pawn: Pawn) -> void:
+	if pawn.job_stage == "walking":
+		if pawn.is_moving() or not pawn.path.is_empty():
+			return
+		pawn.job_stage = "using"
+		pawn.pose = ""
+	if not world.fires.has(pawn.job_target):
+		var next := Fire.nearest(world, pawn.tile, 2)  # one down; is another alight beside them?
+		if next.x < 0:
+			if pawn.job_minutes >= 2:
+				Mood.add_event(pawn, "fought_fire", GameClock.tick)
+			_end_job(pawn)
+			return
+		pawn.job_target = next
+	if _distance(pawn.tile, pawn.job_target) > 2:
+		pawn.job_stage = "walking"  # it has spread: follow it
+		var plan := _plan_beside(pawn, pawn.job_target)
+		if plan.is_empty():
+			_end_job(pawn)
+		else:
+			pawn.path = plan["route"]
+		return
+	pawn.facing = (pawn.job_target - pawn.tile).sign() if pawn.job_target != pawn.tile else pawn.facing
+	pawn.job_minutes += 1
+	var burning: Dictionary = world.fires[pawn.job_target]
+	burning["fuel"] = int(burning["fuel"]) - int(Fire.config().get("extinguish_per_minute", 6))
+	if int(burning["fuel"]) <= 0:
+		world.fires.erase(pawn.job_target)
+
+
 ## Someone ill with the means goes to the nearest free thing that cures them (a sickbed).
 func _seek_treatment(pawn: Pawn) -> bool:
 	var options: Array[PlacedObject] = []
@@ -1545,21 +1702,38 @@ func _roll_illness(everyone: Array[Pawn]) -> void:
 			var days_ill := (GameClock.tick - pawn.ill_since) / GameClock.MINUTES_PER_DAY
 			if pawn.is_dying():
 				continue
+			var grace := 3 if pawn.treated_until > GameClock.tick else 0  # herbs buy time
 			if current.is_empty() or _rng.randf() < Illness.recovery_chance(current, pawn):
 				_recover(pawn)
-			elif days_ill >= int(current.get("fatal_after_days", 9999)):
+			elif days_ill >= int(current.get("fatal_after_days", 9999)) + grace:
 				Mortality.fall(self, pawn, str(current.get("death_cause", "died")))
 			continue
 		for illness in DataRegistry.get_list("illness"):
+			if Illness.is_immune(pawn, str(illness["id"])):
+				continue
 			if _rng.randf() < Illness.catch_chance(illness, pawn, season_id, event_factor):
 				pawn.illness = str(illness["id"])
 				pawn.ill_since = GameClock.tick
-				if household.get_pawn(pawn.id) != null:
-					health_notice.emit("%s %s." % [pawn.display_name, str(illness.get("caught", "is ill"))])
+				_announce_illness(pawn)
 				break
 
 
+## Tells the player when one of their folk falls ill, and when the plague is first about.
+func _announce_illness(pawn: Pawn) -> void:
+	var illness := Illness.def(pawn.illness)
+	if household.get_pawn(pawn.id) != null:
+		health_notice.emit("%s %s." % [pawn.display_name, str(illness.get("caught", "is ill"))])
+	elif bool(illness.get("contagious", false)) and not _announced.has(pawn.illness):
+		_announced[pawn.illness] = true
+		var town := world.town_of_lot(pawn.home_lot)
+		health_notice.emit("Word comes of %s in %s." % [str(illness.get("name", "sickness")).to_lower(), str(town.get("name", "the country"))])
+
+
 func _recover(pawn: Pawn) -> void:
+	var immunity := int(Illness.def(pawn.illness).get("immunity_days", 0))
+	if immunity > 0:
+		pawn.immune[pawn.illness] = GameClock.tick + immunity * GameClock.MINUTES_PER_DAY
+	pawn.treated_until = 0
 	pawn.illness = ""
 	if household.get_pawn(pawn.id) != null:
 		health_notice.emit("%s is well again." % pawn.display_name)

@@ -44,6 +44,8 @@ var floors: Dictionary = {}
 ## How fast people age: an id from data/lifespans.json (see Life). A world from an older save
 ## goes by the calendar, as it always did.
 var lifespan := "calendar"
+## What is burning (see Fire): tile -> { "since": tick it caught, "fuel": minutes left }.
+var fires: Dictionary = {}
 ## One entry for each of the dead who lies in a grave (see Mortality): { "name", "look", "grave":
 ## [x, y], "restless": bool, "haunt_until": tick }.
 var spirits: Array[Dictionary] = []
@@ -355,6 +357,7 @@ func to_dict() -> Dictionary:
 		"floors": floors.keys().map(func(cell: Vector2i) -> Array: return [cell.x, cell.y, floors[cell]]),
 		"lifespan": lifespan,
 		"spirits": spirits.duplicate(true),
+		"fires": fires.keys().map(func(tile: Vector2i) -> Array: return [tile.x, tile.y, int(fires[tile]["since"]), int(fires[tile]["fuel"])]),
 	}
 
 
@@ -409,6 +412,9 @@ static func from_dict(data: Dictionary) -> WorldState:
 	for saved in data.get("floors", []):
 		if saved is Array and saved.size() >= 3 and DataRegistry.has_def("floors", str(saved[2])):
 			world.floors[Vector2i(int(saved[0]), int(saved[1]))] = str(saved[2])
+	for saved in data.get("fires", []):
+		if saved is Array and saved.size() >= 4:
+			world.fires[Vector2i(int(saved[0]), int(saved[1]))] = { "since": int(saved[2]), "fuel": int(saved[3]) }
 	var saved_lifespan := str(data.get("lifespan", "calendar"))
 	world.lifespan = saved_lifespan if DataRegistry.has_def("lifespans", saved_lifespan) else "calendar"
 	for saved in data.get("spirits", []):
