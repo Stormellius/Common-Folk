@@ -70,8 +70,21 @@ func _init(p_world: WorldState, p_household: Household, p_town: Household = null
 	_repair_after_load()
 
 
-## One game minute passes. Called from the clock's `ticked` signal.
-func step() -> void:
+## People take their steps (a fraction of a game minute: see GameClock.SUBSTEPS_PER_MINUTE). The
+## clock's `motion_ticked` signal calls this; thinking, needs and everything else wait for `step`.
+func step_motion() -> void:
+	for pawn in people():
+		if not (pawn.is_infant() or pawn.is_dying()):
+			pawn.tick(world)
+	Pregnancy.carry_infants(self)
+
+
+## One game minute passes. Called from the clock's `ticked` signal. `motion_steps` is how many
+## motion steps to take first: the live game takes them as the clock hands them out, so it passes
+## 0; a test or tool stepping by hand gets one, so a person moves a little with each minute.
+func step(motion_steps: int = 1) -> void:
+	for i in motion_steps:
+		step_motion()
 	for change in events.update(world.world_seed):
 		var event_def := DataRegistry.get_def("events", str(change["id"]))
 		var event_name := str(event_def.get("name", change["id"]))
@@ -108,7 +121,6 @@ func step() -> void:
 			continue
 		if household.get_pawn(pawn.id) != null or (GameClock.tick + pawn.id) % MOOD_EVERY == 0:
 			_update_mood(pawn, everyone)  # the town's mood changes slowly, so it is looked at less often
-		pawn.tick(world)
 		_step_job(pawn)
 		if pawn.think_cooldown > 0:
 			pawn.think_cooldown -= 1

@@ -55,6 +55,7 @@ func _ready() -> void:
 	menus.closed.connect(_on_menus_closed)
 	menus.baby_named.connect(_on_baby_named)
 	GameClock.ticked.connect(_on_tick)
+	GameClock.motion_ticked.connect(_on_motion_tick)
 	GameClock.day_changed.connect(_on_day_changed)
 	if _skips_title():
 		_begin_game()
@@ -98,6 +99,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			GameClock.set_speed(2)
 		KEY_3, KEY_KP_3:
 			GameClock.set_speed(3)
+		KEY_4, KEY_KP_4:
+			GameClock.set_speed(4)
 		KEY_B:
 			build.toggle()
 		KEY_G:
@@ -124,7 +127,7 @@ func _unhandled_input(event: InputEvent) -> void:
 ## Options can be given after "--" on the command line, for example:
 ##   godot --path . -- --seed=1234 --day=50 --hour=12 --zoom=0.5 --speed=0
 ## seed = world seed, day = day number to start on (0 = first), hour = hour of day,
-## zoom = camera zoom, look = tile to center the camera on (x,y), speed = 0 (paused) to 3,
+## zoom = camera zoom, look = tile to center the camera on (x,y), speed = 0 (paused) to 4,
 ## walk = tile (x,y) to send the selected person to at the start,
 ## menu = tile (x,y) to open the right-click menu on at the start,
 ## needs = need values for the selected person, such as rest:10,hunger:30,
@@ -515,7 +518,12 @@ func _on_event_ended(event_name: String) -> void:
 
 func _on_tick(_tick: int) -> void:
 	if sim != null:
-		sim.step()
+		sim.step(0)  # the people have been walking in between, on motion_ticked
+
+
+func _on_motion_tick() -> void:
+	if sim != null:
+		sim.step_motion()
 
 
 func _on_context_menu_requested(screen_position: Vector2, tile: Vector2i) -> void:

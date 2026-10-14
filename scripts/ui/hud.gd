@@ -7,7 +7,7 @@ extends CanvasLayer
 ## The HUD only shows state and calls GameClock.set_speed(). Keyboard shortcuts live in main.gd;
 ## the title screen, saving, loading and settings are in Menus.
 
-const SPEED_LABELS: Array[String] = ["II", "1x", "2x", "3x"]
+const SPEED_LABELS: Array[String] = ["II", "1x", "3x", "10x", "30x"]
 const HINT_TEXT := "Right-click: actions    B: build    H: help    Esc: menu"
 const BUILD_HELP := "Left-click: build (drag for walls and floors)    Right-click or Esc: put the tool away    Esc again or B: leave build mode"
 ## The help panel (H): [keys, what they do].
@@ -18,7 +18,7 @@ const HELP_LINES: Array = [
 	["C", "Center on them"],
 	["WASD, arrows", "Move the camera (Shift: faster)"],
 	["Wheel, middle drag", "Zoom, pan"],
-	["Space, 1 2 3", "Pause, speed"],
+	["Space, 1 to 4", "Pause, speed"],
 	["B", "Build mode"],
 	["G", "Grid"],
 	["F5 / F9", "Quick save / load the newest save"],

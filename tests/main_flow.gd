@@ -23,6 +23,24 @@ func _ready() -> void:
 	_check(main._in_game and hud.visible and not menus.is_open(), "Begin starts the game and shows the HUD")
 	_check(main.world.world_seed == 4242 and main.world.titles.size() > 0 and main.world.lifespan == "short" and GameClock.speed_level == 1, "with the chosen seed, start and lifespan, running")
 
+	# Time passes slowly, but people walk at a human pace: a walk across the yard takes seconds.
+	var walker: Pawn = main.sim.household.selected()
+	GameClock.set_speed(1)
+	var from := walker.tile
+	var goal := Vector2i(-1, -1)
+	for offset in [Vector2i(10, 0), Vector2i(-10, 0), Vector2i(0, 10), Vector2i(0, -10), Vector2i(6, 6), Vector2i(-6, -6)]:
+		var there: Vector2i = from + offset
+		if main.world.is_walkable(there.x, there.y) and not main.sim.pathfinder.find_path(from, there).is_empty():
+			goal = there
+			break
+	var ticks_before := GameClock.tick
+	if goal.x >= 0:
+		main.sim.order_move(walker, goal)
+		var waited := 0.0
+		while walker.tile != goal and waited < 8.0:
+			await get_tree().process_frame
+			waited += get_process_delta_time()
+		_check(walker.tile == goal and GameClock.tick - ticks_before <= 4, "a ten-tile walk takes a few seconds and only a minute or two of game time (%.1f s, %d min)" % [waited, GameClock.tick - ticks_before])
 	GameClock.set_speed(2)
 	main._open_pause()
 	_check(menus.current() == "pause" and GameClock.speed_level == 0 and not main.camera.input_enabled, "the pause menu stops the clock and the camera")

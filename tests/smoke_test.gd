@@ -92,6 +92,14 @@ func _test_mod_loading() -> void:
 	_check(DataRegistry.has_def("tiles", "water"), "removed entry comes back with base data")
 
 
+## Runs the clock for `seconds` of real time in small frames, as the game would.
+func _run_clock(seconds: float) -> void:
+	var left := seconds
+	while left > 0.0:
+		GameClock._process(minf(left, 0.05))
+		left -= 0.05
+
+
 func _test_clock() -> void:
 	print("Game clock")
 	GameClock.reset()
@@ -126,18 +134,38 @@ func _test_clock() -> void:
 	_check(GameClock.tick == before, "paused clock does not advance")
 
 	GameClock.set_speed(1)
+	_check(is_equal_approx(GameClock.DAY_SECONDS, 3600.0) and is_equal_approx(GameClock.MINUTE_SECONDS * GameClock.MINUTES_PER_DAY, 3600.0), "a day takes an hour at normal speed")
+	var motion := [0]
+	var count_motion := func() -> void: motion[0] += 1
+	GameClock.motion_ticked.connect(count_motion)
+	GameClock.set_time(0, 6)
 	before = GameClock.tick
-	GameClock._process(1.0)
-	_check(absi(GameClock.tick - before - 10) <= 1, "1x runs about 10 ticks per second")
+	_run_clock(GameClock.MINUTE_SECONDS * 4.0 + 0.01)
+	_check(GameClock.tick - before == 4, "1x runs a game minute every two and a half seconds (%d)" % (GameClock.tick - before))
+	_check(motion[0] == 4 * GameClock.SUBSTEPS_PER_MINUTE, "and gives people %d steps to walk in between (%d)" % [GameClock.SUBSTEPS_PER_MINUTE, motion[0]])
+	GameClock.set_time(0, 6)
+	motion[0] = 0
+	GameClock.advance_one_tick()
+	_check(motion[0] == GameClock.SUBSTEPS_PER_MINUTE, "a minute advanced by hand carries its motion too")
+	GameClock.motion_ticked.disconnect(count_motion)
 
+	GameClock.set_speed(2)
+	GameClock.set_time(0, 6)
+	before = GameClock.tick
+	_run_clock(GameClock.MINUTE_SECONDS * 2.0 + 0.01)
+	_check(GameClock.tick - before == 6, "3x runs three times as fast (%d)" % (GameClock.tick - before))
 	GameClock.set_speed(3)
+	GameClock.set_time(0, 6)
 	before = GameClock.tick
-	GameClock._process(1.0)
-	_check(absi(GameClock.tick - before - 30) <= 1, "3x runs about 30 ticks per second")
+	_run_clock(GameClock.MINUTE_SECONDS + 0.01)
+	_check(GameClock.tick - before == 10, "and 10x ten times (%d)" % (GameClock.tick - before))
+	GameClock.set_speed(9)
+	_check(GameClock.speed_level == 4, "speed stops at the fastest level")
 
+	GameClock.set_time(0, 6)
 	before = GameClock.tick
-	GameClock._process(10.0)
-	_check(GameClock.tick - before == GameClock.MAX_TICKS_PER_FRAME, "a very long frame is capped")
+	GameClock._process(1000.0)
+	_check(GameClock.tick - before <= GameClock.MAX_SUBSTEPS_PER_FRAME / GameClock.SUBSTEPS_PER_MINUTE + 1, "a very long frame is capped")
 
 	GameClock.set_speed(2)
 	GameClock.toggle_pause()
@@ -2781,13 +2809,13 @@ func _test_life_and_death() -> void:
 	rng.seed = 5
 
 	# Ages and stages.
-	_check(Life.days_per_year(world) == 4 and Life.days_per_year(WorldState.new(4, 4)) == 60, "a year of life is four days on Normal, and a whole calendar year in an older world")
+	_check(Life.days_per_year(world) == 2 and Life.days_per_year(WorldState.new(4, 4)) == 60, "a year of life is two days on Normal, and a whole calendar year in an older world")
 	_check(Life.stage_at(0)["id"] == "baby" and Life.stage_at(3)["id"] == "toddler" and Life.stage_at(10)["id"] == "child" and Life.stage_at(15)["id"] == "youth" and Life.stage_at(40)["id"] == "adult" and Life.stage_at(70)["id"] == "elder", "the stages run from baby to elder")
 	_check(Life.describe_age(ada) == "Adult, 30", "the panel shows the stage and the age")
 	var fated := Life.death_age(ben)
 	_check(fated >= 62 and fated <= 80 and fated == Life.death_age(ben), "everyone has a fixed age to die of old age, between 62 and 80 (Ben: %d)" % fated)
-	ben.birthday = GameClock.get_day_number() % 4
-	GameClock.set_time(GameClock.get_day_number() + 4, 0)
+	ben.birthday = GameClock.get_day_number() % Life.days_per_year(world)
+	GameClock.set_time(GameClock.get_day_number() + Life.days_per_year(world), 0)
 	var heard := Life.new_day(sim, rng)
 	_check(ben.age == 60 and Life.is_elder(ben) and "growing old" in " ".join(heard) and ben.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "grew_old"), "at sixty a person grows old, and feels it")
 	_check(Life.walk_multiplier(ben) > 1.0 and float(Life.drain_multipliers(ben, {})["rest"]) > 1.0 and not Life.may_do_heavy_work(ben) and Life.may_do_heavy_work(ada), "an elder walks slower, tires sooner and keeps clear of heavy work")

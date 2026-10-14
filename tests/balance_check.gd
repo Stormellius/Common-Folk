@@ -54,7 +54,7 @@ func _play(world_seed: int, start_day: int) -> void:
 		var worst_mood := 100.0
 		for minute in DAYS * GameClock.MINUTES_PER_DAY:
 			GameClock.advance_one_tick()
-			sim.step()
+			sim.step(GameClock.SUBSTEPS_PER_MINUTE)
 			if minute % 60 == 0:
 				for pawn in sim.people():
 					total += pawn.mood
