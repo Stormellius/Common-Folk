@@ -25,6 +25,13 @@ func add_pawn(pawn: Pawn) -> void:
 		selected_id = pawn.id
 
 
+## Takes in someone who already has an id and a history (a partner moving in), without renumbering them.
+func adopt(pawn: Pawn) -> void:
+	pawns.append(pawn)
+	if selected_id == -1 and not pawn.is_infant():
+		selected_id = pawn.id
+
+
 func get_pawn(id: int) -> Pawn:
 	for pawn in pawns:
 		if pawn.id == id:

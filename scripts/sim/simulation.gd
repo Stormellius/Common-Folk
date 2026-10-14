@@ -121,6 +121,8 @@ func step(motion_steps: int = 1) -> void:
 			health_notice.emit(notice)
 		for notice in Pregnancy.new_day(self, _rng):
 			health_notice.emit(notice)
+		for notice in Romance.new_day(self, _rng):
+			health_notice.emit(notice)
 		for notice in realm.new_day(self):
 			realm_notice.emit(notice)
 		_roll_illness(everyone)
@@ -249,6 +251,10 @@ func interaction_blocker(pawn: Pawn, other: Pawn, interaction_id: String) -> Str
 			return "%s isn't interested" % other_name
 		if not _attracted_to(pawn, other):
 			return "%s isn't interested" % _first_name(pawn)
+	if bool(interaction.get("romantic", false)):
+		var romantic_blocker := _romance_blocker(pawn, other, interaction)
+		if romantic_blocker != "":
+			return romantic_blocker
 	var min_opinion := float(interaction.get("min_opinion", -1000.0))
 	if other.opinion_of(pawn.id) < min_opinion:
 		return "%s isn't close enough to you yet" % other_name
@@ -263,6 +269,27 @@ func interaction_blocker(pawn: Pawn, other: Pawn, interaction_id: String) -> Str
 			return "%s %s" % [_first_name(pawn), unwilling]
 	if _plan_beside(pawn, other.tile).is_empty():
 		return "can't get there"
+	return ""
+
+
+## What stands in the way of a romantic interaction (flirting, a kiss, asking out): family, someone
+## else's partner, or not being close enough yet. "" if nothing does.
+func _romance_blocker(pawn: Pawn, other: Pawn, interaction: Dictionary) -> String:
+	var other_name := _first_name(other)
+	if Relations.are_kin(pawn, other):
+		return "%s is family" % other_name
+	if pawn.partner_id != 0 and pawn.partner_id != other.id:
+		return "%s is already seeing someone" % _first_name(pawn)
+	if other.partner_id != 0 and other.partner_id != pawn.id:
+		return "%s is already seeing someone" % other_name
+	if bool(interaction.get("begins_dating", false)) and Romance.together(pawn, other):
+		return "already together"
+	var needed := float(interaction.get("min_romance", 0.0))
+	if needed > 0.0:
+		if other.romance_for(pawn.id) < needed:
+			return "%s isn't ready for that" % other_name
+		if pawn.romance_for(other.id) < needed:
+			return "%s isn't ready for that yet" % _first_name(pawn)
 	return ""
 
 
@@ -884,6 +911,10 @@ func describe_activity(pawn: Pawn) -> String:
 		text = str(placed.def().get("doing", "Busy"))
 	elif placed != null:
 		text = "Heading to the %s" % placed.display_name().to_lower()
+	elif pawn.job_kind == "date":
+		var date_partner := person(pawn.job_partner)
+		var date_name := _first_name(date_partner) if date_partner != null else "someone"
+		text = "On a date with %s" % date_name if pawn.job_stage == "using" else "Going on a date with %s" % date_name
 	elif pawn.job_kind == "labour":
 		text = "In labour" if pawn.job_stage == "using" else "In labour, making for a bed"
 	elif pawn.job_kind == "attend":
@@ -1011,6 +1042,7 @@ func _drain_needs(pawn: Pawn, season_multipliers: Dictionary) -> String:
 ## next person in the household. With nobody left the playthrough is over.
 func die(pawn: Pawn, cause: String) -> void:
 	_end_job(pawn)
+	Romance.on_death(self, pawn)
 	pawn.path.clear()
 	var spot := pawn.committed_tile()
 	var figure := Mortality.death_figure(pawn)
@@ -1111,6 +1143,9 @@ func _step_job(pawn: Pawn) -> void:
 		return
 	if pawn.job_kind == "plead":
 		_step_plead(pawn)
+		return
+	if pawn.job_kind == "date":
+		_step_date(pawn)
 		return
 	if pawn.job_kind == "labour":
 		_step_labour(pawn)
@@ -1225,20 +1260,77 @@ func _finish_interaction(pawn: Pawn, partner: Pawn, interaction: Dictionary) -> 
 		Mood.add_event(partner, "interaction:%s" % pawn.job_interaction, GameClock.tick)
 	pawn.add_opinion(partner.id, delta)
 	partner.add_opinion(pawn.id, delta)
+	var romance_rule: Dictionary = interaction.get("romance", {})
+	if not romance_rule.is_empty():
+		var warmth := float(romance_rule.get("gain", 0.0))
+		if not flopped and romance_rule.has("backfire") and _rng.randf() < float(romance_rule["backfire"]):
+			warmth = -float(romance_rule.get("loss", 0.0))
+			flopped = true
+			Mood.add_event(pawn, "flirt_flop", GameClock.tick)
+		pawn.add_romance(partner.id, warmth)
+		partner.add_romance(pawn.id, warmth)
+		if bool(interaction.get("begins_dating", false)) and not flopped:
+			Romance.begin_dating(self, pawn, partner)
+			if household.get_pawn(pawn.id) != null or household.get_pawn(partner.id) != null:
+				health_notice.emit("%s and %s are courting." % [_first_name(pawn), _first_name(partner)])
 	var conception := float(interaction.get("conception_chance", 0.0))
 	if conception > 0.0 and not flopped:
 		Pregnancy.try_conceive(self, pawn, partner, conception, _rng)
 
 
 ## Lines for the panel: who `pawn` knows best (or least well), as { "name", "label", "opinion" }.
+## Their partner comes first.
 func relationship_lines(pawn: Pawn, limit: int = 5) -> Array[Dictionary]:
 	var lines: Array[Dictionary] = []
 	for other_id in pawn.relations:
 		var other := person(int(other_id))
-		if other != null and absf(float(pawn.relations[other_id])) >= 5.0:
+		if other != null and absf(float(pawn.relations[other_id])) >= 5.0 and int(other_id) != pawn.partner_id:
 			lines.append({ "name": other.display_name, "label": Relations.label(float(pawn.relations[other_id])), "opinion": float(pawn.relations[other_id]) })
 	lines.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return absf(a["opinion"]) > absf(b["opinion"]))
+	var partner := person(pawn.partner_id) if pawn.partner_id != 0 else null
+	if partner != null:
+		var label := Romance.tie_name(pawn, partner)
+		lines.push_front({ "name": partner.display_name, "label": label if label != "" else "Partner", "opinion": maxf(pawn.opinion_of(partner.id), 1.0) })
 	return lines.slice(0, limit)
+
+
+## A date: both people head for `tile` (by `route`) and then spend time together there.
+func begin_date(pawn: Pawn, partner: Pawn, tile: Vector2i, route: Array[Vector2i]) -> void:
+	_end_job(pawn)
+	pawn.path = route
+	pawn.job_kind = "date"
+	pawn.job_stage = "walking"
+	pawn.job_tile = tile
+	pawn.job_partner = partner.id
+	pawn.job_minutes = 0
+
+
+func _step_date(pawn: Pawn) -> void:
+	var partner := person(pawn.job_partner)
+	if partner == null or partner.job_kind != "date" or partner.job_partner != pawn.id:
+		_end_job(pawn)
+		return
+	if pawn.job_stage == "walking":
+		if pawn.is_moving() or not pawn.path.is_empty():
+			return
+		pawn.job_stage = "waiting"
+	if pawn.job_stage == "waiting":
+		if partner.job_stage == "waiting" or partner.job_stage == "using":
+			if _distance(pawn.tile, partner.tile) <= 2:
+				pawn.job_stage = "using"
+				pawn.job_minutes = 0
+				pawn.pose = "close"
+				pawn.facing = partner.tile - pawn.tile if partner.tile != pawn.tile else pawn.facing
+		return
+	for need_id in ["social", "fun", "libido"]:
+		if pawn.needs.has(need_id):
+			pawn.needs[need_id] = minf(Needs.FULL, float(pawn.needs[need_id]) + 2.0)
+	pawn.job_minutes += 1
+	if pawn.job_minutes >= int(Romance.config().get("date_minutes", 60)):
+		Romance.finish_date(pawn, partner)  # ending it ends the other's too, so this is only done once
+		if household.get_pawn(pawn.id) != null or household.get_pawn(partner.id) != null:
+			health_notice.emit("%s and %s had a lovely time together." % [_first_name(pawn), _first_name(partner)])
+		_end_job(pawn)
 
 
 func _end_job(pawn: Pawn) -> void:
@@ -1250,7 +1342,8 @@ func _end_job(pawn: Pawn) -> void:
 	var placed := world.get_object(pawn.job_object)
 	if placed != null and placed.user_id == pawn.id:
 		placed.user_id = 0
-	var partner: Pawn = person(pawn.job_partner) if pawn.job_kind == "interact" else null
+	var partner: Pawn = person(pawn.job_partner) if pawn.job_kind in ["interact", "date"] else null
+	var partner_kind := pawn.job_kind
 	pawn.job_kind = ""
 	pawn.job_object = 0
 	pawn.job_stage = ""
@@ -1259,7 +1352,7 @@ func _end_job(pawn: Pawn) -> void:
 	pawn.job_interaction = ""
 	pawn.pose = ""
 	# An interaction has two people: when one stops, so does the other.
-	if partner != null and partner.job_kind == "interact" and partner.job_partner == pawn.id:
+	if partner != null and partner.job_kind == partner_kind and partner.job_partner == pawn.id:
 		_end_job(partner)
 
 
@@ -1492,6 +1585,9 @@ func _repair_after_load() -> void:
 		for members in homes.values():
 			Relations.make_family(members)
 	for pawn in people():
+		if pawn.partner_id != 0 and person(pawn.partner_id) == null:
+			pawn.partner_id = 0  # their partner is no longer in the world
+			pawn.partner_status = ""
 		for need_id in active_needs:
 			if not pawn.needs.has(need_id):
 				pawn.needs[need_id] = 80.0

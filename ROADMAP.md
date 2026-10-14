@@ -1,6 +1,6 @@
 # Common Folk: roadmap
 
-Milestones 1 to 11 are done (see the README). This is the plan from milestone 12 on. Each milestone ends with the game playable, the smoke test passing and older saves still loading.
+Milestones 1 to 11 are in the README's history; this is the plan from milestone 12 on (15 is done). Each milestone ends with the game playable, the smoke test passing and older saves still loading.
 
 ## What the people are called
 
@@ -40,31 +40,40 @@ Folk are born, grow up, grow old and die, as in the Sims, with a medieval face o
 - **Babies need care**: a cradle to sleep in, and needs of their own (hunger, comfort, cleanliness) that parents see to: feeding, rocking, washing. A baby that is neglected for too long is taken in by the parish. Toddlers run about and need watching too
 - Townsfolk couples have children as well, so the town grows and changes
 
-## Milestone 15: Work sites and resources
+## Milestone 15: A wider world and closer ties (done)
+
+- **A day is an hour.** One game day takes one real hour at normal speed, with 3x, 10x and 30x for fast-forwarding. Walking runs on finer motion ticks, so people still cross the street in seconds. Lifespans were halved to suit
+- **A face for each age**: swaddled babies, toddlers with a curl and a bib, children with big heads, lanky youths, greying and stooped elders with wrinkles, sticks and bald heads
+- **A bigger map** (480 by 320) with a proper town in the middle: cobbled streets, a market square with a well and stalls, side streets of houses, inns, shops, a clinic, chapels, lanterns, flower beds and woodpiles
+- **More towns**: a market town, two villages (one by a lake with a pier) and a hamlet, each with a name and its own people and jobs, joined by earth roads with plank bridges. T visits the next town, M shows the whole map, and names show when zoomed out
+- **Courtship**: flirt, kiss, ask out, go on dates, move in with a partner (or have them move in with you), break up. Family and the taken are out of reach. Townsfolk pair up, move in together and have children on their own
+- A leaner README, with the data reference in `docs/DATA.md`
+
+## Milestone 16: Work sites and resources
 
 - Five resources: wood, stone, grain, fish and herbs (`resources.json`: name, price)
-- Work sites at the edge of town, made from templates like the buildings: a **woodlot** by the forest, a **quarry** at the rocks, **fields** outside the walls, a **fishing jetty** on the water and an **herb garden**
+- Work sites at the edge of town, made from templates like the buildings: a **woodlot** by the forest, a **quarry** at the rocks, **fields** outside the walls, a **fishing jetty** on the water (the fishing village's pier is waiting) and an **herb garden**
 - Each site has places to work: a chopping block, a quarry face, field plots, a jetty, herb beds. Folk can take a job at a site (a wage, as now), or gather on their own: right-click and "Chop wood" puts what they gather in your household's stockpile
 - Fields follow the seasons: sow in spring, they grow through summer, harvest in late summer and autumn, fallow in winter
 - The stockpile shows under the purse. Building now takes materials as well as coin (a timber wall takes wood, a stone wall stone); anything you are short of is bought at the shop's price, shown before you build
-- Surplus sells at the shop (and at a better price on market day)
+- Surplus sells at the shop (and at a better price on market day), and traders from other towns buy and sell on the roads
 
-## Milestone 16: Accidents
+## Milestone 17: Accidents
 
 - **Fire**: a hearth can throw a spark. Fire spreads to wood (timber walls, beds, straw, plank floors), folk nearby beat it out on their own, and anyone caught in it can be burned to death. Stone does not burn
 - **Work accidents**, rare: a falling tree at the woodlot, a fall at the quarry, which injure or kill
 - **Drowning**, very rare, while fishing
-- **Plague**: an illness that spreads from person to person when they are close, worse in a crowd; the clinic and keeping clean help. Rare, and deadly
+- **Plague**: an illness that spreads from person to person when they are close, worse in a crowd and between towns; the clinic and keeping clean help. Rare, and deadly
 
 ## Later
 
 Roughly in the order they would matter:
 
-- Courtship and marriage, weddings at the chapel, and married couples sharing a home
+- Marriage and weddings at the chapel, engagements, rings
 - Builders and materials hauled to the site, rooms and roofs
 - Skills that grow with practice (woodcutting, cooking, healing, music) and pass on as a trade
 - Ambitions, like the Sims' aspirations: a goal for each of your folk, and small wishes that come and go
-- Playing another family in the town, and the town's families carrying on without you
-- Traders and caravans, a market square, and more goods to make and sell
+- Playing another family in the town, and the town's families carrying on without you (inheritance, moving between towns)
+- Traders and caravans, and more goods to make and sell
 - Sound and music
 - Sprites drawn by hand to replace the code-drawn art, one piece at a time

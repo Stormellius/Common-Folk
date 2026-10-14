@@ -1,0 +1,20 @@
+[
+  { "id": "romance",
+    "min_age": 18,
+    "ask_out_romance": 25,
+    "ask_out_opinion": 25,
+    "move_in_romance": 40,
+    "move_in_dating_days": 1,
+    "daily_decay": 0.6,
+    "partner_daily_gain": 0.5,
+    "date_minutes": 60,
+    "date_romance": 14,
+    "date_opinion": 6,
+    "date_from_hour": 9,
+    "date_until_hour": 22,
+    "date_venues": ["park", "tavern", "chapel"],
+    "breakup_opinion": -45,
+    "town_pair_chance": 0.012,
+    "household_pair_chance": 0.3,
+    "town_move_in_chance": 0.3 }
+]

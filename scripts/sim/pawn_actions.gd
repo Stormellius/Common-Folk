@@ -24,6 +24,10 @@ const FUND_PREFIX := "fund:"         # "fund:<amount>"
 const PLEAD_PREFIX := "plead:"       # "plead:<dying person's id>"
 const TEND_PREFIX := "tend:"         # "tend:<care id>:<baby's id>"
 const ATTEND_PREFIX := "attend:"     # "attend:<mother's id>"
+const DATE_PREFIX := "date:"         # "date:<partner's id>"
+const MOVE_PREFIX := "move:"         # "move:invite:<id>" (they move in with you) or "move:join:<id>" (you move in with them)
+const BREAKUP_PREFIX := "breakup:"   # "breakup:<partner's id>"
+const MOVE_HOME := "move_home"
 const FUND_STEPS := [10, 50]
 
 
@@ -61,6 +65,9 @@ static func list_for(sim: Simulation, pawn: Pawn, tile: Vector2i) -> Array[Dicti
 			actions.append(_entry(FUND_PREFIX + str(amount), "Give %s to the town's defense fund (now %s)" % [Economy.format(amount), Economy.format(sim.realm.fund)], not short, "you only have %s" % Economy.format(sim.household.coins) if short else ""))
 	actions.append_array(_land_entries(sim, tile))
 	actions.append(_walk_entry(sim, pawn, tile))
+	if sim.household.get_pawn(pawn.id) != null and pawn.home_lot != WorldState.HOME_LOT:
+		var home_blocker := Romance.move_home_blocker(sim, pawn)
+		actions.append(_entry(MOVE_HOME, "Move back to your own lot", home_blocker == "", home_blocker))
 	if pawn.is_busy():
 		actions.append(_entry(STOP, "Stop"))
 	for other in sim.people():
@@ -77,11 +84,29 @@ static func list_for(sim: Simulation, pawn: Pawn, tile: Vector2i) -> Array[Dicti
 			var plead_blocker := Mortality.plead_blocker(sim, pawn, other)
 			actions.append(_entry(PLEAD_PREFIX + str(other.id), "Plead with Death for %s" % other.display_name.get_slice(" ", 0), plead_blocker == "", plead_blocker))
 			continue
+		actions.append_array(_romance_entries(sim, pawn, other))
 		for interaction in DataRegistry.get_list("interactions"):
 			var blocker := sim.interaction_blocker(pawn, other, str(interaction["id"]))
 			var label := str(interaction.get("action", "Interact with {name}")).replace("{name}", other.display_name.get_slice(" ", 0))
 			actions.append(_entry(INTERACT_PREFIX + "%s:%d" % [interaction["id"], other.id], label, blocker == "", blocker))
 	return actions
+
+
+## What a couple can do beyond talking: go on a date, move in together, part.
+static func _romance_entries(sim: Simulation, pawn: Pawn, other: Pawn) -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	if not Romance.together(pawn, other):
+		return entries
+	var name := other.display_name.get_slice(" ", 0)
+	var date_blocker := Romance.date_blocker(sim, pawn, other)
+	entries.append(_entry(DATE_PREFIX + str(other.id), "Go on a date with %s" % name, date_blocker == "", date_blocker))
+	if sim.household.get_pawn(pawn.id) != null and sim.household.get_pawn(other.id) == null:
+		var invite_blocker := Romance.invite_blocker(sim, pawn, other)
+		entries.append(_entry(MOVE_PREFIX + "invite:%d" % other.id, "Ask %s to move in" % name, invite_blocker == "", invite_blocker))
+		var join_blocker := Romance.join_blocker(sim, pawn, other)
+		entries.append(_entry(MOVE_PREFIX + "join:%d" % other.id, "Move in with %s" % name, join_blocker == "", join_blocker))
+	entries.append(_entry(BREAKUP_PREFIX + str(other.id), "Break up with %s" % name))
+	return entries
 
 
 ## Feeding, soothing and washing one of your household's babies, each with how it is now.
@@ -194,6 +219,32 @@ static func _perform(sim: Simulation, pawn: Pawn, action_id: String, tile: Vecto
 		if dying == null:
 			return { "ok": false, "message": "Death has already taken them" }
 		return sim.order_plead(pawn, dying)
+	if action_id == MOVE_HOME:
+		var home_blocker := Romance.move_home_blocker(sim, pawn)
+		if home_blocker != "":
+			return { "ok": false, "message": "Can't move back: %s" % home_blocker }
+		sim.health_notice.emit(Romance.move_home(sim, pawn))
+		return { "ok": true, "message": "" }
+	if action_id.begins_with(DATE_PREFIX):
+		var date_partner := sim.person(int(action_id.trim_prefix(DATE_PREFIX)))
+		return Romance.order_date(sim, pawn, date_partner) if date_partner != null else { "ok": false, "message": "They are not here" }
+	if action_id.begins_with(MOVE_PREFIX):
+		var move_parts := action_id.trim_prefix(MOVE_PREFIX).split(":")
+		var lover := sim.person(int(move_parts[1])) if move_parts.size() == 2 else null
+		if lover == null:
+			return { "ok": false, "message": "They are not here" }
+		var move_blocker := Romance.invite_blocker(sim, pawn, lover) if move_parts[0] == "invite" else Romance.join_blocker(sim, pawn, lover)
+		if move_blocker != "":
+			return { "ok": false, "message": "Can't move in: %s" % move_blocker }
+		var told := Romance.invite(sim, pawn, lover) if move_parts[0] == "invite" else Romance.join(sim, pawn, lover)
+		sim.health_notice.emit(told)
+		return { "ok": true, "message": "" }
+	if action_id.begins_with(BREAKUP_PREFIX):
+		var ex := sim.person(int(action_id.trim_prefix(BREAKUP_PREFIX)))
+		if ex == null or not Romance.together(pawn, ex):
+			return { "ok": false, "message": "You are not together" }
+		sim.health_notice.emit(Romance.break_up(sim, pawn, ex))
+		return { "ok": true, "message": "" }
 	if action_id.begins_with(TEND_PREFIX):
 		var tend_parts := action_id.trim_prefix(TEND_PREFIX).split(":")
 		var baby := sim.person(int(tend_parts[1])) if tend_parts.size() == 2 else null

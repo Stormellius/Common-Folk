@@ -337,6 +337,9 @@ static func _make_baby(sim: Simulation, mother: Pawn, rng: RandomNumberGenerator
 	baby.class_id = mother.class_id
 	baby.birthday = posmod(GameClock.get_day_number(), Life.days_per_year(sim.world))
 	baby.carried_by = mother.id
+	baby.parents = [mother.id] as Array[int]
+	if mother.pregnancy_father != 0:
+		baby.parents.append(mother.pregnancy_father)
 	baby.tile = mother.committed_tile()
 	baby.step_to = baby.tile
 	Babies.reset_care(baby)

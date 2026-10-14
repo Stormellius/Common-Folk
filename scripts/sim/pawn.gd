@@ -103,6 +103,16 @@ var skip_work_day := -1
 ## What this person thinks of each other person they have met, -100 to 100, by that person's id
 ## (see Relations). Missing means a stranger: 0.
 var relations: Dictionary = {}
+## Romance (see Romance): how taken this person is with each other person, 0 to 100, by id; who they
+## are seeing (0 for nobody) and how far it has got ("dating", or "partners" once they live
+## together) and since which tick; where they lived before moving in with someone; and their parents,
+## so that family stay apart.
+var romance: Dictionary = {}
+var partner_id := 0
+var partner_status := ""
+var partner_since := 0
+var origin_lot := ""
+var parents: Array[int] = []
 ## Ticks to wait before looking for something to do about a need again.
 var think_cooldown := 0
 
@@ -114,6 +124,18 @@ var step_ticks_done := 0
 
 func is_infant() -> bool:
 	return age < Pregnancy.infant_age()
+
+
+func romance_for(other_id: int) -> float:
+	return float(romance.get(other_id, 0.0))
+
+
+func add_romance(other_id: int, delta: float) -> void:
+	var value := clampf(romance_for(other_id) + delta, 0.0, 100.0)
+	if value <= 0.0:
+		romance.erase(other_id)
+	else:
+		romance[other_id] = value
 
 
 func is_pregnant() -> bool:
@@ -233,6 +255,12 @@ func to_dict() -> Dictionary:
 		"work_job": work_job,
 		"skip_work_day": skip_work_day,
 		"relations": _relations_for_save(),
+		"romance": _romance_for_save(),
+		"partner": partner_id,
+		"partner_status": partner_status,
+		"partner_since": partner_since,
+		"origin_lot": origin_lot,
+		"parents": Array(parents),
 		"look": look.duplicate(),
 		"tile": _vec_to_array(tile),
 		"facing": _vec_to_array(facing),
@@ -300,6 +328,16 @@ static func from_dict(data: Dictionary) -> Pawn:
 	if saved_relations is Dictionary:
 		for other_id in saved_relations:
 			pawn.relations[int(other_id)] = float(saved_relations[other_id])  # JSON keys are text
+	var saved_romance: Variant = data.get("romance", {})
+	if saved_romance is Dictionary:
+		for other_id in saved_romance:
+			pawn.romance[int(other_id)] = float(saved_romance[other_id])
+	pawn.partner_id = int(data.get("partner", 0))
+	pawn.partner_status = str(data.get("partner_status", ""))
+	pawn.partner_since = int(data.get("partner_since", 0))
+	pawn.origin_lot = str(data.get("origin_lot", ""))
+	for parent_id in data.get("parents", []):
+		pawn.parents.append(int(parent_id))
 	var saved_look: Variant = data.get("look", {})
 	pawn.look = saved_look.duplicate() if saved_look is Dictionary else {}
 	if pawn.look.has("hair_style"):
@@ -338,6 +376,13 @@ static func from_dict(data: Dictionary) -> Pawn:
 	pawn.pose = str(data.get("pose", ""))
 	pawn.think_cooldown = int(data.get("think", 0))
 	return pawn
+
+
+func _romance_for_save() -> Dictionary:
+	var saved := {}
+	for other_id in romance:
+		saved[str(other_id)] = snappedf(float(romance[other_id]), 0.1)
+	return saved
 
 
 func _relations_for_save() -> Dictionary:

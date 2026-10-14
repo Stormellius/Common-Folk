@@ -82,5 +82,17 @@
   { "id": "saw_ghost",    "text": "Saw the ghost of {name}",  "mood": -8,  "hours": 8,  "on": "saw_ghost" },
   { "id": "laid_to_rest", "text": "Laid {name} to rest",      "mood": 6,   "hours": 24, "on": "laid_to_rest" },
   { "id": "came_of_age",  "text": "Came of age",              "mood": 6,   "hours": 24, "on": "came_of_age" },
-  { "id": "grew_old",     "text": "Growing old",              "mood": -3,  "hours": 24, "on": "grew_old" }
+  { "id": "grew_old",     "text": "Growing old",              "mood": -3,  "hours": 24, "on": "grew_old" },
+  { "id": "flirted",      "text": "Flirting",                 "mood": 4,   "hours": 8,   "on": "interaction:flirt" },
+  { "id": "kissed",       "text": "A kiss",                   "mood": 8,   "hours": 12,  "on": "interaction:kiss" },
+  { "id": "asked_out",    "text": "Asked out",                "mood": 6,   "hours": 12,  "on": "interaction:ask_out" },
+  { "id": "new_romance",  "text": "Newly in love with {name}", "mood": 14, "hours": 72,  "on": "new_romance" },
+  { "id": "had_date",     "text": "A lovely time with {name}", "mood": 10, "hours": 24,  "on": "had_date" },
+  { "id": "heartbroken",  "text": "Heartbroken over {name}",  "mood": -22, "hours": 120, "on": "heartbroken" },
+  { "id": "broke_up",     "text": "Ended it with {name}",     "mood": -9,  "hours": 48,  "on": "broke_up" },
+  { "id": "widowed",      "text": "Lost {name}, the one they loved", "mood": -20, "hours": 144, "on": "widowed" },
+  { "id": "moved_in",     "text": "Moved in with {name}",     "mood": 10,  "hours": 72,  "on": "moved_in" },
+  { "id": "moved_away",   "text": "{name} has moved out",     "mood": -5,  "hours": 48,  "on": "moved_away" },
+  { "id": "partnered",    "text": "Has someone special",      "mood": 4,   "when": { "partner": true }, "group": "partner" },
+  { "id": "flirt_flop",   "text": "Flirting fell flat",       "mood": -4,  "hours": 8,   "on": "flirt_flop" }
 ]

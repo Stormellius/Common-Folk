@@ -28,6 +28,7 @@ func _ready() -> void:
 	_test_region()
 	_test_economy()
 	_test_social()
+	_test_romance()
 	_test_events()
 	_test_realm()
 	_test_faith_and_illness()
@@ -1531,6 +1532,332 @@ func _collect_events(world_seed: int, days: int) -> Array[Dictionary]:
 				if change["kind"] == "started":
 					found.append({ "id": change["id"], "day": day, "season": GameClock.get_date()["season_id"] })
 	return found
+
+
+## A small world for courtship: your lot with beds for three, two town houses, a green, and a shop in
+## another town. Returns the world, your household (Anna and Ben), the town (Cara of the first
+## house, with a job in the other town, and Dan of the second) and a simulation.
+func _romance_setup() -> Dictionary:
+	GameClock.set_time(3, 12)
+	var world := WorldState.new(90, 40, 3, "grass")
+	world.lot = Rect2i(2, 2, 12, 8)
+	world.lots = [
+		{ "id": "lot_1", "kind": "house", "name": "House", "template": "cottage", "facing": "south", "rect": Rect2i(20, 2, 10, 8), "public": false, "town": "t1" },
+		{ "id": "lot_2", "kind": "house", "name": "House", "template": "cottage", "facing": "south", "rect": Rect2i(34, 2, 10, 8), "public": false, "town": "t1" },
+		{ "id": "lot_3", "kind": "park", "name": "Village green", "template": "green", "facing": "south", "rect": Rect2i(50, 2, 14, 10), "public": true, "town": "t1" },
+		{ "id": "lot_4", "kind": "shop", "name": "Shop", "template": "shop", "facing": "south", "rect": Rect2i(70, 2, 10, 8), "public": true, "town": "t2" },
+	]
+	world.towns = [
+		{ "id": "t1", "name": "Testford", "kind": "town", "profile": "town", "center": Vector2i(40, 10), "rect": Rect2i(0, 0, 66, 40), "home": true },
+		{ "id": "t2", "name": "Faraway", "kind": "village", "profile": "village", "center": Vector2i(75, 10), "rect": Rect2i(66, 0, 24, 40), "home": false },
+	]
+	for lot_rect in [Rect2i(20, 2, 10, 8), Rect2i(34, 2, 10, 8)]:
+		for y in range(lot_rect.position.y, lot_rect.end.y):
+			for x in range(lot_rect.position.x, lot_rect.end.x):
+				world.set_floor(Vector2i(x, y), "planks")
+	for bed_tile in [Vector2i(4, 4), Vector2i(6, 4), Vector2i(8, 4), Vector2i(22, 4), Vector2i(24, 4), Vector2i(36, 4)]:
+		world.add_object("bed", bed_tile)
+	var household := Household.new()
+	household.coins = 40
+	var town := Household.new(NpcGenerator.FIRST_ID)
+	var specs := [
+		[household, "Anna Marsh", "female", 25, ["straight"], WorldState.HOME_LOT, Vector2i(5, 6)],
+		[household, "Ben Marsh", "male", 27, ["straight"], WorldState.HOME_LOT, Vector2i(7, 6)],
+		[town, "Cara Cooper", "female", 24, ["bisexual"], "lot_1", Vector2i(23, 6)],
+		[town, "Dan Hollis", "male", 26, ["straight"], "lot_2", Vector2i(37, 6)],
+	]
+	var people: Array[Pawn] = []
+	for spec in specs:
+		var person := Pawn.new()
+		person.display_name = spec[1]
+		person.gender = spec[2]
+		person.age = spec[3]
+		person.adult = true
+		for trait_id in spec[4]:
+			person.traits.append(str(trait_id))
+		person.home_lot = spec[5]
+		person.tile = spec[6]
+		person.step_to = person.tile
+		_fill_needs(person)
+		spec[0].add_pawn(person)
+		people.append(person)
+	people[2].work_lot = "lot_4"
+	people[2].work_job = "shop_clerk"
+	Relations.make_family([people[0], people[1]] as Array[Pawn])
+	var sim := Simulation.new(world, household, town)
+	return { "world": world, "household": household, "town": town, "sim": sim, "anna": people[0], "ben": people[1], "cara": people[2], "dan": people[3] }
+
+
+func _test_romance() -> void:
+	print("Courtship, dates and moving in")
+	var setup := _romance_setup()
+	var sim: Simulation = setup["sim"]
+	var world: WorldState = setup["world"]
+	var household: Household = setup["household"]
+	var town: Household = setup["town"]
+	var anna: Pawn = setup["anna"]
+	var ben: Pawn = setup["ben"]
+	var cara: Pawn = setup["cara"]
+	var dan: Pawn = setup["dan"]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 9
+	var interactions := DataRegistry.get_list("interactions")
+	var kinds := interactions.map(func(i: Dictionary) -> String: return str(i["id"]))
+	_check("flirt" in kinds and "kiss" in kinds and "ask_out" in kinds, "flirting, kissing and asking someone out are interactions")
+	_check(float(Romance.config()["ask_out_romance"]) > 0.0 and Romance.config()["date_venues"].has("park"), "courtship is data (relationships.json)")
+
+	# Who can flirt with whom.
+	anna.set_opinion(dan.id, 20.0)
+	dan.set_opinion(anna.id, 20.0)
+	_check(sim.interaction_blocker(anna, dan, "flirt") == "", "a woman and a man who are drawn to each other may flirt")
+	_check("interested" in sim.interaction_blocker(anna, cara, "flirt"), "but not with someone she is not drawn to (%s)" % sim.interaction_blocker(anna, cara, "flirt"))
+	var child := Pawn.new()
+	child.display_name = "Kid Marsh"
+	child.age = 9
+	child.adult = false
+	child.tile = Vector2i(9, 6)
+	child.step_to = child.tile
+	_fill_needs(child)
+	household.add_pawn(child)
+	_check(sim.interaction_blocker(anna, child, "flirt") != "", "or with a child")
+	var sister := Pawn.new()
+	sister.display_name = "Sis Marsh"
+	sister.gender = "male"
+	sister.traits = ["bisexual"] as Array[String]
+	sister.age = 30
+	sister.tile = Vector2i(10, 6)
+	sister.step_to = sister.tile
+	_fill_needs(sister)
+	household.add_pawn(sister)
+	anna.traits = ["bisexual"] as Array[String]
+	sister.parents = [anna.id] as Array[int]
+	sister.set_opinion(anna.id, 50.0)
+	anna.set_opinion(sister.id, 50.0)
+	_check("family" in sim.interaction_blocker(anna, sister, "flirt") and Relations.are_kin(anna, sister), "or with family (%s)" % sim.interaction_blocker(anna, sister, "flirt"))
+	var twin := Pawn.new()
+	twin.parents = [anna.id] as Array[int]
+	_check(Relations.are_kin(twin, sister) and not Relations.are_kin(ben, anna), "siblings are family, housemates are not")
+	household.remove_pawn(sister.id)
+	household.remove_pawn(child.id)
+	anna.traits = ["straight"] as Array[String]
+
+	# Flirting warms romance on both sides.
+	var flirt := DataRegistry.get_def("interactions", "flirt")
+	var tries := 0
+	while anna.romance_for(dan.id) < 25.0 and tries < 40:
+		anna.job_interaction = "flirt"
+		sim._finish_interaction(anna, dan, flirt)
+		tries += 1
+	_check(anna.romance_for(dan.id) >= 25.0 and dan.romance_for(anna.id) >= 25.0, "flirting warms them both (after %d tries)" % tries)
+	_check(anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "flirted") and tries > 2, "and it lifts the mood, though a flirt can fall flat")
+	var kiss_entry: Dictionary = _interaction_entries(sim, anna, dan)["kiss"]
+	_check(kiss_entry["enabled"] or "ready" in str(kiss_entry["reason"]), "a kiss waits until they are warm enough (%s)" % str(kiss_entry))
+	dan.romance[anna.id] = 10.0
+	_check("ready" in sim.interaction_blocker(anna, dan, "kiss") and "ready" in sim.interaction_blocker(anna, dan, "ask_out"), "she cannot kiss or ask out someone who is not ready (%s)" % sim.interaction_blocker(anna, dan, "ask_out"))
+	dan.romance[anna.id] = 30.0
+	anna.romance[dan.id] = 30.0
+	dan.set_opinion(anna.id, 30.0)
+	anna.set_opinion(dan.id, 30.0)
+
+	# Asking out.
+	_check(sim.interaction_blocker(anna, dan, "ask_out") == "" and _interaction_entries(sim, anna, dan)["ask_out"]["enabled"], "once both are ready she can ask him out")
+	var asked := sim.order_interact(anna, dan, "ask_out")
+	_check(asked["ok"] and dan.job_kind == "interact", "asking sends her to him")
+	for i in 90:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		if anna.partner_id != 0:
+			break
+	_check(anna.partner_id == dan.id and dan.partner_id == anna.id and anna.partner_status == "dating" and Romance.together(anna, dan), "he says yes: they are dating")
+	_check(anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "new_romance" and t.get("about", "") == "Dan") and _has_part(Mood.evaluate(anna, household, GameClock.tick), "partnered"), "and both are glad of it")
+	_check(sim.relationship_lines(anna)[0]["name"] == "Dan Hollis" and sim.relationship_lines(anna)[0]["label"] == "Dating", "the panel lists a partner first")
+	_check("together" in sim.interaction_blocker(anna, dan, "ask_out"), "nobody asks out their own partner")
+	var cara_flirt := sim.interaction_blocker(cara, anna, "flirt")
+	var ben_flirt := sim.interaction_blocker(ben, anna, "flirt")
+	_check("seeing someone" in sim.interaction_blocker(dan, cara, "flirt") or "interested" in sim.interaction_blocker(dan, cara, "flirt"), "a taken person is not flirted with, and does not flirt")
+	dan.partner_id = 0
+	anna.partner_id = 0
+	cara.set_opinion(anna.id, 40.0)
+	anna.set_opinion(cara.id, 40.0)
+	dan.partner_id = anna.id
+	anna.partner_id = dan.id
+	_check(cara_flirt != "" and ben_flirt != "", "(%s; %s)" % [cara_flirt, ben_flirt])
+
+	# The menu and a date.
+	var entries := PawnActions.list_for(sim, anna, dan.tile).map(func(e: Dictionary) -> String: return str(e["id"]))
+	_check(entries.has("date:%d" % dan.id) and entries.has("breakup:%d" % dan.id) and entries.has("move:invite:%d" % dan.id) and entries.has("move:join:%d" % dan.id), "a couple's menu offers a date, moving in and a break-up")
+	GameClock.set_time(3, 23)
+	_check("hour" in Romance.date_blocker(sim, anna, dan), "nobody goes out on a date in the dead of night")
+	GameClock.set_time(3, 12)
+	_check(Romance.date_blocker(sim, anna, dan) == "", "by day they can")
+	var before_romance := anna.romance_for(dan.id)
+	var before_opinion := anna.opinion_of(dan.id)
+	var date_result := PawnActions.perform(sim, anna, "date:%d" % dan.id, dan.tile)
+	_check(date_result["ok"] and anna.job_kind == "date" and dan.job_kind == "date" and "date" in sim.describe_activity(anna).to_lower(), "she asks him on a date and both set off (%s)" % sim.describe_activity(anna))
+	var date_minutes := 0
+	for i in 220:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		date_minutes += 1
+		if anna.job_kind == "" and dan.job_kind == "":
+			break
+	_check(anna.job_kind == "" and dan.job_kind == "" and anna.romance_for(dan.id) > before_romance + 8.0 and anna.opinion_of(dan.id) > before_opinion, "after an hour at the green they are closer (%d min)" % date_minutes)
+	_check(dan.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "had_date") and Rect2i(50, 2, 14, 10).has_point(anna.tile), "and remember it with joy")
+	dan.job_kind = "use"
+	_check("busy" in Romance.date_blocker(sim, anna, dan), "a busy partner cannot be taken out")
+	dan.job_kind = ""
+
+	# Moving in.
+	anna.romance[dan.id] = 50.0
+	dan.romance[anna.id] = 50.0
+	anna.partner_since = GameClock.tick
+	dan.partner_since = GameClock.tick
+	_check("long enough" in Romance.invite_blocker(sim, anna, dan), "they must have been together a while (%s)" % Romance.invite_blocker(sim, anna, dan))
+	anna.partner_since = GameClock.tick - 2 * GameClock.MINUTES_PER_DAY
+	dan.partner_since = anna.partner_since
+	_check(Romance.spare_beds(sim, WorldState.HOME_LOT) == 1 and Romance.invite_blocker(sim, anna, dan) == "", "with a bed to spare at home she can ask him to move in")
+	var told := Romance.invite(sim, anna, dan)
+	_check(household.get_pawn(dan.id) != null and town.get_pawn(dan.id) == null and dan.id >= NpcGenerator.FIRST_ID, "he joins your household and keeps his own number (%s)" % told)
+	_check(dan.home_lot == WorldState.HOME_LOT and dan.origin_lot == "lot_2" and dan.partner_status == "partners" and anna.partner_status == "partners", "and lives on your lot now")
+	_check(Romance.spare_beds(sim, WorldState.HOME_LOT) == 0 and household.select(dan.id), "the beds are full, and you can play him")
+	_check(dan.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "moved_in") and anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "moved_in"), "they are glad to be together")
+	var hud_lines := PawnActions.list_for(sim, anna, dan.tile).map(func(e: Dictionary) -> String: return str(e["id"]))
+	_check(not hud_lines.has("move:invite:%d" % dan.id), "once he lives with her there is no more asking")
+
+	# Breaking up sends the one who moved in home.
+	var leaving := Romance.break_up(sim, anna, dan)
+	_check(anna.partner_id == 0 and dan.partner_id == 0 and anna.romance_for(dan.id) == 0.0 and anna.opinion_of(dan.id) < 0.0, "a break-up ends it, and sours the friendship (%s)" % leaving)
+	_check(household.get_pawn(dan.id) == null and town.get_pawn(dan.id) != null and dan.home_lot == "lot_2" and dan.origin_lot == "", "and he goes back to the town and his own house")
+	_check(dan.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "heartbroken") and anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "broke_up"), "one is heartbroken and one is sorry")
+
+	# Moving in with them: Anna and Cara (Anna turns out to like women).
+	anna.traits = ["bisexual"] as Array[String]
+	Romance.begin_dating(sim, anna, cara)
+	anna.romance[cara.id] = 60.0
+	cara.romance[anna.id] = 60.0
+	anna.partner_since = GameClock.tick - 3 * GameClock.MINUTES_PER_DAY
+	cara.partner_since = anna.partner_since
+	_check(Romance.invite_blocker(sim, anna, cara) == "" and Romance.join_blocker(sim, anna, cara) != "" == false, "she could ask Cara in, or move in with her")
+	world.add_object("bed", Vector2i(26, 4))
+	var moved := Romance.join(sim, anna, cara)
+	_check(anna.home_lot == "lot_1" and anna.origin_lot == WorldState.HOME_LOT and household.get_pawn(anna.id) != null and "moved in" in moved, "Anna moves into Cara's house and stays one of your folk (%s)" % moved)
+	_check(anna.opinion_of(cara.id) >= Relations.FAMILY_START, "the family there take to her")
+	var home_entries := PawnActions.list_for(sim, anna, Vector2i(5, 5)).map(func(e: Dictionary) -> String: return str(e["id"]))
+	_check(home_entries.has("move_home") and sim.use_blocker(anna, world.object_at(Vector2i(4, 4))) != "", "she can no longer use the beds on your lot, and may move back")
+	_check(sim.use_blocker(anna, world.object_at(Vector2i(26, 4))) == "", "but she can use the ones at Cara's")
+	var back_home := PawnActions.perform(sim, anna, "move_home", Vector2i(5, 5))
+	_check(back_home["ok"] and anna.home_lot == WorldState.HOME_LOT and anna.partner_status == "dating", "moving back puts them back to dating")
+
+	# A job in another town cannot be kept.
+	_check(cara.work_job == "shop_clerk", "Cara works at the shop in the other town")
+	anna.partner_since = GameClock.tick - 3 * GameClock.MINUTES_PER_DAY
+	cara.partner_since = anna.partner_since
+	world.add_object("bed", Vector2i(10, 4))
+	Romance.invite(sim, anna, cara)
+	_check(cara.work_job == "" and household.get_pawn(cara.id) != null, "a partner who moves to your lot gives up a job in another town")
+
+	# A partner dies.
+	Romance.break_up(sim, anna, cara)
+	Romance.begin_dating(sim, anna, ben)
+	Mortality.fall(sim, ben, "starved")
+	sim.die(ben, "starved")
+	_check(anna.partner_id == 0 and anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "widowed"), "if a partner dies the other is on their own, in grief")
+
+	# Among the town's people.
+	var civic := _romance_setup()
+	var civic_sim: Simulation = civic["sim"]
+	var civic_town: Household = civic["town"]
+	var extra: Array[Pawn] = []
+	for spec in [["Eve Hollis", "female", "lot_2"], ["Finn Cooper", "male", "lot_1"]]:
+		var person := Pawn.new()
+		person.display_name = spec[0]
+		person.gender = spec[1]
+		person.age = 25
+		person.traits = ["straight"] as Array[String]
+		person.home_lot = spec[2]
+		person.tile = Vector2i(37, 7) if spec[2] == "lot_2" else Vector2i(23, 7)
+		person.step_to = person.tile
+		_fill_needs(person)
+		civic_town.add_pawn(person)
+		extra.append(person)
+	var civic_cara: Pawn = civic["cara"]
+	civic_cara.traits = ["straight"] as Array[String]
+	civic_cara.work_lot = ""
+	civic_cara.work_job = ""
+	var civic_dan: Pawn = civic["dan"]
+	var eve: Pawn = extra[0]
+	var finn: Pawn = extra[1]
+	# Dan and Eve share a house, Cara and Finn another: they pair up and live as partners.
+	var days := 0
+	while (civic_dan.partner_id == 0 or civic_cara.partner_id == 0) and days < 60:
+		GameClock.set_time(10 + days, 0)
+		Romance.new_day(civic_sim, rng)
+		days += 1
+	_check(civic_dan.partner_id == eve.id and civic_dan.partner_status == "partners" and civic_cara.partner_id == finn.id, "two grown-ups of the town under one roof soon become partners (after %d days)" % days)
+	# Singles of different houses: free Dan and Cara's partners and let them meet.
+	for pawn in [civic_dan, eve, civic_cara, finn]:
+		pawn.partner_id = 0
+		pawn.partner_status = ""
+		pawn.romance.clear()
+	eve.traits = ["asexual"] as Array[String]  # nobody else under their roofs is drawn to them
+	finn.traits = ["asexual"] as Array[String]
+	civic["world"].add_object("bed", Vector2i(26, 4))  # a spare bed in each house
+	civic["world"].add_object("bed", Vector2i(38, 4))
+	var courted := 0
+	for day in 2000:
+		GameClock.set_time(100 + day, 0)
+		Romance.new_day(civic_sim, rng)
+		if civic_cara.partner_id == civic_dan.id:
+			courted = day
+			break
+	_check(civic_cara.partner_id == civic_dan.id and civic_cara.partner_status == "dating", "singles of one town in time take to each other (day %d)" % courted)
+	var settled := false
+	for day in 60:
+		GameClock.set_time(2200 + day, 0)
+		Romance.new_day(civic_sim, rng)
+		if civic_cara.partner_status == "partners":
+			settled = true
+			break
+	_check(settled and civic_cara.home_lot == civic_dan.home_lot and (civic_cara.origin_lot != "" or civic_dan.origin_lot != ""), "and a dating couple move under one roof, if there is a bed (%s and %s live at %s)" % [civic_cara.display_name, civic_dan.display_name, civic_dan.home_lot])
+
+	# Cooling off.
+	var cold := _romance_setup()
+	var cold_a: Pawn = cold["anna"]
+	var cold_d: Pawn = cold["dan"]
+	cold_a.romance[cold_d.id] = 20.0
+	Romance.new_day(cold["sim"], rng)
+	_check(cold_a.romance_for(cold_d.id) < 20.0, "romance cools if it is not kept up")
+	cold_a.romance[cold_d.id] = 60.0
+	cold_a.partner_id = cold_d.id
+	cold_d.partner_id = cold_a.id
+	Romance.new_day(cold["sim"], rng)
+	_check(cold_a.romance_for(cold_d.id) > 60.0, "but a couple's grows")
+
+	# Saving.
+	cold_a.parents = [7, 8] as Array[int]
+	cold_a.origin_lot = "lot_2"
+	cold_a.partner_status = "dating"
+	cold_a.partner_since = 1234
+	_check(SaveGame.save(TEST_SAVE, cold["world"], cold["household"], {}) == OK, "a household in love is saved")
+	var loaded := SaveGame.load_from(TEST_SAVE)
+	var loaded_anna: Pawn = loaded["household"].pawns[0]
+	_check(loaded["ok"] and loaded["household"].to_dict() == cold["household"].to_dict() and is_equal_approx(loaded_anna.romance_for(cold_d.id), cold_a.romance_for(cold_d.id)) and loaded_anna.partner_id == cold_d.id and loaded_anna.partner_status == "dating" and loaded_anna.parents == [7, 8] and loaded_anna.origin_lot == "lot_2" and loaded_anna.partner_since == 1234, "and the romance, partner, family and where she came from survive a round trip")
+	DirAccess.remove_absolute(TEST_SAVE)
+
+	# Babies are born with parents.
+	var parents := _family_setup()
+	var mum: Pawn = parents["mother"]
+	var dad: Pawn = parents["father"]
+	GameClock.set_time(0, 0)
+	Pregnancy.begin(parents["sim"], mum, dad, rng)
+	mum.babies_due = 2
+	_deliver(parents["sim"], mum, rng)
+	var newborns: Array[Pawn] = []
+	for pawn in parents["household"].pawns:
+		if pawn.is_infant():
+			newborns.append(pawn)
+	_check(newborns.size() == 2 and newborns[0].parents == [mum.id, dad.id] and Relations.are_kin(newborns[0], newborns[1]) and Relations.are_kin(newborns[0], mum), "a baby knows its parents, and its twin is its sibling")
+	GameClock.reset()
 
 
 func _test_events() -> void:
