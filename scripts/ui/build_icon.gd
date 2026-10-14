@@ -20,6 +20,8 @@ func _draw() -> void:
 			ObjectArt.draw(self, id, 0.8, 0.0)
 		"floor":
 			FloorArt.draw(self, id, Rect2(Vector2(6, 6), Vector2(32, 32)), Vector2i(1, 1))
+		"roof":
+			RoofArt.draw(self, id, Rect2(Vector2(6, 6), Vector2(32, 32)), Vector2i(1, 1), 15)
 		"remove":
 			var red := Color(0.86, 0.33, 0.28)
 			draw_line(Vector2(10, 10), Vector2(34, 34), red, 4.0)

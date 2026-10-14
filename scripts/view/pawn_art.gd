@@ -263,6 +263,20 @@ static func draw(ci: CanvasItem, look: Dictionary, facing: Vector2i, u: float, p
 		_ellipse(ci, (head + Vector2(sx * 4.6, 0.8)) * u, Vector2(1.3, 1.5) * u, EYE)
 
 
+## What a builder is carrying: a bundle of planks, a stone block, held in front.
+static func draw_carry(ci: CanvasItem, carrying: Dictionary, facing: Vector2i, u: float) -> void:
+	var kind := facing_kind(facing)
+	var anchor := Vector2(0.0, 2.0) if kind == SOUTH else (Vector2(0.0, -1.0) if kind == NORTH else Vector2(6.0 * (1.0 if kind == EAST else -1.0), 3.0))
+	var shown := 0
+	for resource_id in carrying:
+		var color := Color(str(DataRegistry.get_def("resources", str(resource_id)).get("color", "#b0a090")))
+		for i in mini(int(carrying[resource_id]), 3):
+			var spot := anchor + Vector2(-5.0 + shown * 3.2, 7.5 - shown * 1.6)
+			ci.draw_rect(Rect2(spot * u, Vector2(8.0, 4.0) * u), OUTLINE)
+			ci.draw_rect(Rect2((spot + Vector2(0.6, 0.6)) * u, Vector2(6.8, 2.8) * u), color)
+			shown += 1
+
+
 ## The tool in a person's hand (data/tools.json): drawn at the right hand, tilted, and swung while
 ## `working`. A satchel hangs at the hip instead.
 static func draw_tool(ci: CanvasItem, tool_id: String, facing: Vector2i, u: float, clock: float, working: bool) -> void:

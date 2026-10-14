@@ -1,0 +1,5 @@
+[
+  { "id": "shelter",
+    "roofed_drain_multipliers": { "warmth": 0.45 },
+    "open_sleep_rest": 0.75 }
+]

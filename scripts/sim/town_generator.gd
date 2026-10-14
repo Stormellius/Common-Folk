@@ -323,6 +323,8 @@ static func _build(world: WorldState, template: Dictionary, grid: Array[String],
 				while lot.has_point(outside):
 					world.set_tile(outside.x, outside.y, "dirt")  # a bare path across the yard
 					outside += DOOR_FACING[rot]
+	if floor_id != "":
+		Rooms.auto_roof(world, foot)  # the building's closed rooms are roofed
 	return way_in
 
 
@@ -334,6 +336,7 @@ static func _clear_lot(world: WorldState, entry: Dictionary) -> void:
 	for y in range(rect.position.y, rect.end.y):
 		for x in range(rect.position.x, rect.end.x):
 			world.set_floor(Vector2i(x, y), "")
+			world.set_roof(Vector2i(x, y), "")
 
 
 # --- the finishing touches -----------------------------------------------------------

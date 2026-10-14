@@ -26,6 +26,8 @@ var _loaded_view: Dictionary = {}  # the camera of the save just loaded
 @onready var cloud_shadows: CloudShadows = $CloudShadows
 @onready var weather: Weather = $Weather
 @onready var object_layer: ObjectLayer = $ObjectLayer
+@onready var site_layer: SiteLayer = $SiteLayer
+@onready var roof_layer: RoofLayer = $RoofLayer
 @onready var build: BuildController = $BuildController
 @onready var pawn_layer: PawnLayer = $PawnLayer
 @onready var tile_cursor: TileCursor = $TileCursor
@@ -105,6 +107,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			build.toggle()
 		KEY_G:
 			tile_cursor.toggle_grid()
+		KEY_R:
+			hud.show_message(roof_layer.cycle())
 		KEY_TAB:
 			if sim != null:
 				sim.household.cycle_selection(-1 if event.shift_pressed else 1)
@@ -225,6 +229,8 @@ func _apply_launch_options() -> void:
 		GameClock.set_time(int(_launch_option("day")), hour)
 	if _launch_option("fire") != "" and sim != null and sim.household.selected() != null:
 		_start_demo_fire()
+	if _launch_option("plans") != "" and sim != null:
+		_start_demo_plans(int(_launch_option("plans")))
 	if _launch_option("wedding") != "" and sim != null and sim.household.selected() != null:
 		_start_demo_wedding()
 	if _launch_option("speed") != "":
@@ -321,6 +327,27 @@ func _build_demo_house() -> void:
 	sim.build_place("wall", origin + Vector2i(5, 3))
 	sim.build_place("bed", origin + Vector2i(2, 2))
 	sim.build_place("hearth", origin + Vector2i(7, 2))
+
+
+## For looking at building work: the demo house gets a roof planned, a bed and a table, and two of
+## your folk set to building it; time runs on `minutes` before the picture is taken.
+func _start_demo_plans(minutes: int) -> void:
+	_build_demo_house()
+	var origin := world.lot.position + Vector2i(world.lot.size.x - 11, 2)
+	sim.household.add_stock("hammer", 2)
+	Construction.plan_object(sim, "table", origin + Vector2i(2, 4))
+	Construction.plan_object(sim, "bench", origin + Vector2i(6, 4))
+	Construction.plan_object(sim, "bed", origin + Vector2i(1, 4))
+	var roofed := Construction.plan_room_roof(sim, "thatch", origin + Vector2i(2, 3))
+	if not bool(roofed["ok"]):
+		push_warning(str(roofed["message"]))
+	for member in sim.household.pawns:
+		if not member.is_infant():
+			Construction.order_build(sim, member)
+	for minute in minutes:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+	camera.position = (Vector2(origin) + Vector2(4.5, 3.5)) * MapView.TILE_SIZE
 
 
 # --- the title screen and the menus ----------------------------------------------
@@ -498,6 +525,8 @@ func _show_world(new_world: WorldState, household: Household, town: Household = 
 	cloud_shadows.set_world(world)
 	weather.bind(world)
 	object_layer.bind(sim)
+	site_layer.bind(sim)
+	roof_layer.bind(world)
 	pawn_layer.bind(sim)
 	death_layer.bind(sim)
 	fire_layer.bind(sim)
@@ -518,6 +547,7 @@ func _process(_delta: float) -> void:
 		hud.set_events(sim.events.names())
 		hud.set_purse(sim.household.coins, sim.household.stock)
 		hud.set_animals(Fauna.kept_text(sim))
+		hud.set_building(Construction.summary(sim))
 		hud.set_realm(sim.realm.summary(sim))
 		var here := world.town_at(chosen.tile) if chosen != null else {}
 		hud.set_place(str(here["name"]) if not here.is_empty() else ("Open country" if chosen != null and not world.towns.is_empty() else ""))

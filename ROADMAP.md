@@ -1,6 +1,6 @@
 # Common Folk: roadmap
 
-Milestones 1 to 20 are done. This file keeps the plan for 12 to 20 as it was built, and what comes next (21 to 25). Each milestone ended with the game playable, the smoke test passing and older saves still loading.
+Milestones 1 to 21 are done. This file keeps the plan for 12 to 21 as it was built, and what comes next (22 to 25). Each milestone ended with the game playable, the smoke test passing and older saves still loading.
 
 ## What the people are called
 
@@ -93,9 +93,17 @@ Folk are born, grow up, grow old and die, as in the Sims, with a medieval face o
 - **Stables** in the larger settlements, with a hitching post that sells horses, donkeys, oxen, dogs and cats, and a stablehand's job
 - Your animals have names, eat from the stockpile (grain for the beasts, meat or fish for pets) and go off to fend for themselves if they are left hungry for days. They are listed under the stockpile
 
+## Milestone 21: Builders, rooms and roofs (done)
+
+- **Building is work**: placing furniture, walls, doors and floors makes a *plan*, drawn as a see-through picture with a dashed outline, a progress bar and a square for each unit of material that has arrived. Planning pays for it: the materials you hold are set aside and the rest bought at the shop's price. Calling a plan off (or using the remove tool on it) brings the materials back and half the coin
+- **Hauling**: a builder with a hammer takes materials from the pile (beside the storage crates, or the gate of the lot), carries up to four at a time (more with a led pack animal), delivers them to the plan, then works until it is done. Carpentry for timber, masonry for stone and tiles; both are skills now. Several can work at once, and a wall waits for anyone standing where it goes
+- **Hired builders**: a carpenter's workshop counter hires a townsperson to build for the day, paid by the hour they work
+- **Rooms and roofs**: walls and doors close in rooms; right-click inside a closed room (or use the Roofs tab) to plan a thatched or tiled roof over all of it. The towns' own buildings are roofed when generated, and an older save's buildings are roofed on loading. Zoomed in the roofs fade so you can see inside; zoomed out they make a town. R cycles them
+- **Shelter**: indoors, under a roof, warmth drains far more slowly; a bed in the open gives less rest and a bad night's sleep (the tent camp is a start, a house is better)
+
 ## The plan from here
 
-Five milestones, in the order that lets each one build on the last. Each ends with the game playable, the smoke test passing and older saves still loading.
+Four milestones, in the order that lets each one build on the last. Each ends with the game playable, the smoke test passing and older saves still loading.
 
 - **21 Builders and rooms**: building as a job, with materials hauled to the site; rooms, roofs and the indoor/outdoor difference
 - **22 Traders and goods**: caravans on the roads, a wider list of goods made at workshops (flour and bread, planks, tools, cloth, iron) and sold

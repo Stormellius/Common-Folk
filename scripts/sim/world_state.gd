@@ -14,6 +14,7 @@ var width: int = 0
 var height: int = 0
 ## Something on a tile was built, moved or removed (an object or a floor). The views redraw
 ## and the path finder updates that one cell; see Simulation.
+signal roofs_changed
 signal tile_changed(tile: Vector2i)
 
 ## Tile ids used by this world. Index 0 is the default tile every cell starts as.
@@ -53,6 +54,17 @@ var spirits: Array[Dictionary] = []
 ## before there were animals is stocked when it is loaded).
 var animals: Array[Animal] = []
 var fauna_seeded := false
+## Roofs (Vector2i -> a roof id from data/roofs.json): a roofed tile is indoors. What the player has
+## planned to build and nobody has finished (see Construction), and the materials set aside for it
+## and not yet carried to a site, by resource id.
+var roofs: Dictionary = {}
+var sites: Array[BuildSite] = []
+var reserved: Dictionary = {}
+## True for a world loaded from a save that had no roofs: the buildings need roofing (see Rooms).
+var needs_roofing := false
+
+var _next_site_id := 1
+var _site_by_id := {}  # site id -> BuildSite
 
 var _next_animal_id := 1
 var _animal_by_id := {}  # animal id -> Animal
@@ -110,6 +122,52 @@ func is_ground_walkable(x: int, y: int) -> bool:
 
 func object_at(tile: Vector2i) -> PlacedObject:
 	return _object_at_tile.get(tile)
+
+
+func roof_at(tile: Vector2i) -> String:
+	return str(roofs.get(tile, ""))
+
+
+## Puts a roof on a tile (or takes it off with ""). Returns false if nothing changed.
+func set_roof(tile: Vector2i, roof_id: String) -> bool:
+	if roof_id == "":
+		var had := roofs.erase(tile)
+		if had:
+			roofs_changed.emit()
+		return had
+	if str(roofs.get(tile, "")) == roof_id:
+		return false
+	roofs[tile] = roof_id
+	roofs_changed.emit()
+	return true
+
+
+func add_site(site: BuildSite) -> BuildSite:
+	site.id = _next_site_id
+	_next_site_id += 1
+	sites.append(site)
+	_site_by_id[site.id] = site
+	return site
+
+
+func remove_site(id: int) -> void:
+	var site: BuildSite = _site_by_id.get(id)
+	if site != null:
+		sites.erase(site)
+		_site_by_id.erase(id)
+		tile_changed.emit(site.tile)
+
+
+func get_site(id: int) -> BuildSite:
+	return _site_by_id.get(id)
+
+
+## The plan of one kind ("object", "floor", "roof") on a tile, or null.
+func site_at(tile: Vector2i, kind: String) -> BuildSite:
+	for site in sites:
+		if site.tile == tile and site.kind == kind:
+			return site
+	return null
 
 
 ## Puts an animal in the world and gives it an id.
@@ -393,6 +451,10 @@ func to_dict() -> Dictionary:
 		"lifespan": lifespan,
 		"spirits": spirits.duplicate(true),
 		"fires": fires.keys().map(func(tile: Vector2i) -> Array: return [tile.x, tile.y, int(fires[tile]["since"]), int(fires[tile]["fuel"])]),
+		"roofs": roofs.keys().map(func(cell: Vector2i) -> Array: return [cell.x, cell.y, roofs[cell]]),
+		"sites": sites.map(func(site: BuildSite) -> Dictionary: return site.to_dict()),
+		"reserved": reserved.duplicate(),
+		"next_site_id": _next_site_id,
 		"animals": animals.map(func(animal: Animal) -> Dictionary: return animal.to_dict()),
 		"next_animal_id": _next_animal_id,
 		"fauna_seeded": fauna_seeded,
@@ -454,6 +516,20 @@ static func from_dict(data: Dictionary) -> WorldState:
 	for saved in data.get("fires", []):
 		if saved is Array and saved.size() >= 4:
 			world.fires[Vector2i(int(saved[0]), int(saved[1]))] = { "since": int(saved[2]), "fuel": int(saved[3]) }
+	world.needs_roofing = not data.has("roofs")  # an older save: its buildings get roofs when it is loaded
+	for saved in data.get("roofs", []):
+		if saved is Array and saved.size() >= 3 and DataRegistry.has_def("roofs", str(saved[2])):
+			world.roofs[Vector2i(int(saved[0]), int(saved[1]))] = str(saved[2])
+	for saved in data.get("sites", []):
+		if saved is Dictionary:
+			var site := BuildSite.from_dict(saved)
+			world.sites.append(site)
+			world._site_by_id[site.id] = site
+			world._next_site_id = maxi(world._next_site_id, site.id + 1)
+	var saved_reserved: Variant = data.get("reserved", {})
+	if saved_reserved is Dictionary:
+		for resource_id in saved_reserved:
+			world.reserved[str(resource_id)] = int(saved_reserved[resource_id])
 	for saved in data.get("animals", []):
 		if saved is Dictionary:
 			var animal := Animal.from_dict(saved)

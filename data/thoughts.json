@@ -113,5 +113,7 @@
   { "id": "engagement_off", "text": "The engagement is off", "mood": -12, "hours": 96, "on": "engagement_off" },
   { "id": "hunted",       "text": "A good day's hunting",    "mood": 5,  "hours": 12, "on": "hunted" },
   { "id": "attacked",     "text": "Attacked by a beast",     "mood": -10, "hours": 72, "on": "attacked" },
-  { "id": "petted",       "text": "Made a fuss of {name}",   "mood": 5,  "hours": 8,  "on": "petted" }
+  { "id": "petted",       "text": "Made a fuss of {name}",   "mood": 5,  "hours": 8,  "on": "petted" },
+  { "id": "slept_rough", "text": "Slept without a roof",     "mood": -3, "hours": 12, "on": "slept_rough" },
+  { "id": "built",       "text": "Built something with their own hands", "mood": 5, "hours": 12, "on": "built" }
 ]

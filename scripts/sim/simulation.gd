@@ -145,7 +145,7 @@ func step(motion_steps: int = 1) -> void:
 	for pawn in everyone:
 		if pawn.is_infant() or pawn.is_dying():
 			continue  # carried by the household, or lying still until Death comes
-		var cause := _drain_needs(pawn, Life.drain_multipliers(pawn, Pregnancy.drain_multipliers(pawn, Illness.drain_multipliers(pawn, season_multipliers))))
+		var cause := _drain_needs(pawn, Shelter.drain_multipliers(world, pawn, Life.drain_multipliers(pawn, Pregnancy.drain_multipliers(pawn, Illness.drain_multipliers(pawn, season_multipliers)))))
 		if cause != "":
 			Mortality.fall(self, pawn, cause)
 			continue
@@ -795,6 +795,8 @@ func _needs_break(pawn: Pawn) -> bool:
 ## An idle person with a job goes to work when their shift starts (unless the player took them
 ## off it today). Returns true if they set off.
 func _try_work(pawn: Pawn, minute: int) -> bool:
+	if pawn.contract_until > 0 and town.get_pawn(pawn.id) != null and not _needs_break(pawn) and Construction.try_contract(self, pawn):
+		return true  # hired to build for the player
 	if pawn.work_job == "" or pawn.skip_work_day == GameClock.get_day_number() or _needs_break(pawn):
 		return false
 	var job := DataRegistry.get_def("jobs", pawn.work_job)
@@ -934,6 +936,8 @@ func build_move(object_id: int, to_tile: Vector2i) -> Dictionary:
 func build_remove(tile: Vector2i) -> Dictionary:
 	if not world.can_build_at(tile):
 		return { "ok": false, "message": "Outside your land" }
+	if Construction.cancel_at(self, tile) > 0:
+		return { "ok": true, "message": "" }  # a plan that was never built is simply called off
 	var placed := world.object_at(tile)
 	if placed != null and not bool(placed.def().get("buildable", true)):
 		return { "ok": false, "message": "The %s can't be taken down" % placed.display_name().to_lower() }
@@ -1022,6 +1026,10 @@ func describe_activity(pawn: Pawn) -> String:
 		var date_partner := person(pawn.job_partner)
 		var date_name := _first_name(date_partner) if date_partner != null else "someone"
 		text = "On a date with %s" % date_name if pawn.job_stage == "using" else "Going on a date with %s" % date_name
+	elif pawn.job_kind == "build":
+		var plan := world.get_site(pawn.job_site)
+		var plan_name := Construction.site_name(plan) if plan != null else "the building work"
+		text = "Building the %s" % plan_name if pawn.job_stage == "working" else ("Hauling materials to the %s" % plan_name if pawn.job_stage == "site" else "Fetching materials")
 	elif pawn.job_kind == "hunt":
 		var game := world.get_animal(pawn.job_animal)
 		text = ("Taking aim at %s" if pawn.job_stage == "using" else "Stalking %s") % (game.title() if game != null else "game")
@@ -1275,6 +1283,9 @@ func _step_job(pawn: Pawn) -> void:
 	if pawn.job_kind == "date":
 		_step_date(pawn)
 		return
+	if pawn.job_kind == "build":
+		Construction.step_build(self, pawn, _rng)
+		return
 	if pawn.job_kind == "hunt":
 		Fauna.step_hunt(self, pawn, _rng)
 		return
@@ -1345,10 +1356,11 @@ func _step_job(pawn: Pawn) -> void:
 	var all_full := not object_def.has("gathers") and recipe.is_empty()  # gathering and making go on until the time is up
 	var skill_id := str(object_def.get("skill", ""))
 	var boost := Skills.boost(pawn, skill_id) if skill_id != "" else 1.0
+	var open_sky := Shelter.rest_factor(world, placed, object_def)  # a bed with no roof over it gives less rest
 	for need_id in satisfies:
 		if not pawn.needs.has(need_id):
 			continue
-		var value := minf(Needs.FULL, float(pawn.needs[need_id]) + float(satisfies[need_id]) * boost / 60.0)
+		var value := minf(Needs.FULL, float(pawn.needs[need_id]) + float(satisfies[need_id]) * boost * (open_sky if need_id == "rest" else 1.0) / 60.0)
 		pawn.needs[need_id] = value
 		if value < Needs.FULL:
 			all_full = false
@@ -1377,6 +1389,8 @@ func _step_job(pawn: Pawn) -> void:
 	var minutes_needed := Skills.recipe_minutes(pawn, recipe) if not recipe.is_empty() else int(object_def.get("max_use_minutes", 60))
 	if all_full or pawn.job_minutes >= minutes_needed:
 		Mood.add_event(pawn, "used:%s" % placed.def_id, GameClock.tick)
+		if open_sky < 1.0:
+			Mood.add_event(pawn, "slept_rough", GameClock.tick)
 		if not recipe.is_empty():
 			_finish_craft(pawn, recipe)
 		if satisfies.has("hunger"):
@@ -1687,6 +1701,8 @@ func _end_job(pawn: Pawn) -> void:
 		placed.user_id = 0
 	Skills.unequip(self, pawn)
 	pawn.job_recipe = ""
+	if pawn.job_kind == "build":
+		Construction.release(self, pawn)
 	if pawn.job_animal != 0:
 		pawn.job_animal = 0
 		Fauna.refresh_pace(self, pawn)  # no more creeping after game
@@ -2061,6 +2077,11 @@ func _distance(a: Vector2i, b: Vector2i) -> int:
 
 ## A loaded save may predate needs or objects, or name things that are gone: make it consistent.
 func _repair_after_load() -> void:
+	if world.needs_roofing:  # a save from before roofs: its buildings are roofed now
+		world.needs_roofing = false
+		for lot in world.lots:
+			Rooms.auto_roof(world, lot["rect"])
+		Rooms.auto_roof(world, world.lot)
 	if household.get_pawn(realm.head_id) == null:
 		realm.choose_head(household)
 	var anyone_knows_anyone := false

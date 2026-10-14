@@ -39,5 +39,6 @@
   {"id": "forge", "cost": 45, "name": "Forge", "category": "workshop", "blocks_walking": true, "use_position": "beside", "skill": "smithing", "tool": "smiths_hammer", "recipes": true, "drains": {"rest": 8.0, "hygiene": 6.0}, "price": 2, "light": {"color": "#ff7a30", "radius": 3.2, "energy": 0.9}, "smoke": true, "materials": {"stone": 6}},
   {"id": "workbench", "cost": 24, "name": "Workbench", "category": "workshop", "blocks_walking": true, "use_position": "beside", "skill": "carpentry", "tool": "hammer", "recipes": true, "drains": {"rest": 5.0, "hygiene": 2.0}, "price": 1, "materials": {"wood": 4}, "flammable": 0.7},
   {"id": "tool_rack", "cost": 14, "name": "Tool rack", "category": "business", "blocks_walking": true, "sells_tools": true, "materials": {"wood": 2}, "flammable": 0.6},
-  {"id": "hitching_post", "cost": 16, "name": "Hitching post", "category": "business", "blocks_walking": true, "sells_animals": true, "materials": {"wood": 2}, "flammable": 0.6}
+  {"id": "hitching_post", "cost": 16, "name": "Hitching post", "category": "business", "blocks_walking": true, "sells_animals": true, "materials": {"wood": 2}, "flammable": 0.6},
+  {"id": "storage", "cost": 12, "name": "Storage crates", "category": "furniture", "blocks_walking": true, "pile": true, "materials": {"wood": 2}, "flammable": 0.7}
 ]

@@ -40,6 +40,10 @@ const LEAD_PREFIX := "lead:"         # "lead:<animal id>"
 const WAIT_PREFIX := "wait:"         # "wait:<animal id>": stop leading it
 const ADOPT_PREFIX := "adopt:"       # "adopt:<animal id>"
 const BUYANIMAL_PREFIX := "buyanimal:"  # "buyanimal:<kind>:<hitching post id>"
+const BUILD_PREFIX := "build:"       # "build:<site id>" or "build:all": work on what is planned
+const UNPLAN_PREFIX := "unplan:"     # "unplan:<site id>": call a plan off
+const ROOF_PREFIX := "roof:"         # "roof:<roof id>": roof the room that was clicked in
+const HIRE_CREW := "hire_crew"
 const DISMOUNT := "dismount"
 const WED_PREFIX := "wed:"           # "wed:<fiancé(e)'s id>"
 const FUND_STEPS := [10, 50]
@@ -85,6 +89,10 @@ static func list_for(sim: Simulation, pawn: Pawn, tile: Vector2i) -> Array[Dicti
 		for amount in FUND_STEPS:
 			var short: bool = amount > sim.household.coins
 			actions.append(_entry(FUND_PREFIX + str(amount), "Give %s to the town's defense fund (now %s)" % [Economy.format(amount), Economy.format(sim.realm.fund)], not short, "you only have %s" % Economy.format(sim.household.coins) if short else ""))
+	if placed != null and placed.def_id == "counter" and str(sim.world.lot_at(placed.tile).get("kind", "")) == "workshop":
+		var crew_blocker := Construction.hire_blocker(sim, pawn)
+		actions.append(_entry(HIRE_CREW, "Hire a builder for the day (%s an hour)" % Economy.format(int(DataRegistry.get_def("jobs", "carpenter").get("wage", 5))), crew_blocker == "", crew_blocker))
+	actions.append_array(_building_entries(sim, pawn, tile))
 	if placed != null and bool(placed.def().get("sells_animals", false)):
 		actions.append_array(_animal_market_entries(sim, pawn, placed))
 	for animal in sim.world.animals_at(tile):
@@ -176,6 +184,34 @@ static func _sell_entries(sim: Simulation, pawn: Pawn) -> Array[Dictionary]:
 		var short := price > sim.coins_of(pawn)
 		var reason := "only your own folk buy for the household" if sim.household.get_pawn(pawn.id) == null else ("can't afford it" if short else "")
 		entries.append(_entry(BUY_PREFIX + item_id, "Buy %s (%s)" % [Economy.item_phrase(item_id), Economy.format(price)], reason == "", reason))
+	return entries
+
+
+## Planned building on the tile (work on it, call it off), the building work in general, and roofing
+## the closed room the tile is in.
+static func _building_entries(sim: Simulation, pawn: Pawn, tile: Vector2i) -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	if not sim.world.can_build_at(tile):
+		return entries
+	var plans_here: Array[BuildSite] = []
+	for site in sim.world.sites:
+		if site.tile == tile:
+			plans_here.append(site)
+	var blocker := Construction.build_blocker(sim, pawn)
+	for site in plans_here:
+		entries.append(_entry(UNPLAN_PREFIX + str(site.id), "Call off the %s (materials come back)" % Construction.site_name(site)))
+	if not sim.world.sites.is_empty():
+		var label := "Work on the building (%d planned)" % sim.world.sites.size()
+		entries.append(_entry(BUILD_PREFIX + "all", label, blocker == "", blocker))
+	var plan := Construction.roof_plan(sim, tile)
+	if str(plan["reason"]) == "" and not (plan["tiles"] as Array).is_empty():
+		for roof_def in DataRegistry.get_list("roofs"):
+			var roof_id := str(roof_def["id"])
+			var price := Construction.roof_price(sim, roof_id, (plan["tiles"] as Array).size())
+			var cost := Economy.stock_text(price["needs"])
+			var label := "Roof this room: %s (%d tiles: %s)" % [str(roof_def.get("name", roof_id)).to_lower(), (plan["tiles"] as Array).size(), cost]
+			var short := int(price["coins"]) > sim.household.coins
+			entries.append(_entry(ROOF_PREFIX + roof_id, label, not short, "you need %s more coin" % Economy.format(int(price["coins"]) - sim.household.coins) if short else ""))
 	return entries
 
 
@@ -365,6 +401,21 @@ static func _perform(sim: Simulation, pawn: Pawn, action_id: String, tile: Vecto
 			return { "ok": false, "message": "Can't move back: %s" % home_blocker }
 		sim.health_notice.emit(Romance.move_home(sim, pawn))
 		return { "ok": true, "message": "" }
+	if action_id == HIRE_CREW:
+		var hired := Construction.hire(sim, pawn)
+		if hired["ok"]:
+			sim.health_notice.emit(str(hired["message"]))
+		return { "ok": hired["ok"], "message": "" if hired["ok"] else hired["message"] }
+	if action_id == BUILD_PREFIX + "all":
+		return Construction.order_build(sim, pawn)
+	if action_id.begins_with(UNPLAN_PREFIX):
+		var plan := sim.world.get_site(int(action_id.trim_prefix(UNPLAN_PREFIX)))
+		if plan == null:
+			return { "ok": false, "message": "That plan is gone" }
+		Construction.cancel(sim, plan)
+		return { "ok": true, "message": "" }
+	if action_id.begins_with(ROOF_PREFIX):
+		return Construction.plan_room_roof(sim, action_id.trim_prefix(ROOF_PREFIX), tile)
 	if action_id == DISMOUNT:
 		Fauna.dismount(sim, pawn)
 		return { "ok": true, "message": "" }

@@ -37,5 +37,8 @@
     "effects": { "yield": 0.10, "safety": 0.05 } },
   { "id": "husbandry", "name": "Animal care", "color": "#c9a06a", "gain": 0.06,
     "text": "Gets more from pack animals and rides faster.",
-    "effects": { "carry": 0.05, "speed": 0.03 } }
+    "effects": { "carry": 0.05, "speed": 0.03 } },
+  { "id": "masonry", "name": "Masonry", "color": "#a7a29a", "gain": 0.09,
+    "text": "Lays stone and tile faster and wastes less of it.",
+    "effects": { "speed": 0.04, "save": 0.04 } }
 ]

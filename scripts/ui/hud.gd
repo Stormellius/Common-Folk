@@ -20,7 +20,8 @@ const HELP_LINES: Array = [
 	["Wheel, middle drag", "Zoom, pan"],
 	["Space, 1 to 4", "Pause, speed"],
 	["T, M, Home", "Next town, whole map, your home"],
-	["B", "Build mode"],
+	["B", "Build mode (plans, then someone builds)"],
+	["R", "Roofs: by the zoom, shown, hidden"],
 	["G", "Grid"],
 	["F5 / F9", "Quick save / load the newest save"],
 	["F11", "Full screen"],
@@ -71,6 +72,7 @@ var _realm_label: Label
 var _place_label: Label
 var _stock_label: Label
 var _animals_label: Label
+var _building_label: Label
 var _mood_bar: ProgressBar
 var _mood_fill: StyleBoxFlat
 var _mood_label: Label
@@ -130,6 +132,12 @@ func set_purse(coins: int, stock: Dictionary = {}) -> void:
 func set_animals(text: String) -> void:
 	_animals_label.text = text
 	_animals_label.visible = text != ""
+
+
+## "Building: 5 planned, 1 at work" under the animals (nothing shown when nothing is planned).
+func set_building(text: String) -> void:
+	_building_label.text = text
+	_building_label.visible = text != ""
 
 
 ## Class, land title, next tax day, guild: the lines under the purse.
@@ -463,6 +471,10 @@ func _build_clock_panel() -> void:
 	_animals_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_animals_label.custom_minimum_size = Vector2(214, 0)
 	box.add_child(_animals_label)
+	_building_label = _make_label("", "DimLabel")
+	_building_label.add_theme_font_size_override("font_size", 12)
+	_building_label.add_theme_color_override("font_color", Color(0.62, 0.78, 0.95))
+	box.add_child(_building_label)
 	_realm_label = _make_label("", "DimLabel")
 	_realm_label.add_theme_font_size_override("font_size", 12)
 	_realm_label.visible = false
@@ -730,6 +742,11 @@ func _build_build_ui() -> void:
 		tabs["Floors"] = []
 		for floor_def in DataRegistry.get_list("floors"):
 			tabs["Floors"].append({ "kind": "floor", "id": str(floor_def["id"]), "name": str(floor_def.get("name", floor_def["id"])), "cost": int(floor_def.get("cost", 0)) })
+	if DataRegistry.count("roofs") > 0:
+		tabs["Roofs"] = []
+		for roof_def in DataRegistry.get_list("roofs"):
+			tabs["Roofs"].append({ "kind": "roof", "id": str(roof_def["id"]), "name": str(roof_def.get("name", roof_def["id"])), "cost": 0,
+				"hint": "Click inside a closed room to roof it all: %s a tile" % Economy.stock_text(roof_def.get("materials", {})) })
 	tabs["Tools"] = [
 		{ "kind": "move", "id": "", "name": "Move" },
 		{ "kind": "remove", "id": "", "name": "Remove" },
@@ -757,7 +774,10 @@ func _build_build_ui() -> void:
 			item.button_group = group
 			item.focus_mode = Control.FOCUS_NONE
 			item.custom_minimum_size = Vector2(90, 70)
-			item.tooltip_text = str(entry["name"]) + ("  -  %s" % (Economy.cost_text(str(entry["id"])) if str(entry["kind"]) == "place" else Economy.format(int(entry["cost"]))) if int(entry.get("cost", 0)) > 0 else "")
+			if entry.has("hint"):
+				item.tooltip_text = "%s  -  %s" % [str(entry["name"]), str(entry["hint"])]
+			else:
+				item.tooltip_text = str(entry["name"]) + ("  -  %s" % (Economy.cost_text(str(entry["id"])) if str(entry["kind"]) == "place" else Economy.format(int(entry["cost"]))) if int(entry.get("cost", 0)) > 0 else "")
 			var icon := BuildIcon.new()
 			icon.kind = str(entry["kind"])
 			icon.id = str(entry["id"])

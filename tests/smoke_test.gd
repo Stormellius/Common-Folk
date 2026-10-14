@@ -37,6 +37,7 @@ func _ready() -> void:
 	_section("romance", _test_romance)
 	_section("marriage", _test_marriage)
 	_section("animals", _test_animals)
+	_section("construction", _test_construction)
 	_section("events", _test_events)
 	_section("realm", _test_realm)
 	_section("faith_and_illness", _test_faith_and_illness)
@@ -580,6 +581,7 @@ func _test_needs() -> void:
 	world = setup["world"]
 	pawn = setup["pawn"]
 	var bed := world.add_object("bed", Vector2i(8, 2))
+	world.set_roof(Vector2i(8, 2), "thatch")  # under a roof, so it gives its full rest
 	sim = Simulation.new(world, setup["household"])
 	var lay_down := false
 	for i in 1500:
@@ -1496,7 +1498,7 @@ func _test_skills() -> void:
 	print("Skills, tools and trades")
 	# The data hangs together.
 	var skill_ids := Skills.skill_ids()
-	_check(skill_ids.size() == 13 and "woodcutting" in skill_ids and "smithing" in skill_ids and "music" in skill_ids and "hunting" in skill_ids, "there are thirteen skills (%d)" % skill_ids.size())
+	_check(skill_ids.size() == 14 and "woodcutting" in skill_ids and "smithing" in skill_ids and "music" in skill_ids and "hunting" in skill_ids and "masonry" in skill_ids, "there are fourteen skills (%d)" % skill_ids.size())
 	var tools_ok := true
 	for tool_id in Skills.tool_ids():
 		tools_ok = tools_ok and Skills.skill_ids().has(str(DataRegistry.get_def("tools", tool_id)["skill"])) and Skills.tool_price(tool_id) > 0
@@ -2823,6 +2825,223 @@ func _chebyshev(a: Vector2i, b: Vector2i) -> int:
 	return maxi(absi(a.x - b.x), absi(a.y - b.y))
 
 
+func _test_construction() -> void:
+	print("Planning, builders, rooms and roofs")
+	var field := _open_field()
+	var world: WorldState = field["world"]
+	var household: Household = field["household"]
+	var town: Household = field["sim"].town
+	var sim: Simulation = field["sim"]
+	var anna: Pawn = field["anna"]
+	var ben: Pawn = field["ben"]
+	var notices: Array[String] = []
+	sim.health_notice.connect(func(text: String) -> void: notices.append(text))
+	anna.tile = Vector2i(4, 5)
+	anna.step_to = anna.tile
+	ben.tile = Vector2i(12, 8)
+	ben.step_to = ben.tile
+
+	# Rooms: a space that walls close in.
+	for x in range(3, 10):
+		for y in [3, 8]:
+			sim.build_place("wall", Vector2i(x, y))
+	for y in range(4, 8):
+		for x in [3, 9]:
+			sim.build_place("wall", Vector2i(x, y))
+	var open_room := Rooms.region(world, Vector2i(5, 5))
+	_check(not bool(open_room["closed"]) or (open_room["tiles"] as Array).size() > 0, "a ring of walls is complete")
+	var shell := Rooms.region(world, Vector2i(5, 5))
+	_check(bool(shell["closed"]) and (shell["tiles"] as Array).size() == 5 * 4, "walls close in a room of twenty tiles (%d)" % (shell["tiles"] as Array).size())
+	sim.build_remove(Vector2i(9, 6))
+	_check(not bool(Rooms.region(world, Vector2i(5, 5), 60)["closed"]) and "open" in str(Rooms.roomy(world, Vector2i(5, 5))["reason"]), "a gap in the wall means it is no room (%s)" % str(Rooms.roomy(world, Vector2i(5, 5))["reason"]))
+	sim.build_place("door", Vector2i(9, 6))
+	_check(bool(Rooms.region(world, Vector2i(5, 5))["closed"]), "a door closes it again")
+	_check("wall" in str(Rooms.roomy(world, Vector2i(3, 3))["reason"]) and "land" in str(Rooms.roomy(world, Vector2i(30, 30))["reason"]), "a wall is not a room, nor is ground that is not yours")
+	_check(Rooms.roof_for(world, shell["tiles"]) == "thatch", "timber walls call for thatch")
+
+	# Planning costs coin and sets materials aside.
+	household.coins = 100
+	household.stock = { "wood": 1 }
+	var bed_price := Economy.build_price("bed", household.stock)
+	var planned := Construction.plan_object(sim, "bed", Vector2i(5, 5))
+	_check(planned["ok"] and world.sites.size() == 1 and household.coins == 100 - int(bed_price["coins"]) and household.stock_of("wood") == 0 and int(world.reserved.get("wood", 0)) == 3, "planning a bed pays for it and sets its three wood aside (coin %d, reserved %s)" % [household.coins, str(world.reserved)])
+	_check(world.object_at(Vector2i(5, 5)) == null and world.site_at(Vector2i(5, 5), "object") != null, "but nothing stands there yet")
+	_check("Already" in str(Construction.plan_object(sim, "bed", Vector2i(5, 5))["message"]), "and it is not planned twice")
+	var menu := PawnActions.list_for(sim, anna, Vector2i(5, 5)).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("unplan:") or str(e["id"]).begins_with("build:"))
+	_check(menu.size() == 2 and not menu[1]["enabled"] and ("hammer" in str(menu[1]["reason"])), "the menu offers to call it off, or to build, which needs a hammer (%s)" % str(menu))
+	var coins_before := household.coins
+	PawnActions.perform(sim, anna, "unplan:%d" % world.sites[0].id, Vector2i(5, 5))
+	_check(world.sites.is_empty() and household.stock_of("wood") == 3 and int(world.reserved.get("wood", 0)) == 0 and household.coins > coins_before, "calling it off brings back the materials and half the coin")
+	Construction.plan_object(sim, "bed", Vector2i(5, 5))
+	_check(sim.build_remove(Vector2i(5, 5))["ok"] and world.sites.is_empty(), "the remove tool calls off a plan too")
+	household.coins = 4
+	_check(not Construction.plan_object(sim, "bed", Vector2i(5, 6))["ok"], "an empty purse plans nothing")
+	household.coins = 300
+
+	# A builder takes the work on.
+	Construction.plan_object(sim, "bed", Vector2i(5, 5))
+	Construction.plan_object(sim, "table", Vector2i(7, 5))
+	_check(world.sites.size() == 2 and "2 planned" in Construction.summary(sim), "two things are planned (%s)" % Construction.summary(sim))
+	_check("hammer" in str(Construction.order_build(sim, anna)["message"]), "nobody builds without a hammer")
+	household.add_stock("hammer", 1)
+	var skill_before := Skills.xp(anna, "carpentry")
+	var order := PawnActions.perform(sim, anna, "build:all", Vector2i(5, 5))
+	_check(order["ok"] and anna.job_kind == "build" and anna.tool == "hammer", "she takes the hammer and sets to work")
+	var saw_fetch := false
+	var saw_carry := false
+	for i in 400:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		saw_fetch = saw_fetch or anna.job_stage == "fetch"
+		saw_carry = saw_carry or not anna.carrying.is_empty()
+		if anna.job_kind == "":
+			break
+	_check(saw_fetch and saw_carry, "she fetched the materials from the pile and carried them to the site")
+	_check(world.sites.is_empty() and world.object_at(Vector2i(5, 5)) != null and world.object_at(Vector2i(5, 5)).def_id == "bed" and world.object_at(Vector2i(7, 5)) != null, "the bed and the table stand when she is done")
+	_check(anna.tool == "" and household.stock_of("hammer") == 1 and anna.carrying.is_empty() and int(world.reserved.get("wood", 0)) == 0, "the hammer is back, nothing is left in her hands or set aside")
+	_check(Skills.xp(anna, "carpentry") > skill_before + 5.0 and anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "built"), "and she has learned from it")
+	_check(notices.any(func(t: String) -> bool: return "finished the building" in t), "the household hears she has finished (%s)" % str(notices))
+
+	# A wall waits for someone standing where it goes.
+	Construction.plan_object(sim, "wall", Vector2i(8, 7))
+	ben.tile = Vector2i(8, 7)
+	ben.step_to = ben.tile
+	_check(bool(Construction.order_build(sim, anna)["ok"]), "she sets to on a wall")
+	_minutes(sim, 120, func() -> bool: return anna.job_kind == "")
+	_check(world.object_at(Vector2i(8, 7)) == null, "it does not go up on top of somebody (%s)" % str(world.sites.size()))
+	ben.tile = Vector2i(12, 8)
+	ben.step_to = ben.tile
+	_minutes(sim, 6)  # it waits a few minutes before trying again
+	Construction.order_build(sim, anna)
+	_minutes(sim, 120, func() -> bool: return anna.job_kind == "")
+	_check(world.object_at(Vector2i(8, 7)) != null and world.sites.is_empty(), "once they have moved it is built")
+
+	# Roofs.
+	household.stock = { "hammer": 2 }
+	household.coins = 300
+	_check(PawnActions.list_for(sim, anna, Vector2i(6, 6)).any(func(e: Dictionary) -> bool: return str(e["id"]) == "roof:thatch"), "the menu offers to roof a closed room")
+	var roof_plan := Construction.roof_plan(sim, Vector2i(6, 6))
+	_check((roof_plan["tiles"] as Array).size() == 19 and str(roof_plan["reason"]) == "", "all nineteen free tiles of it (a wall stands in the twentieth)")
+	var roof_cost := Construction.roof_price(sim, "thatch", 19)
+	_check(int(roof_cost["coins"]) == 19 * Economy.resource_price("wood") and int(roof_cost["needs"]["wood"]) == 19, "a thatched roof takes a wood a tile, bought if you have none (%s)" % str(roof_cost))
+	var coins_roof := household.coins
+	var roofing := Construction.plan_room_roof(sim, "thatch", Vector2i(6, 6))
+	_check(roofing["ok"] and world.sites.size() == 19 and household.coins == coins_roof - int(roof_cost["coins"]) and int(world.reserved.get("wood", 0)) == 19, "planning it makes nineteen plans and sets the wood aside")
+	_check("already" in str(Construction.plan_room_roof(sim, "thatch", Vector2i(6, 6))["message"]), "it cannot be planned twice")
+	_check(not Shelter.is_indoors(world, Vector2i(6, 6)), "and the room is open to the sky until it is built")
+	var first_hand := Construction.order_build(sim, anna)
+	var second_hand := Construction.order_build(sim, ben)
+	_check(first_hand["ok"] and second_hand["ok"] and anna.job_kind == "build" and ben.job_kind == "build", "two pairs of hands can work on it together (%s %s)" % [str(first_hand["message"]), str(second_hand["message"])])
+	_minutes(sim, 600, func() -> bool: return world.sites.is_empty())
+	_check(world.sites.is_empty() and world.roofs.size() == 19 and Shelter.is_indoors(world, Vector2i(6, 6)) and Shelter.is_indoors(world, Vector2i(4, 4)), "the roof goes on: nineteen tiles are indoors (%d, %d left)" % [world.roofs.size(), world.sites.size()])
+	_check(int(world.reserved.get("wood", 0)) == 0 and household.stock_of("wood") == 0, "with nothing left over")
+	_check(not PawnActions.list_for(sim, anna, Vector2i(6, 6)).any(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("roof:")), "and no offer to roof it again")
+	sim.order_stop(anna)
+	sim.order_stop(ben)
+
+	# What a roof does.
+	var plain := Pawn.new()
+	plain.tile = Vector2i(40, 40)
+	var sheltered := Pawn.new()
+	sheltered.tile = Vector2i(6, 6)
+	var open_rate := Needs.drain_per_tick("warmth", [] as Array[String], Shelter.drain_multipliers(world, plain, {}))
+	var roofed_rate := Needs.drain_per_tick("warmth", [] as Array[String], Shelter.drain_multipliers(world, sheltered, {}))
+	_check(roofed_rate < open_rate * 0.6, "indoors people lose warmth much more slowly (%.4f against %.4f)" % [roofed_rate, open_rate])
+	var outdoor_bed := world.add_object("bed", Vector2i(11, 8))
+	var indoor_bed := world.object_at(Vector2i(5, 5))
+	_check(Shelter.rest_factor(world, indoor_bed, indoor_bed.def()) == 1.0 and Shelter.rest_factor(world, outdoor_bed, outdoor_bed.def()) < 1.0, "a bed under a roof gives full rest, one in the open less")
+	ben.tile = Vector2i(11, 9)
+	ben.step_to = ben.tile
+	ben.needs["rest"] = 10.0
+	sim.order_use(ben, outdoor_bed)
+	_minutes(sim, 90, func() -> bool: return ben.job_stage == "using")
+	var rest_start := float(ben.needs["rest"])
+	_minutes(sim, 60)
+	var rest_outside := float(ben.needs["rest"]) - rest_start
+	sim.order_stop(ben)
+	ben.tile = Vector2i(5, 6)
+	ben.step_to = ben.tile
+	ben.needs["rest"] = 10.0
+	sim.order_use(ben, indoor_bed)
+	_minutes(sim, 30, func() -> bool: return ben.job_stage == "using")
+	rest_start = float(ben.needs["rest"])
+	_minutes(sim, 60)
+	var rest_inside := float(ben.needs["rest"]) - rest_start
+	_check(rest_inside > rest_outside * 1.2, "and sleeping in the open rests less (%.1f against %.1f an hour)" % [rest_outside, rest_inside])
+	sim.order_stop(ben)
+
+	# A tiled roof over stone walls, and the saving of it all.
+	for x in range(20, 25):
+		for y in [3, 7]:
+			world.add_object("stone_wall", Vector2i(x, y))
+	for y in range(4, 7):
+		for x in [20, 24]:
+			world.add_object("stone_wall", Vector2i(x, y))
+	world.lot = Rect2i(2, 2, 30, 8)
+	_check(Rooms.roof_for(world, Rooms.region(world, Vector2i(22, 5))["tiles"]) == "tile", "stone walls call for tiles")
+	var saved_plan := Construction.plan_room_roof(sim, "tile", Vector2i(22, 5))
+	_check(saved_plan["ok"] and world.sites.size() == 9 and int(world.reserved.get("stone", 0)) == 9, "a tiled roof takes a stone a tile")
+	var reloaded := WorldState.from_dict(world.to_dict())
+	_check(reloaded.sites.size() == 9 and reloaded.roofs.size() == world.roofs.size() and int(reloaded.reserved.get("stone", 0)) == 9 and reloaded.get_site(world.sites[0].id) != null, "plans, roofs and what is set aside are saved with the world")
+	anna.carrying = { "wood": 2 }
+	anna.job_site = world.sites[0].id
+	var anna_again := Pawn.from_dict(anna.to_dict())
+	_check(anna_again.carrying == { "wood": 2 } and anna_again.job_site == anna.job_site, "and a builder's load")
+	anna.carrying.clear()
+	for site in world.sites.duplicate():
+		Construction.cancel(sim, site)
+	_check(world.sites.is_empty() and household.stock_of("stone") == 9 and world.reserved.values().all(func(v: Variant) -> bool: return int(v) == 0), "calling the lot off returns every stone")
+
+	# Hiring a builder from a workshop.
+	world.lots.append({ "id": "lot_9", "kind": "workshop", "name": "Workshop", "template": "workshop", "facing": "south", "rect": Rect2i(60, 5, 11, 7), "public": true, "town": "none" })
+	var bench_counter := world.add_object("counter", Vector2i(63, 8))
+	_check(not Construction.hire_blocker(sim, anna).is_empty(), "with nothing planned there is nobody to hire (%s)" % Construction.hire_blocker(sim, anna))
+	var carpenter := _townsperson("Colm Fletcher", "male", 33, 0)
+	carpenter.work_job = "carpenter"
+	carpenter.skills["carpentry"] = Skills.xp_for_level(4)
+	town.add_pawn(carpenter)
+	carpenter.tile = Vector2i(30, 12)
+	carpenter.step_to = carpenter.tile
+	household.stock = {}
+	household.coins = 200
+	Construction.plan_object(sim, "table", Vector2i(10, 6))
+	Construction.plan_object(sim, "table", Vector2i(11, 4))
+	var hire_menu := PawnActions.list_for(sim, anna, bench_counter.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "hire_crew")
+	_check(hire_menu.size() == 1 and hire_menu[0]["enabled"] and "Hire a builder" in str(hire_menu[0]["label"]), "the workshop's counter offers to hire a builder (%s)" % str(hire_menu))
+	var coins_hire := household.coins
+	var hired := PawnActions.perform(sim, anna, "hire_crew", bench_counter.tile)
+	_check(hired["ok"] and carpenter.contract_until > GameClock.tick, "the carpenter is taken on for the day")
+	_minutes(sim, 300, func() -> bool: return world.sites.is_empty())
+	_check(world.sites.is_empty() and world.object_at(Vector2i(10, 6)) != null and world.object_at(Vector2i(11, 4)) != null, "he walks over, hauls and builds both tables (%d minutes left on the plan)" % world.sites.size())
+	_check(household.coins < coins_hire and carpenter.coins > 0, "and is paid by the hour (%s)" % Economy.format(coins_hire - household.coins))
+	_minutes(sim, 10)
+	_check(carpenter.contract_until == 0 and carpenter.job_kind != "build", "when the work is done he goes back to his own")
+
+	# The towns' own buildings are roofed from the start.
+	var region := RegionGenerator.generate(42)
+	var floored := 0
+	var roofed := 0
+	var roofed_parks := 0
+	for lot in region.lots:
+		var rect: Rect2i = lot["rect"]
+		for y in range(rect.position.y, rect.end.y):
+			for x in range(rect.position.x, rect.end.x):
+				var cell := Vector2i(x, y)
+				if str(lot["kind"]) == "park" and region.roofs.has(cell):
+					roofed_parks += 1
+				if region.floor_at(cell) != "" and str(lot["kind"]) in ["house", "tavern", "shop", "chapel", "clinic", "smithy", "workshop", "stable"]:
+					floored += 1
+					roofed += 1 if region.roofs.has(cell) else 0
+	_check(floored > 1000 and roofed * 100 >= floored * 95 and roofed_parks == 0, "every town building is roofed, and no green is (%d of %d tiles)" % [roofed, floored])
+	var old_data := region.to_dict()
+	old_data.erase("roofs")
+	var old_world := WorldState.from_dict(old_data)
+	_check(old_world.needs_roofing and old_world.roofs.is_empty(), "an older save has no roofs")
+	var old_sim := Simulation.new(old_world, Household.new(), Household.new(NpcGenerator.FIRST_ID))
+	_check(not old_world.needs_roofing and old_world.roofs.size() * 100 >= region.roofs.size() * 95, "but its buildings are roofed on loading (%d of %d)" % [old_world.roofs.size(), region.roofs.size()])
+	old_sim.free() if old_sim is Object and false else null
+
+
 func _test_events() -> void:
 	print("Town events")
 	var first := _collect_events(42, 120)
@@ -4019,13 +4238,18 @@ func _test_building() -> void:
 	click.call(Vector2i(9, 8), false)
 	var run_length := 0
 	for x in range(5, 10):
-		run_length += 1 if world.object_at(Vector2i(x, 8)) != null else 0
-	_check(run_length == 5, "dragging with the wall tool lays a whole row")
+		run_length += 1 if world.site_at(Vector2i(x, 8), "object") != null else 0
+	_check(run_length == 5 and world.object_at(Vector2i(5, 8)) == null, "dragging with the wall tool plans a whole row (nothing is built yet)")
+	_check(warnings.size() == 1 and "Planned" in warnings[0], "the first plan says what happens next (%s)" % str(warnings))
+	warnings.clear()
+	_complete_plans(sim, setup["pawn"])
+	_check(world.object_at(Vector2i(5, 8)) != null and world.object_at(Vector2i(9, 8)) != null and world.sites.is_empty(), "and once built the row stands")
 	controller.set_tool("place", "bed")
 	click.call(Vector2i(4, 4), true)
 	drag.call(Vector2i(6, 4))
 	click.call(Vector2i(6, 4), false)
-	_check(world.object_at(Vector2i(4, 4)) != null and world.object_at(Vector2i(5, 4)) == null, "furniture goes down one per click, even when dragging")
+	_check(world.site_at(Vector2i(4, 4), "object") != null and world.site_at(Vector2i(5, 4), "object") == null, "furniture is planned one per click, even when dragging")
+	_complete_plans(sim, setup["pawn"])
 	click.call(Vector2i(4, 4), true)
 	click.call(Vector2i(4, 4), false)
 	click.call(Vector2i(4, 4), true)
@@ -4046,7 +4270,9 @@ func _test_building() -> void:
 	click.call(Vector2i(3, 3), true)
 	drag.call(Vector2i(5, 3))
 	click.call(Vector2i(5, 3), false)
-	_check(world.floor_at(Vector2i(3, 3)) == "planks" and world.floor_at(Vector2i(5, 3)) == "planks", "the floor tool covers an area")
+	_check(world.site_at(Vector2i(3, 3), "floor") != null and world.site_at(Vector2i(5, 3), "floor") != null and world.floor_at(Vector2i(3, 3)) == "", "the floor tool plans an area")
+	_complete_plans(sim, setup["pawn"])
+	_check(world.floor_at(Vector2i(3, 3)) == "planks" and world.floor_at(Vector2i(5, 3)) == "planks", "which is laid once built")
 	var cleared := [false]
 	controller.tool_cleared.connect(func() -> void: cleared[0] = true)
 	click.call(Vector2i(3, 3), true, MOUSE_BUTTON_RIGHT)
@@ -4057,6 +4283,14 @@ func _test_building() -> void:
 	controller._unhandled_input(escape)
 	_check(not controller.active, "Esc with no tool leaves build mode")
 	controller.queue_free()
+
+
+## Finishes every plan at once, as a builder would, for tests that are about where things go.
+func _complete_plans(sim: Simulation, builder: Pawn) -> void:
+	var rng := RandomNumberGenerator.new()
+	for site in sim.world.sites.duplicate():
+		site.progress = 1.0
+		Construction.finish(sim, builder, site, rng)
 
 
 func _test_accidents() -> void:

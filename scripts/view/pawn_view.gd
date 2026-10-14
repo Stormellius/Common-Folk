@@ -94,6 +94,8 @@ func _draw() -> void:
 		draw_set_transform(Vector2(0.0, -7.0) * u, 0.0, Vector2.ONE)
 	PawnArt.draw(self, pawn.look, pawn.facing, u, _phase * 0.5 if pawn.mount != 0 else _phase, asleep or fallen, PawnArt.outfit_for(pawn), breath)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	if not pawn.carrying.is_empty() and not fallen and not asleep:
+		PawnArt.draw_carry(self, pawn.carrying, pawn.facing, u)
 	if pawn.tool != "" and not fallen and not asleep:
 		PawnArt.draw_tool(self, pawn.tool, pawn.facing, u, Time.get_ticks_msec() / 1000.0 + pawn.id, pawn.job_stage == "using")
 	if asleep:

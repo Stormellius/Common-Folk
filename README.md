@@ -2,7 +2,7 @@
 
 A medieval life sim sandbox with a RimWorld look, made in Godot 4.4. You play one of your **folk** at a time in a generated region of towns that carries on without you. They work, court, raise children, grow old and die, and the family goes on.
 
-Milestones 1 to 20 are done; the plan from here is in [ROADMAP.md](ROADMAP.md). The data files and how to mod them are in [docs/DATA.md](docs/DATA.md).
+Milestones 1 to 21 are done; the plan from here is in [ROADMAP.md](ROADMAP.md). The data files and how to mod them are in [docs/DATA.md](docs/DATA.md).
 
 ## Run it
 
@@ -24,7 +24,8 @@ You control one of your folk. Left-click a person (or their portrait, or press T
 | C, Home | Centre on the selected person, on your home town |
 | T, M | Visit the next town, show the whole map |
 | Space, 1 to 4 | Pause, speed |
-| B | Build mode (right-click or Esc puts the tool away) |
+| B | Build mode: plan things (right-click or Esc puts the tool away) |
+| R | Roofs: by the zoom, always shown, hidden |
 | G, H | Grid, list of keys |
 | F5 / F9 | Quick save / load the newest save |
 | F11 | Window or borderless full screen |
@@ -52,7 +53,7 @@ You control one of your folk. Left-click a person (or their portrait, or press T
 
 **Danger.** A hearth can throw a spark, and fire spreads through timber, beds, straw and planks (stone does not burn). Folk run from flames and grown-ups nearby beat them out; anyone caught in them is burned, and burns kill. Work at the woodlot, quarry and jetty has its accidents: a falling tree, a rockfall, a fall into the water. Fevers come with the cold and the plague, rare and deadly, passes between people who stand close, worse among the filthy; the recovered are immune for a while. The clinic's sickbeds heal injuries and fevers, and herbs from the garden nurse the sick through. A fallen person can still be pleaded for.
 
-**Building.** On your own lot: furniture, timber and stone walls, doors, floors, business fittings and garden decor, with coin costs, refunds and live route updates.
+**Building.** On your own lot: furniture, timber and stone walls, doors, floors, business fittings and garden decor. Building is work now: you **plan** what you want and pay for it (what you hold of the materials is set aside, what you lack is bought), and then someone has to build it. A builder with a hammer fetches materials from the pile (by your storage crates, or the gate of the lot), hauls them to each plan and works until it stands, learning carpentry or masonry as they go; hire a builder for the day at a carpenter's counter if your folk are busy. A room closed in by walls and a door can be **roofed** (thatch or tile); under a roof people lose warmth more slowly and sleep properly, while a bed in the open gives less rest. The towns' buildings are roofed from the start, and zoomed out the roofs show as a town (R cycles roofs: by the zoom, always, hidden).
 
 **Look and feel.** Terrain drawn by a GPU shader, walls with depth and shadows, firelight and lantern light at night, seasons, weather, cloud shadows, and everything else drawn by code. Menus are dark carved wood and parchment in IM Fell English and Alegreya. A title screen, named save slots, quick save, an autosave each midnight, and settings (window mode, size, interface scale, vsync).
 
