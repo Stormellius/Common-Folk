@@ -1575,18 +1575,24 @@ func _on_world_changed(_tile: Vector2i) -> void:
 ## Every minute while something burns: those close to the flames run from them, and an idle adult
 ## within reach goes to beat them out.
 func _react_to_fire(pawn: Pawn) -> void:
-	if pawn.is_dying() or (pawn.is_infant() and pawn.carried_by != 0) or pawn.job_kind == "extinguish" or pawn.job_kind == "labour":
+	if pawn.is_dying() or (pawn.is_infant() and pawn.carried_by != 0) or pawn.job_kind == "labour":
+		return
+	var standing := world.fires.has(pawn.tile) or world.fires.has(pawn.committed_tile())
+	if pawn.job_kind == "extinguish" and not standing:
+		if Fire.count_near(world, pawn.tile, 5) > int(Fire.config().get("max_fightable", 10)):  # too big to fight
+			_end_job(pawn)
+			_flee(pawn, pawn.job_target)
 		return
 	var danger := Fire.nearest(world, pawn.tile, int(Fire.config().get("flee_radius", 3)))
-	if danger.x >= 0:
+	if danger.x >= 0 or standing:
 		if pawn.job_kind != "" or pawn.has_orders():
 			_end_job(pawn)
-		_flee(pawn, danger)
+		_flee(pawn, danger if danger.x >= 0 else pawn.tile)
 		Mood.add_event(pawn, "saw_fire", GameClock.tick)
 		return
 	if pawn.adult and not pawn.is_busy() and not _needs_break(pawn) and pawn.age >= 14:
 		var near := Fire.nearest(world, pawn.tile, int(Fire.config().get("fight_radius", 12)))
-		if near.x >= 0:
+		if near.x >= 0 and Fire.count_near(world, near, 5) <= int(Fire.config().get("max_fightable", 10)):
 			order_extinguish(pawn, near)
 
 
@@ -1623,9 +1629,22 @@ func extinguish_blocker(pawn: Pawn, fire_tile: Vector2i) -> String:
 		return "%s is in labour" % _first_name(pawn)
 	if not world.fires.has(fire_tile):
 		return "nothing is burning there"
-	if _plan_beside(pawn, fire_tile).is_empty():
+	if _plan_fire_stand(pawn, fire_tile).is_empty():
 		return "can't get close"
 	return ""
+
+
+## Where to stand to fight a fire: beside it, on something that will not burn if there is such a place.
+func _plan_fire_stand(pawn: Pawn, fire_tile: Vector2i) -> Dictionary:
+	var safe: Array[Vector2i] = []
+	var other: Array[Vector2i] = []
+	for step in [Vector2i(0, 1), Vector2i(1, 0), Vector2i(0, -1), Vector2i(-1, 0)]:
+		var tile: Vector2i = fire_tile + step
+		if world.fires.has(tile):
+			continue
+		(safe if Fire.flammability(world, tile) <= 0.0 else other).append(tile)
+	var plan := _plan_best(pawn, safe)
+	return plan if not plan.is_empty() else _plan_best(pawn, other)
 
 
 ## Sends `pawn` to beat out the fire at `fire_tile`.
@@ -1633,7 +1652,7 @@ func order_extinguish(pawn: Pawn, fire_tile: Vector2i) -> Dictionary:
 	var blocker := extinguish_blocker(pawn, fire_tile)
 	if blocker != "":
 		return { "ok": false, "message": "Can't fight the fire: %s" % blocker }
-	var plan := _plan_beside(pawn, fire_tile)
+	var plan := _plan_fire_stand(pawn, fire_tile)
 	_end_job(pawn)
 	pawn.path = plan["route"]
 	pawn.job_kind = "extinguish"
@@ -1660,7 +1679,7 @@ func _step_extinguish(pawn: Pawn) -> void:
 		pawn.job_target = next
 	if _distance(pawn.tile, pawn.job_target) > 2:
 		pawn.job_stage = "walking"  # it has spread: follow it
-		var plan := _plan_beside(pawn, pawn.job_target)
+		var plan := _plan_fire_stand(pawn, pawn.job_target)
 		if plan.is_empty():
 			_end_job(pawn)
 		else:

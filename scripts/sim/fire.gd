@@ -47,6 +47,15 @@ static func nearest(world: WorldState, tile: Vector2i, radius: int) -> Vector2i:
 	return best
 
 
+## How many tiles burn within `radius` (Chebyshev) of a tile.
+static func count_near(world: WorldState, tile: Vector2i, radius: int) -> int:
+	var count := 0
+	for burning in world.fires:
+		if maxi(absi(burning.x - tile.x), absi(burning.y - tile.y)) <= radius:
+			count += 1
+	return count
+
+
 ## Sets a tile alight if it can burn. Returns true if it caught.
 static func ignite(world: WorldState, tile: Vector2i) -> bool:
 	var amount := flammability(world, tile)

@@ -9,5 +9,6 @@
     "fight_radius": 12,
     "extinguish_per_minute": 6,
     "minutes_to_burn": 1,
-    "minutes_to_death": 4 }
+    "minutes_to_death": 6,
+    "max_fightable": 10 }
 ]

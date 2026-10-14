@@ -3317,7 +3317,10 @@ func _test_accidents() -> void:
 	_check(victim.illness == "burns" and victim.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "burned") and "burned" in " ".join(told), "someone caught in the flames is burned (%s)" % str(told))
 	for i in 4:
 		Fire.step(sim, rng)
-	_check(victim.is_dying() and victim.dying_cause == "burned to death", "and if they stay they die of it")
+	_check(not victim.is_dying(), "a few moments in the flames are survived")
+	for i in 3:
+		Fire.step(sim, rng)
+	_check(victim.is_dying() and victim.dying_cause == "burned to death", "but if they stay they die of it")
 	world.fires.clear()
 	household.remove_pawn(victim.id)
 	world.remove_object(world.object_at(Vector2i(10, 20)).id)
@@ -3348,6 +3351,39 @@ func _test_accidents() -> void:
 		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
 	_check(ben.job_kind == "" and ben.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "fought_fire"), "and is proud of it")
 	_check(anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "saw_fire"), "while the one who ran was frightened")
+
+	# A firefighter whose own ground catches fire runs, and nobody fights a blaze that is too big.
+	Fire.ignite(world, table.tile)
+	ben.tile = Vector2i(7, 5)
+	ben.step_to = ben.tile
+	world.set_floor(ben.tile, "planks")
+	ben.job_kind = "extinguish"
+	ben.job_stage = "using"
+	ben.job_target = table.tile
+	Fire.ignite(world, ben.tile)
+	sim._react_to_fire(ben)
+	_check(ben.job_kind == "" and ben.has_orders(), "a firefighter whose own ground catches fire runs for it")
+	world.fires.clear()
+	world.set_floor(ben.tile, "")
+	var safe_stand := sim._plan_fire_stand(ben, table.tile)
+	world.set_floor(Vector2i(6, 6), "planks")
+	var stand := sim._plan_fire_stand(anna, table.tile)
+	Fire.ignite(world, table.tile)
+	_check(not stand.is_empty() and Fire.flammability(world, stand["tile"]) == 0.0 and not safe_stand.is_empty(), "firefighters pick ground that will not burn to stand on")
+	world.fires.clear()
+	for dx in 12:
+		world.add_object("bed", Vector2i(20 + dx, 28))
+		Fire.ignite(world, Vector2i(20 + dx, 28))
+	var idle := Pawn.new()
+	idle.display_name = "Idle Hand"
+	idle.age = 30
+	idle.tile = Vector2i(26, 31)
+	idle.step_to = idle.tile
+	household.add_pawn(idle)
+	sim._react_to_fire(idle)
+	_check(idle.job_kind != "extinguish", "nobody takes on a blaze that is too big to fight")
+	world.fires.clear()
+	household.remove_pawn(idle.id)
 
 	# A fire is saved.
 	Fire.ignite(world, table.tile)
