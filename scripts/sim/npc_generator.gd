@@ -10,12 +10,16 @@ const FIRST_ID := 1000  # the town's people are numbered from here, apart from t
 
 static func create(world: WorldState) -> Household:
 	var town := Household.new(FIRST_ID)
-	var config := DataRegistry.get_def("worldgen", "town")
-	var remaining := int(config.get("npc_count", 12))
 	var rng := RandomNumberGenerator.new()
 	rng.seed = world.world_seed * 15485863 + 7
 	var surnames: Array = DataRegistry.get_def("names", "family").get("list", ["Smith"]).duplicate()
 	var homes: Array[Dictionary] = []  # { lot, family, spots, used_names, beds, size }
+	var wanted := {}  # settlement id -> how many people live there
+	var settlements: Array[Dictionary] = world.towns
+	if settlements.is_empty():  # a world with no settlements recorded: all the lots are one town
+		settlements = [{ "id": "", "profile": "town" }]
+	for settlement in settlements:
+		wanted[str(settlement["id"])] = int(DataRegistry.get_def("worldgen", str(settlement.get("profile", "town"))).get("npc_count", 12))
 	for lot in world.lots:
 		if str(lot["kind"]) != "house":
 			continue
@@ -27,22 +31,24 @@ static func create(world: WorldState) -> Household:
 		var used_names: Array[String] = []
 		homes.append({ "lot": lot, "family": family, "spots": spots, "used_names": used_names, "beds": _bed_count(world, lot), "size": 0 })
 	# First every house gets a couple (or one), then spare beds are filled with children until
-	# the town has the people it should.
+	# each settlement has the people it should.
 	for home in homes:
-		var take := mini(remaining, mini(2, int(home["beds"])))
+		var key := _settlement_of(wanted, home)
+		var take := mini(int(wanted[key]), mini(2, int(home["beds"])))
 		for i in take:
 			_add(town, rng, world, home, rng.randi_range(19, 58))
-		remaining -= take
+		wanted[key] = int(wanted[key]) - take
 	var progress := true
-	while remaining > 0 and progress:
+	while progress:
 		progress = false
 		for home in homes:
-			if remaining > 0 and int(home["size"]) < mini(int(home["beds"]), (home["spots"] as Array).size()):
+			var key := _settlement_of(wanted, home)
+			if int(wanted[key]) > 0 and int(home["size"]) < mini(int(home["beds"]), (home["spots"] as Array).size()):
 				_add(town, rng, world, home, rng.randi_range(3, 15))
-				remaining -= 1
+				wanted[key] = int(wanted[key]) - 1
 				progress = true
-	for pawn in town.pawns:  # the stone houses hold gentry, everyone else starts as a peasant
-		pawn.class_id = "gentry" if str(world.get_lot(pawn.home_lot).get("template", "")) == "stone_house" else "peasant"
+	for pawn in town.pawns:  # the grand houses hold gentry, everyone else starts as a peasant
+		pawn.class_id = str(_template(str(world.get_lot(pawn.home_lot).get("template", ""))).get("class", "peasant"))
 	_assign_jobs(world, town, rng)
 	for home in homes:  # a family with someone in trade ranks as burghers
 		var in_trade := false
@@ -62,6 +68,19 @@ static func create(world: WorldState) -> Household:
 	return town
 
 
+## The settlement a home is in, as a key of `wanted` ("" when the world has no settlements).
+static func _settlement_of(wanted: Dictionary, home: Dictionary) -> String:
+	var key := str(home["lot"].get("town", ""))
+	return key if wanted.has(key) else str(wanted.keys()[0])
+
+
+static func _template(template_id: String) -> Dictionary:
+	for def in DataRegistry.get_list("buildings"):
+		if str(def["id"]) == template_id:
+			return def
+	return {}
+
+
 ## Gives some adults work at the town's businesses. Each business keeps its last position open,
 ## so there is always something for a newcomer to apply for.
 static func _assign_jobs(world: WorldState, town: Household, rng: RandomNumberGenerator) -> void:
@@ -72,7 +91,8 @@ static func _assign_jobs(world: WorldState, town: Household, rng: RandomNumberGe
 			var filled := 0
 			var unemployed: Array[Pawn] = []
 			for pawn in town.pawns:
-				if pawn.work_job == "" and pawn.age >= int(job.get("min_age", 16)) and pawn.class_id not in job.get("not_for", []):
+				if pawn.work_job == "" and pawn.age >= int(job.get("min_age", 16)) and pawn.class_id not in job.get("not_for", []) \
+						and str(world.get_lot(pawn.home_lot).get("town", "")) == str(lot.get("town", "")):  # work where you live
 					unemployed.append(pawn)
 			while filled < int(job.get("positions", 1)) - 1 and not unemployed.is_empty():
 				var worker: Pawn = unemployed.pop_at(rng.randi() % unemployed.size())

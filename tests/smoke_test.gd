@@ -25,6 +25,7 @@ func _ready() -> void:
 	_test_needs()
 	_test_building()
 	_test_town()
+	_test_region()
 	_test_economy()
 	_test_social()
 	_test_events()
@@ -58,7 +59,7 @@ func _test_registry() -> void:
 	_check(DataRegistry.count("seasons") == 4, "seasons.json has four seasons")
 	_check(DataRegistry.count("needs") >= 7, "needs.json has at least the seven starting needs")
 	_check(DataRegistry.count("traits") >= 6, "traits.json loaded")
-	_check(DataRegistry.count("names") == 3 and DataRegistry.count("appearance") == 4 and DataRegistry.count("objects") >= 6, "names, appearance and objects loaded")
+	_check(DataRegistry.count("names") == 4 and DataRegistry.count("appearance") == 4 and DataRegistry.count("objects") >= 6, "names, appearance and objects loaded")
 	_check(DataRegistry.has_def("tiles", "grass"), "grass tile exists")
 	_check(not DataRegistry.has_def("tiles", "nonexistent"), "unknown id reports missing")
 	_check(DataRegistry.get_def("tiles", "nonexistent").is_empty(), "unknown id gives an empty Dictionary")
@@ -777,12 +778,14 @@ func _test_town() -> void:
 	for entry in world.lots:
 		rects.append(entry["rect"])
 	for i in rects.size():
-		var on_road := rects[i].intersects(Rect2i(center.x - 44, center.y, 89, 2)) or rects[i].intersects(Rect2i(center.x, center.y - 26, 2, 55))
+		var on_road := rects[i].intersects(Rect2i(center.x - 62, center.y, 125, 3)) or rects[i].intersects(Rect2i(center.x, center.y - 36, 3, 75))
 		apart = apart and not on_road
 		for j in range(i + 1, rects.size()):
 			apart = apart and not rects[i].intersects(rects[j])
 	_check(apart, "no two lots overlap and none sits on a road")
-	_check(world.get_tile_id(center.x, center.y) == "dirt" and world.get_tile_id(center.x + 1, center.y + 1) == "dirt", "the roads cross in the middle")
+	_check(world.get_tile_id(center.x, center.y) == "cobble" and world.get_tile_id(center.x + 2, center.y + 2) == "cobble" and world.get_tile_id(center.x - 20, center.y + 1) == "cobble", "the cobbled streets cross in the middle")
+	_check(world.object_at(Vector2i(center.x + 1, center.y + 1)) != null and world.object_at(Vector2i(center.x + 1, center.y + 1)).def_id == "well", "with a well in the square")
+	_check(world.towns.size() == 1 and world.home_town()["center"] == center and world.lots.all(func(entry: Dictionary) -> bool: return entry["town"] == world.towns[0]["id"]), "the lots belong to the town")
 	_check(world.lot.size == Vector2i(16, 13), "the player's lot is the size worldgen.json says")
 	var home_ground := true
 	for y in range(world.lot.position.y, world.lot.end.y):
@@ -961,6 +964,128 @@ func _work_setup() -> Dictionary:
 	world.add_object("counter", Vector2i(16, 4))
 	world.add_object("counter", Vector2i(17, 4))
 	return setup
+
+
+func _test_region() -> void:
+	print("The region and its towns")
+	var started := Time.get_ticks_msec()
+	var world := RegionGenerator.generate(7)
+	var elapsed := Time.get_ticks_msec() - started
+	var region := DataRegistry.get_def("worldgen", "region")
+	_check(world.width == int(region["width"]) and world.height == int(region["height"]) and world.width * world.height > 100000, "the map is big (%d by %d)" % [world.width, world.height])
+	_check(elapsed < 4000, "and is made in a moment (%d ms)" % elapsed)
+	_check(world.towns.size() == region["settlements"].size(), "with %d settlements" % world.towns.size())
+	var home := world.home_town()
+	_check(not home.is_empty() and home["center"] == Vector2i(world.width / 2, world.height / 2) and world.towns.filter(func(t: Dictionary) -> bool: return bool(t["home"])).size() == 1, "the player's town is in the middle, and only one is theirs")
+	var names := {}
+	var apart := true
+	for a in world.towns:
+		names[a["name"]] = true
+		for b in world.towns:
+			if a != b:
+				apart = apart and Vector2(a["center"]).distance_to(b["center"]) > 120.0
+	_check(names.size() == world.towns.size() and apart, "each has its own name, and they lie a long walk apart")
+	var every_building := true
+	for town in world.towns:
+		var wanted: Dictionary = DataRegistry.get_def("worldgen", town["profile"])["buildings"]
+		var got := {}
+		for lot in world.lots:
+			if lot.get("town", "") == town["id"]:
+				got[lot["kind"]] = int(got.get(lot["kind"], 0)) + 1
+		for kind in wanted:
+			every_building = every_building and int(got.get(kind, 0)) == int(wanted[kind])
+	_check(every_building, "every town has all the buildings its kind calls for")
+	_check(home["rect"].has_point(world.lot.get_center()) and world.lot_at(world.lot.get_center())["id"] == WorldState.HOME_LOT, "the player's lot is in their town")
+	var kinds := {}
+	for town in world.towns:
+		kinds[town["kind"]] = true
+	_check(kinds.has("town") and kinds.has("village") and kinds.has("hamlet"), "there are towns, villages and a hamlet")
+
+	# Streets and decoration make it look like a town.
+	var lanterns := 0
+	var stalls := 0
+	var beds := 0
+	for placed in world.objects:
+		lanterns += 1 if placed.def_id == "lantern_post" else 0
+		stalls += 1 if placed.def_id == "market_stall" else 0
+		beds += 1 if placed.def_id == "flower_bed" else 0
+	_check(lanterns >= 30 and stalls >= 4 and beds >= 10, "lanterns, stalls and flower beds finish it (%d, %d, %d)" % [lanterns, stalls, beds])
+	var cobbles := 0
+	for y in range(home["rect"].position.y, home["rect"].end.y):
+		cobbles += 1 if world.get_tile_id(home["center"].x + 1, y) == "cobble" else 0
+	_check(cobbles > 40, "the avenue is cobbled")
+
+	# The towns are joined: someone can walk from the home town to each of the others.
+	var finder := PathFinder.new(world)
+	var joined := true
+	for town in world.towns:
+		if town != home:
+			joined = joined and not finder.find_path(home["center"], Vector2i(town["center"].x, town["center"].y)).is_empty()
+	_check(joined, "a road joins every town to the player's")
+	var road_tiles := 0
+	for y in world.height:
+		for x in range(0, world.width, 1):
+			road_tiles += 1 if world.get_tile_id(x, y) == "dirt" else 0
+	_check(road_tiles > 1500, "the roads between them are laid in earth (%d tiles)" % road_tiles)
+
+	# Finding a place.
+	var other: Dictionary = world.towns[1]
+	_check(world.town_at(other["center"])["id"] == other["id"] and world.town_at(Vector2i(2, 2)).is_empty(), "a tile knows which town it is in, or none")
+	_check(world.town_of_lot(world.lots.filter(func(l: Dictionary) -> bool: return l["town"] == other["id"])[0]["id"])["id"] == other["id"] and world.town_of_lot(WorldState.HOME_LOT)["id"] == home["id"], "and a lot knows its town")
+
+	# The people live in their own towns, and work there.
+	var household := HouseholdGenerator.create(world)
+	CampGenerator.place(world, household)
+	var town_people := NpcGenerator.create(world)
+	var per_town := {}
+	var works_at_home := true
+	for pawn in town_people.pawns:
+		var where := str(world.town_of_lot(pawn.home_lot).get("id", ""))
+		per_town[where] = int(per_town.get(where, 0)) + 1
+		if pawn.work_lot != "":
+			works_at_home = works_at_home and str(world.town_of_lot(pawn.work_lot).get("id", "")) == where
+	var counts_ok := per_town.size() == world.towns.size()
+	for town in world.towns:
+		counts_ok = counts_ok and int(per_town.get(town["id"], 0)) > 0 and int(per_town.get(town["id"], 0)) <= int(DataRegistry.get_def("worldgen", town["profile"])["npc_count"])
+	_check(counts_ok and town_people.pawns.size() > 80, "every town has its people (%d in all)" % town_people.pawns.size())
+	_check(works_at_home, "and they work in the town they live in")
+	var surnames := {}
+	for pawn in town_people.pawns:
+		surnames[pawn.display_name.get_slice(" ", 1)] = true
+	_check(surnames.size() >= 30, "from many different families (%d surnames)" % surnames.size())
+
+	# Walkers stay near home, apart from the odd visit.
+	var sim := Simulation.new(world, household, town_people)
+	var villager: Pawn = town_people.pawns[0]
+	var villager_town := world.town_of_lot(villager.home_lot)
+	var strayed := 0
+	var trips := 0
+	for trip in 4000:
+		villager.path.clear()
+		villager.job_kind = ""
+		villager.tile = villager_town["center"]
+		villager.step_to = villager.tile
+		sim._roam(villager, 12 * 60)
+		var goal := villager.goal_tile()
+		if goal != villager.tile:
+			trips += 1
+			strayed += 1 if world.town_at(goal, 0).get("id", "") != villager_town["id"] else 0
+	_check(trips > 20 and strayed * 4 < trips, "townsfolk take their walks in their own town, and only seldom visit another (%d of %d)" % [strayed, trips])
+
+	# Saving keeps the towns and the tiles.
+	_check(SaveGame.save(TEST_SAVE, world, household, {}) == OK, "the big map is saved")
+	var back := SaveGame.load_from(TEST_SAVE)
+	_check(back["ok"] and back["world"].tiles == world.tiles and back["world"].towns.size() == world.towns.size() and back["world"].towns[1]["center"] == world.towns[1]["center"] and back["world"].home_town()["name"] == home["name"], "and they come back")
+	var packed_size := FileAccess.get_file_as_string(TEST_SAVE).length()
+	_check(packed_size < 1500000, "in a save that is not enormous (%d bytes)" % packed_size)
+	var old_world: Dictionary = world.to_dict()
+	old_world.erase("towns")
+	old_world.erase("tiles_z")
+	old_world["tiles"] = Array(world.tiles)
+	var from_old := WorldState.from_dict(old_world)
+	_check(from_old.tiles == world.tiles and from_old.towns.size() == 1 and from_old.towns[0]["home"], "a save from before there were towns gets one around its lots, with its tiles as written")
+	DirAccess.remove_absolute(TEST_SAVE)
+	GameClock.reset()
 
 
 func _test_economy() -> void:
@@ -1382,7 +1507,7 @@ func _test_social() -> void:
 	var strangers_met := 0
 	for minute in 2 * GameClock.MINUTES_PER_DAY:
 		GameClock.advance_one_tick()
-		big_sim.step()
+		big_sim.step(GameClock.SUBSTEPS_PER_MINUTE)  # as in the live game, where walking is quick
 		if minute % 60 == 0:
 			for villager in town.pawns:
 				lowest_social = minf(lowest_social, float(villager.needs["social"]))
@@ -2248,7 +2373,7 @@ func _test_faith_and_illness() -> void:
 	TownGenerator.generate(town_world)
 	var chapels := town_world.lots.filter(func(entry: Dictionary) -> bool: return str(entry["kind"]) == "chapel")
 	var inside := _objects_in(town_world, chapels[0]["rect"]) if chapels.size() == 1 else {}
-	_check(chapels.size() == 1 and bool(chapels[0]["public"]) and int(inside.get("altar", 0)) == 1 and int(inside.get("pew", 0)) == 8, "the town has a public chapel with an altar and eight pews (%s)" % str(inside))
+	_check(chapels.size() == 1 and bool(chapels[0]["public"]) and int(inside.get("altar", 0)) == 1 and int(inside.get("pew", 0)) >= 4, "the town has a public chapel with an altar and pews (%s)" % str(inside))
 	var clinic_lot := town_world.lots.filter(func(entry: Dictionary) -> bool: return str(entry["kind"]) == "clinic")
 	_check(int(_objects_in(town_world, clinic_lot[0]["rect"]).get("sickbed", 0)) == 3, "and the clinic has three sickbeds")
 

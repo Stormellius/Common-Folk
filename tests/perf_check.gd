@@ -4,8 +4,7 @@ extends Node
 func _ready() -> void:
 	GameClock.reset()
 	GameClock.set_time(0, 6)
-	var world := MapGenerator.generate(7, 128, 96)
-	TownGenerator.generate(world)
+	var world := RegionGenerator.generate(7)
 	var household := HouseholdGenerator.create(world)
 	CampGenerator.place(world, household)
 	var sim := Simulation.new(world, household, NpcGenerator.create(world))

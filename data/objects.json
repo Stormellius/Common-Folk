@@ -24,5 +24,12 @@
   { "id": "pew",      "cost": 15, "name": "Pew",      "action": "Pray",              "doing": "Praying",             "blocks_walking": false, "use_position": "on",     "satisfies": { "faith": 70.0 },  "max_use_minutes": 45 },
   { "id": "altar",    "cost": 40, "name": "Altar",    "action": "Pray at the altar", "doing": "Praying at the altar", "blocks_walking": true,  "use_position": "beside", "satisfies": { "faith": 110.0 }, "max_use_minutes": 30, "light": { "color": "#ffd590", "radius": 2.5, "energy": 0.7 } },
   { "id": "sickbed",  "cost": 20, "name": "Sickbed",  "action": "Rest and be treated", "doing": "Being treated",    "blocks_walking": false, "use_position": "on",     "pose": "lie", "satisfies": { "rest": 20.0 }, "max_use_minutes": 300, "price": 10, "cures": ["fever"], "cure_minutes": 90 },
-  { "id": "watch_post", "cost": 30, "name": "Watch post", "category": "structure", "blocks_walking": true, "defense": 3, "light": { "color": "#ffd27a", "radius": 4.0, "energy": 0.9 } }
+  { "id": "watch_post", "cost": 30, "name": "Watch post", "category": "structure", "blocks_walking": true, "defense": 3, "light": { "color": "#ffd27a", "radius": 4.0, "energy": 0.9 } },
+  { "id": "lantern_post", "cost": 6, "name": "Lantern post", "category": "decor", "blocks_walking": true, "light": { "color": "#ffd9a0", "radius": 4.6, "energy": 0.85, "shadow": false } },
+  { "id": "flower_bed", "cost": 3, "name": "Flower bed", "category": "decor", "blocks_walking": false },
+  { "id": "bush", "cost": 2, "name": "Bush", "category": "decor", "blocks_walking": true },
+  { "id": "haystack", "cost": 4, "name": "Haystack", "category": "decor", "blocks_walking": true },
+  { "id": "woodpile", "cost": 4, "name": "Woodpile", "category": "decor", "blocks_walking": true },
+  { "id": "cart", "cost": 10, "name": "Handcart", "category": "decor", "blocks_walking": true },
+  { "id": "market_stall", "cost": 12, "name": "Market stall", "category": "decor", "blocks_walking": true }
 ]

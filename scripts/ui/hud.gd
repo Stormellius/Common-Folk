@@ -19,6 +19,7 @@ const HELP_LINES: Array = [
 	["WASD, arrows", "Move the camera (Shift: faster)"],
 	["Wheel, middle drag", "Zoom, pan"],
 	["Space, 1 to 4", "Pause, speed"],
+	["T, M, Home", "Next town, whole map, your home"],
 	["B", "Build mode"],
 	["G", "Grid"],
 	["F5 / F9", "Quick save / load the newest save"],
@@ -65,6 +66,7 @@ var _needs_activity: Label
 var _needs_job: Label
 var _purse_label: Label
 var _realm_label: Label
+var _place_label: Label
 var _mood_bar: ProgressBar
 var _mood_fill: StyleBoxFlat
 var _mood_label: Label
@@ -107,6 +109,11 @@ func _ready() -> void:
 
 
 ## The household's purse, shown under the clock.
+## Where the person you control is: a town's name, or "Open country".
+func set_place(text: String) -> void:
+	_place_label.text = text
+
+
 func set_purse(coins: int) -> void:
 	_purse_label.text = "Purse  %s" % Economy.format(coins)
 
@@ -390,6 +397,10 @@ func _build_clock_panel() -> void:
 	_date_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_date_label.add_theme_font_size_override("font_size", 14)
 	date_box.add_child(_date_label)
+	_place_label = _make_label("", "DimLabel")
+	_place_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_place_label.add_theme_font_size_override("font_size", 12)
+	date_box.add_child(_place_label)
 	_season_glyph = SeasonGlyph.new()
 	_season_glyph.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	top.add_child(_season_glyph)

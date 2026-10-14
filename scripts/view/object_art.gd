@@ -37,6 +37,20 @@ static func draw(ci: CanvasItem, def_id: String, u: float, t: float, occupied: b
 			_bed(ci, u, occupied)
 		"cradle":
 			_cradle(ci, u)
+		"lantern_post":
+			_lantern_post(ci, u, t)
+		"flower_bed":
+			_flower_bed(ci, u, cell)
+		"bush":
+			_bush(ci, u, cell)
+		"haystack":
+			_haystack(ci, u, cell)
+		"woodpile":
+			_woodpile(ci, u, cell)
+		"cart":
+			_cart(ci, u, cell)
+		"market_stall":
+			_market_stall(ci, u, cell)
 		"cooking_pot":
 			_cooking_pot(ci, u, t)
 		"hearth":
@@ -83,6 +97,112 @@ static func _bed(ci: CanvasItem, u: float, occupied: bool) -> void:
 	if not occupied:  # a folded blanket at the foot
 		_rect(ci, u, -13, 8, 26, 9, Color(0.49, 0.31, 0.31), 1.0)
 		ci.draw_line(Vector2(-12, 11) * u, Vector2(12, 11) * u, Color(0.62, 0.42, 0.42), maxf(1.0, u))
+
+
+## An iron post with a glass lantern on top, seen from above: its base, and the warm glow.
+static func _lantern_post(ci: CanvasItem, u: float, t: float) -> void:
+	_shadow(ci, u, 9.0)
+	ci.draw_circle(Vector2.ZERO, 8.0 * u, OUTLINE)
+	ci.draw_circle(Vector2.ZERO, 6.6 * u, Color(0.34, 0.34, 0.36))
+	ci.draw_circle(Vector2(-1.2, -1.2) * u, 3.2 * u, Color(0.50, 0.50, 0.52))
+	_rect(ci, u, -4.5, -4.5, 9, 9, Color(0.18, 0.17, 0.18), 1.0)  # the lantern's cage
+	var flicker := 0.92 + 0.08 * sin(t * 6.0)
+	ci.draw_circle(Vector2.ZERO, 3.8 * u, Color(1.0, 0.82, 0.40, 0.95 * flicker))
+	ci.draw_circle(Vector2.ZERO, 1.8 * u, Color(1.0, 0.97, 0.80))
+	ci.draw_line(Vector2(-4.5, 0) * u, Vector2(4.5, 0) * u, Color(0.18, 0.17, 0.18), maxf(1.0, 0.8 * u))
+	ci.draw_line(Vector2(0, -4.5) * u, Vector2(0, 4.5) * u, Color(0.18, 0.17, 0.18), maxf(1.0, 0.8 * u))
+
+
+## A bed of earth with flowers, a different mix on every tile.
+static func _flower_bed(ci: CanvasItem, u: float, cell: Vector2i) -> void:
+	_rect(ci, u, -16, -13, 32, 26, Color(0.33, 0.23, 0.15), 1.2)
+	_rect(ci, u, -14, -11, 28, 22, Color(0.26, 0.18, 0.12), 0.0)
+	var colors := [Color(0.92, 0.35, 0.40), Color(0.97, 0.85, 0.30), Color(0.93, 0.93, 0.95), Color(0.66, 0.48, 0.86), Color(0.98, 0.60, 0.25)]
+	var main_color: Color = colors[int(hash01(cell.x, cell.y, 31) * colors.size()) % colors.size()]
+	var other_color: Color = colors[int(hash01(cell.x, cell.y, 32) * colors.size()) % colors.size()]
+	for i in 11:
+		var at := Vector2(lerpf(-11.0, 11.0, hash01(cell.x, cell.y, 40 + i)), lerpf(-8.0, 8.0, hash01(cell.x, cell.y, 60 + i)))
+		_ellipse(ci, u, at + Vector2(0.0, 1.0), Vector2(3.4, 2.2), Color(0.28, 0.48, 0.24), 0.0)
+		ci.draw_circle((at + Vector2(0.0, -1.5)) * u, 2.5 * u, main_color if i % 3 != 0 else other_color)
+		ci.draw_circle((at + Vector2(0.0, -1.5)) * u, 0.9 * u, Color(0.98, 0.88, 0.40))
+
+
+## A round shrub of dark leaves, with highlights and a few berries.
+static func _bush(ci: CanvasItem, u: float, cell: Vector2i) -> void:
+	_shadow(ci, u, 17.0)
+	var tone := 0.9 + 0.2 * hash01(cell.x, cell.y, 5)
+	for blob in [[Vector2(-7, 3), 10.0], [Vector2(7, 3), 10.0], [Vector2(0, -5), 11.0], [Vector2(0, 5), 10.0]]:
+		ci.draw_circle(blob[0] * u, (blob[1] + 1.2) * u, OUTLINE)
+	for blob in [[Vector2(-7, 3), 10.0], [Vector2(7, 3), 10.0], [Vector2(0, -5), 11.0], [Vector2(0, 5), 10.0]]:
+		ci.draw_circle(blob[0] * u, blob[1] * u, Color(0.22, 0.38, 0.20) * tone)
+	for blob in [[Vector2(-8, 1), 4.5], [Vector2(5, -6), 4.5], [Vector2(1, 3), 3.8]]:
+		ci.draw_circle(blob[0] * u, blob[1] * u, Color(0.34, 0.54, 0.28) * tone)
+	if hash01(cell.x, cell.y, 6) < 0.5:
+		for i in 5:
+			var at := Vector2(lerpf(-10.0, 10.0, hash01(cell.x, cell.y, 70 + i)), lerpf(-9.0, 9.0, hash01(cell.x, cell.y, 80 + i)))
+			ci.draw_circle(at * u, 1.5 * u, Color(0.80, 0.18, 0.22))
+
+
+## A golden mound of hay.
+static func _haystack(ci: CanvasItem, u: float, cell: Vector2i) -> void:
+	_shadow(ci, u, 20.0)
+	_ellipse(ci, u, Vector2.ZERO, Vector2(19, 17), Color(0.78, 0.62, 0.26), 1.3)
+	_ellipse(ci, u, Vector2(-2, -2), Vector2(13, 11), Color(0.88, 0.73, 0.36), 0.0)
+	for i in 14:
+		var a := TAU * i / 14.0 + hash01(cell.x, cell.y, 9) * 0.5
+		ci.draw_line(Vector2(cos(a), sin(a)) * 3.0 * u, Vector2(cos(a), sin(a)) * (13.0 + 3.0 * hash01(cell.x, cell.y, 90 + i)) * u, Color(0.70, 0.54, 0.22), maxf(1.0, 0.9 * u))
+	_ellipse(ci, u, Vector2(-4, -5), Vector2(6, 3.5), Color(1, 1, 1, 0.16), 0.0)
+
+
+## Split logs stacked in a pile, their ends showing.
+static func _woodpile(ci: CanvasItem, u: float, cell: Vector2i) -> void:
+	_shadow(ci, u, 19.0)
+	_rect(ci, u, -19, -15, 38, 30, Color(0.30, 0.20, 0.12), 1.2)
+	for row in 4:
+		var y := -11.0 + row * 7.2
+		for col in 5:
+			var x := -14.5 + col * 7.2 + (3.6 if row % 2 == 1 else 0.0)
+			if x > 15.0:
+				continue
+			var shade := 0.85 + 0.3 * hash01(cell.x + col, cell.y + row, 12)
+			ci.draw_circle(Vector2(x, y) * u, 3.9 * u, OUTLINE)
+			ci.draw_circle(Vector2(x, y) * u, 3.3 * u, Color(0.70, 0.52, 0.30) * shade)
+			ci.draw_arc(Vector2(x, y) * u, 1.8 * u, 0.0, TAU, 10, Color(0.50, 0.34, 0.18), maxf(1.0, 0.7 * u))
+			ci.draw_circle(Vector2(x, y) * u, 0.7 * u, Color(0.42, 0.28, 0.14))
+
+
+## A two-wheeled handcart with sacks in the bed.
+static func _cart(ci: CanvasItem, u: float, cell: Vector2i) -> void:
+	_shadow(ci, u, 21.0)
+	_rect(ci, u, -9, 14, 18, 7, Color(0.36, 0.25, 0.15), 1.0)  # the shafts
+	for side in [-1.0, 1.0]:
+		_rect(ci, u, side * 19.0 - 2.5, -11, 5, 22, Color(0.24, 0.16, 0.10), 1.0)  # wheels, edge on
+		ci.draw_line(Vector2(side * 19.0, -9) * u, Vector2(side * 19.0, 9) * u, Color(0.45, 0.33, 0.20), maxf(1.0, 1.2 * u))
+	_rect(ci, u, -16, -15, 32, 30, Color(0.43, 0.30, 0.18), 1.3)
+	_rect(ci, u, -13, -12, 26, 24, Color(0.58, 0.42, 0.25), 0.0)
+	for i in 4:
+		ci.draw_line(Vector2(-13, -6 + i * 6) * u, Vector2(13, -6 + i * 6) * u, Color(0.40, 0.28, 0.16), maxf(1.0, 0.8 * u))
+	var sack := Color(0.80, 0.72, 0.52) if hash01(cell.x, cell.y, 3) < 0.5 else Color(0.62, 0.50, 0.34)
+	_ellipse(ci, u, Vector2(-5, -3), Vector2(7, 6), sack, 1.0)
+	_ellipse(ci, u, Vector2(6, 4), Vector2(6, 5), sack.darkened(0.08), 1.0)
+	ci.draw_circle(Vector2(-5, -8) * u, 1.6 * u, sack.darkened(0.3))
+
+
+## A trader's stall: a table under a striped awning, goods along the front.
+static func _market_stall(ci: CanvasItem, u: float, cell: Vector2i) -> void:
+	_shadow(ci, u, 22.0)
+	_rect(ci, u, -22, -18, 44, 36, Color(0.36, 0.25, 0.15), 1.4)
+	_rect(ci, u, -20, 4, 40, 12, Color(0.58, 0.42, 0.25), 0.0)  # the table showing under the awning
+	var palette := [[Color(0.74, 0.20, 0.18), Color(0.93, 0.89, 0.78)], [Color(0.22, 0.40, 0.62), Color(0.93, 0.89, 0.78)], [Color(0.28, 0.50, 0.28), Color(0.93, 0.89, 0.78)]]
+	var stripes: Array = palette[int(hash01(cell.x, cell.y, 14) * palette.size()) % palette.size()]
+	for i in 8:
+		_rect(ci, u, -20 + i * 5.0, -16, 5, 22, stripes[i % 2], 0.0)
+	ci.draw_line(Vector2(-20, 6) * u, Vector2(20, 6) * u, Color(0.0, 0.0, 0.0, 0.25), maxf(1.0, 1.4 * u))
+	for i in 6:  # goods on the table
+		var at := Vector2(-16.0 + i * 6.4, 11.0)
+		var goods := [Color(0.84, 0.30, 0.22), Color(0.95, 0.78, 0.30), Color(0.50, 0.68, 0.30), Color(0.80, 0.62, 0.40)]
+		ci.draw_circle(at * u, 2.8 * u, OUTLINE)
+		ci.draw_circle(at * u, 2.2 * u, goods[int(hash01(cell.x + i, cell.y, 16) * goods.size()) % goods.size()])
 
 
 ## A little wooden cradle on two rockers, with a straw tick and a folded blanket.

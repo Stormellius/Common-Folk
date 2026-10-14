@@ -21,6 +21,10 @@ var loaded_mods: Array[String] = []
 ## Human readable problems found while loading (bad JSON, missing ids...).
 var load_errors: Array[String] = []
 
+## Goes up every time the data is loaded again, so code that remembers something worked out from it
+## (see Needs, Life) knows when to forget.
+var revision := 0
+
 var _defs: Dictionary = {}   # kind -> { id -> entry }
 var _order: Dictionary = {}  # kind -> [ids in load order]
 
@@ -31,6 +35,7 @@ func _ready() -> void:
 
 ## Clears everything and loads base data, then every enabled mod.
 func reload() -> void:
+	revision += 1
 	_defs.clear()
 	_order.clear()
 	loaded_mods.clear()

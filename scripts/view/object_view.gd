@@ -33,6 +33,7 @@ func setup(new_placed: PlacedObject) -> void:
 	placed = new_placed
 	position = (Vector2(placed.tile) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE
 	_add_light()
+	set_process(_light != null or ObjectArt.is_animated(placed.def_id))  # most things never change
 	queue_redraw()
 
 
@@ -46,7 +47,7 @@ func _add_light() -> void:
 	_light.texture_scale = float(spec.get("radius", 4.0)) * MapView.TILE_SIZE / (LIGHT_TEXTURE_SIZE * 0.5)
 	_light_energy = float(spec.get("energy", 1.0))
 	_light.enabled = false
-	_light.shadow_enabled = true  # walls stop the light, so a fire indoors does not light the street
+	_light.shadow_enabled = bool(spec.get("shadow", true))  # walls stop the light, so a fire indoors does not light the street
 	_light.shadow_filter = Light2D.SHADOW_FILTER_PCF5
 	_light.shadow_filter_smooth = 1.5
 	add_child(_light)

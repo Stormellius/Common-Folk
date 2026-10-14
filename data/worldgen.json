@@ -1,26 +1,60 @@
 [
-  {
-    "id": "town",
-    "npc_count": 12,
-    "buildings": {
-      "tavern": 1,
-      "shop": 1,
-      "clinic": 1,
-      "chapel": 1,
-      "park": 1,
-      "house": 5,
-      "vacant": 2
-    },
-    "half_width": 44,
-    "half_height_up": 26,
-    "half_height_down": 28,
-    "home_lot_size": [
-      16,
-      13
-    ],
-    "vacant_lot_size": [
-      12,
-      10
-    ]
-  }
+  { "id": "region",
+    "width": 480,
+    "height": 320,
+    "jitter": 0.04,
+    "settlements": [
+      { "profile": "town",            "at": [0.50, 0.50], "home": true },
+      { "profile": "village",         "at": [0.86, 0.20] },
+      { "profile": "hamlet",          "at": [0.09, 0.22] },
+      { "profile": "fishing_village", "at": [0.14, 0.82] },
+      { "profile": "market_town",     "at": [0.86, 0.80] }
+    ] },
+
+  { "id": "town",
+    "kind": "town",
+    "npc_count": 38,
+    "buildings": { "tavern": 2, "shop": 2, "clinic": 1, "chapel": 1, "park": 1, "house": 16, "vacant": 4 },
+    "half_width": 62, "half_height_up": 36, "half_height_down": 38,
+    "streets": { "ns": [-36, 36], "ew": [-24, 24] },
+    "home_lot_size": [16, 13],
+    "vacant_lot_size": [12, 10],
+    "plaza": true },
+
+  { "id": "market_town",
+    "kind": "town",
+    "npc_count": 24,
+    "buildings": { "tavern": 1, "shop": 2, "clinic": 1, "chapel": 1, "park": 1, "house": 9, "vacant": 2 },
+    "half_width": 54, "half_height_up": 30, "half_height_down": 31,
+    "streets": { "ns": [-29, 29], "ew": [] },
+    "vacant_lot_size": [12, 10],
+    "plaza": true },
+
+  { "id": "village",
+    "kind": "village",
+    "npc_count": 20,
+    "buildings": { "tavern": 1, "shop": 1, "chapel": 1, "park": 1, "house": 7, "vacant": 2 },
+    "half_width": 47, "half_height_up": 26, "half_height_down": 27,
+    "streets": { "ns": [-25, 25], "ew": [] },
+    "vacant_lot_size": [12, 10],
+    "plaza": false },
+
+  { "id": "fishing_village",
+    "kind": "village",
+    "npc_count": 13,
+    "buildings": { "tavern": 1, "shop": 1, "house": 5, "vacant": 1 },
+    "half_width": 38, "half_height_up": 20, "half_height_down": 21,
+    "streets": { "ns": [], "ew": [] },
+    "vacant_lot_size": [12, 10],
+    "plaza": false,
+    "lake": true },
+
+  { "id": "hamlet",
+    "kind": "hamlet",
+    "npc_count": 9,
+    "buildings": { "chapel": 1, "house": 4, "vacant": 1 },
+    "half_width": 33, "half_height_up": 19, "half_height_down": 20,
+    "streets": { "ns": [], "ew": [] },
+    "vacant_lot_size": [12, 10],
+    "plaza": false }
 ]

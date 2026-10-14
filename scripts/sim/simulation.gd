@@ -10,11 +10,12 @@ extends RefCounted
 
 const THINK_COOLDOWN_TICKS := 30  # wait this long after finding nothing to fix a need with
 const OPTIONS_PER_NEED := 3       # how many nearest objects to try
-const SOCIAL_RADIUS := 30         # how far someone lonely will go to find a person to talk to
+const SOCIAL_RADIUS := 50         # how far someone lonely will go to find a person to talk to (towns are big)
 const GATHER_CHANCE := 0.04       # per minute, for an idle townsperson while an event draws a crowd
 const EVENT_EVERY := 10           # minutes between giving event thoughts and company
 const WORK_BREAK_BELOW := 15.0    # a need this low sends a worker off their shift to see to it
 const MOOD_EVERY := 5             # minutes between mood checks for townspeople
+const VISIT_CHANCE := 0.04   # of the walks to a public place, how many go to another settlement
 const ROAM_CHANCE := 0.012        # per minute, for an idle townsperson in the daytime
 const ROAM_FROM_MINUTE := 7 * 60
 const ROAM_UNTIL_MINUTE := 20 * 60
@@ -50,6 +51,9 @@ signal household_changed
 signal babies_born(ids: Array[int])
 ## Ids of the needs in play; see Needs.
 var active_needs: Array[String] = []
+var _fillers_by_need := {}  # need id -> the objects that can fill it
+var _fillers_dirty := true
+var _has_infants := true  # whether anyone is a baby, worked out each minute; babies are carried along as people walk
 ## The dead Death has just led away, for the view to show their going: { "tile", "tick", "name",
 ## "death_at" (where Death stood, in tiles, or null) }. Kept an hour or so, never saved.
 var departures: Array[Dictionary] = []
@@ -66,6 +70,7 @@ func _init(p_world: WorldState, p_household: Household, p_town: Household = null
 	town = p_town if p_town != null else Household.new(NpcGenerator.FIRST_ID)
 	_rng.seed = world.world_seed + 4242
 	pathfinder = PathFinder.new(world)
+	world.tile_changed.connect(_on_world_changed)
 	active_needs = Needs.active_ids()
 	_repair_after_load()
 
@@ -73,10 +78,14 @@ func _init(p_world: WorldState, p_household: Household, p_town: Household = null
 ## People take their steps (a fraction of a game minute: see GameClock.SUBSTEPS_PER_MINUTE). The
 ## clock's `motion_ticked` signal calls this; thinking, needs and everything else wait for `step`.
 func step_motion() -> void:
-	for pawn in people():
-		if not (pawn.is_infant() or pawn.is_dying()):
+	for pawn in household.pawns:
+		if (pawn.step_ticks_total > 0 or not pawn.path.is_empty()) and not pawn.is_infant() and not pawn.is_dying():
 			pawn.tick(world)
-	Pregnancy.carry_infants(self)
+	for pawn in town.pawns:
+		if (pawn.step_ticks_total > 0 or not pawn.path.is_empty()) and not pawn.is_infant() and not pawn.is_dying():
+			pawn.tick(world)
+	if _has_infants:
+		Pregnancy.carry_infants(self)
 
 
 ## One game minute passes. Called from the clock's `ticked` signal. `motion_steps` is how many
@@ -94,6 +103,11 @@ func step(motion_steps: int = 1) -> void:
 			event_ended.emit(event_name)
 	var season_multipliers := _season_multipliers()
 	var minute := GameClock.get_minute_of_day()
+	_has_infants = false
+	for pawn in household.pawns:
+		_has_infants = _has_infants or pawn.is_infant()
+	for pawn in town.pawns:
+		_has_infants = _has_infants or pawn.is_infant()
 	Pregnancy.carry_infants(self)
 	Mortality.step(self)
 	for notice in Pregnancy.step(self, _rng):
@@ -912,28 +926,42 @@ func _season_multipliers() -> Dictionary:
 ## a thought. Called every EVENT_EVERY minutes.
 func _apply_events(everyone: Array[Pawn]) -> void:
 	for def in events.active_defs():
-		var rect := _gather_rect(def)
-		if rect.size == Vector2i.ZERO:
-			continue
-		for pawn in everyone:
-			if not rect.has_point(pawn.tile):
-				continue
-			var restore: Dictionary = def.get("restore", {})
-			for need_id in restore:
-				if pawn.needs.has(need_id):
-					pawn.needs[need_id] = minf(Needs.FULL, float(pawn.needs[need_id]) + float(restore[need_id]) * EVENT_EVERY / 60.0)
-			if def.has("thought"):
-				Mood.add_event(pawn, str(def["thought"]), GameClock.tick)
+		for rect in _gather_rects(def):
+			for pawn in everyone:
+				if not rect.has_point(pawn.tile):
+					continue
+				var restore: Dictionary = def.get("restore", {})
+				for need_id in restore:
+					if pawn.needs.has(need_id):
+						pawn.needs[need_id] = minf(Needs.FULL, float(pawn.needs[need_id]) + float(restore[need_id]) * EVENT_EVERY / 60.0)
+				if def.has("thought"):
+					Mood.add_event(pawn, str(def["thought"]), GameClock.tick)
 
 
-## The lot an event draws people to ("gather": a kind of building), or an empty rect.
-func _gather_rect(def: Dictionary) -> Rect2i:
+## Every lot an event draws people to ("gather": a kind of building), one in each settlement.
+func _gather_rects(def: Dictionary) -> Array[Rect2i]:
+	var rects: Array[Rect2i] = []
 	var kind := str(def.get("gather", ""))
 	if kind != "":
 		for entry in world.lots:
 			if str(entry["kind"]) == kind:
-				return entry["rect"]
-	return Rect2i()
+				rects.append(entry["rect"])
+	return rects
+
+
+## The lot an event draws `pawn` to: the one in their own settlement, or an empty rect.
+func _gather_rect(def: Dictionary, pawn: Pawn) -> Rect2i:
+	var kind := str(def.get("gather", ""))
+	var home_town := str(world.town_of_lot(pawn.home_lot).get("id", ""))
+	var fallback := Rect2i()
+	if kind != "":
+		for entry in world.lots:
+			if str(entry["kind"]) == kind:
+				if str(entry.get("town", "")) == home_town:
+					return entry["rect"]
+				if fallback.size == Vector2i.ZERO:
+					fallback = entry["rect"]
+	return fallback if home_town == "" else Rect2i()
 
 
 ## What using this object costs right now: its price, changed by any event (market day).
@@ -1298,9 +1326,8 @@ func _think(pawn: Pawn, minute: int) -> bool:
 				return true
 			continue
 		var options: Array[PlacedObject] = []
-		for placed in world.objects:
-			if placed.user_id == 0 and placed.def().get("satisfies", {}).has(want[1]) and _may_use(pawn, placed) \
-					and price_of(placed.def_id) <= coins_of(pawn) and bool(placed.def().get("autonomous", true)):
+		for placed in _fillers(str(want[1])):
+			if placed.user_id == 0 and _may_use(pawn, placed) and price_of(placed.def_id) <= coins_of(pawn) and bool(placed.def().get("autonomous", true)):
 				options.append(placed)
 		options.sort_custom(func(a: PlacedObject, b: PlacedObject) -> bool:
 			return _effort(pawn, a) < _effort(pawn, b))
@@ -1309,6 +1336,23 @@ func _think(pawn: Pawn, minute: int) -> bool:
 				return true
 	pawn.think_cooldown = THINK_COOLDOWN_TICKS  # nothing within reach; try again later
 	return false
+
+
+## Every object that can fill a need, from a list kept until something is built, moved or removed.
+func _fillers(need_id: String) -> Array:
+	if _fillers_dirty:
+		_fillers_by_need.clear()
+		for placed in world.objects:
+			for filled in placed.def().get("satisfies", {}):
+				if not _fillers_by_need.has(filled):
+					_fillers_by_need[filled] = []
+				_fillers_by_need[filled].append(placed)
+		_fillers_dirty = false
+	return _fillers_by_need.get(need_id, [])
+
+
+func _on_world_changed(_tile: Vector2i) -> void:
+	_fillers_dirty = true
 
 
 ## Someone ill with the means goes to the nearest free thing that cures them (a sickbed).
@@ -1389,7 +1433,7 @@ func _may_use(pawn: Pawn, placed: PlacedObject) -> bool:
 ## road, or round their own lot.
 func _roam(pawn: Pawn, minute: int) -> void:
 	for def in events.active_defs():  # a festival or a market draws a crowd, whatever the hour
-		var crowd := _gather_rect(def)
+		var crowd := _gather_rect(def, pawn)
 		if crowd.size != Vector2i.ZERO and not crowd.has_point(pawn.tile) and _rng.randf() < GATHER_CHANCE:
 			var spot := crowd.position + Vector2i(_rng.randi() % crowd.size.x, _rng.randi() % crowd.size.y)
 			if world.is_walkable(spot.x, spot.y) and world.object_at(spot) == null:
@@ -1399,15 +1443,17 @@ func _roam(pawn: Pawn, minute: int) -> void:
 		return
 	var rect := Rect2i()
 	var roll := _rng.randf()
+	var home_town := world.town_of_lot(pawn.home_lot)
 	if roll < 0.5:
 		var public_lots: Array[Dictionary] = []
+		var visiting := _rng.randf() < VISIT_CHANCE  # now and then, a trip to another settlement
 		for entry in world.lots:
-			if bool(entry["public"]):
+			if bool(entry["public"]) and (home_town.is_empty() or visiting != (str(entry.get("town", "")) == str(home_town["id"]))):
 				public_lots.append(entry)
 		if not public_lots.is_empty():
 			rect = public_lots[_rng.randi() % public_lots.size()]["rect"]
 	elif roll < 0.8:
-		var center := Vector2i(world.width / 2, world.height / 2)
+		var center: Vector2i = home_town["center"] if not home_town.is_empty() else Vector2i(world.width / 2, world.height / 2)
 		rect = Rect2i(center - Vector2i(ROAM_RADIUS, 1), Vector2i(ROAM_RADIUS * 2 + 1, 3))
 	else:
 		rect = world.get_lot(pawn.home_lot).get("rect", Rect2i())

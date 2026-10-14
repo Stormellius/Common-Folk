@@ -14,6 +14,10 @@ extends RefCounted
 const DEFAULT_DAYS_PER_YEAR := 60
 
 
+static var _stage_of_age := {}  # age -> its stage, remembered until the data is loaded again
+static var _stages_revision := -1
+
+
 ## Days to a year of life in this game.
 static func days_per_year(world: WorldState) -> int:
 	var lifespan := DataRegistry.get_def("lifespans", world.lifespan if world != null else "calendar")
@@ -22,11 +26,18 @@ static func days_per_year(world: WorldState) -> int:
 
 ## The stage a person of this age is at: an entry of data/life_stages.json (empty if none).
 static func stage_at(age: int) -> Dictionary:
-	var found := {}
-	for stage in DataRegistry.get_list("life_stages"):
-		if age >= int(stage.get("from_age", 0)):
-			found = stage
-	return found
+	if _stages_revision != DataRegistry.revision:
+		_stage_of_age.clear()
+		_stages_revision = DataRegistry.revision
+	var cached: Variant = _stage_of_age.get(age)
+	if cached == null:
+		var found := {}
+		for stage in DataRegistry.get_list("life_stages"):
+			if age >= int(stage.get("from_age", 0)):
+				found = stage
+		_stage_of_age[age] = found
+		cached = found
+	return cached
 
 
 static func stage_of(pawn: Pawn) -> Dictionary:

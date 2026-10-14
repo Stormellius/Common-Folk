@@ -31,8 +31,7 @@ func _play(world_seed: int, start_day: int) -> void:
 	for once in 1:
 		GameClock.reset()
 		GameClock.set_time(start_day, 6)
-		var world := MapGenerator.generate(world_seed, 128, 96)
-		TownGenerator.generate(world)
+		var world := RegionGenerator.generate(world_seed)
 		var begun := Starts.begin(world, start_id)
 		var household: Household = begun["household"]
 		var sim := Simulation.new(world, household, NpcGenerator.create(world), begun["realm"])

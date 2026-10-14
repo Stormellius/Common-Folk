@@ -29,6 +29,10 @@ var lot := Rect2i()
 ## live there (Pawn.home_lot); public ones (tavern, shop, clinic, green) by anyone. Land outside
 ## every lot is free to all.
 var lots: Array[Dictionary] = []
+## The settlements on the map: { "id", "name", "kind" (town, village, hamlet...), "profile", "center":
+## Vector2i, "rect": Rect2i (the lots and streets), "home": bool (the one the player lives in) }.
+## Every lot above says which it is in with "town".
+var towns: Array[Dictionary] = []
 ## Land the player holds, by lot id, with the kind of title (an id from data/titles.json). The home
 ## lot ("home") always counts as theirs; a business lot is added when they take it on.
 var titles: Dictionary = {}
@@ -206,6 +210,44 @@ func lot_at(tile: Vector2i) -> Dictionary:
 	return {}
 
 
+## The settlement a tile is in (inside its lots and streets, with a margin), or empty in open country.
+func town_at(tile: Vector2i, margin: int = 6) -> Dictionary:
+	for entry in towns:
+		if (entry["rect"] as Rect2i).grow(margin).has_point(tile):
+			return entry
+	return {}
+
+
+func get_town(town_id: String) -> Dictionary:
+	for entry in towns:
+		if entry["id"] == town_id:
+			return entry
+	return {}
+
+
+## The settlement a lot belongs to (the player's lot is in the home town), or empty.
+func town_of_lot(lot_id: String) -> Dictionary:
+	if lot_id == HOME_LOT:
+		return home_town()
+	return get_town(str(get_lot(lot_id).get("town", "")))
+
+
+## The town the player lives in, or empty if the map has none.
+func home_town() -> Dictionary:
+	for entry in towns:
+		if bool(entry.get("home", false)):
+			return entry
+	return towns[0] if not towns.is_empty() else {}
+
+
+## The middle of the home town, or of the map if there is none.
+func home_center() -> Vector2i:
+	var town := home_town()
+	if not town.is_empty():
+		return town["center"]
+	return Vector2i(width / 2, height / 2)
+
+
 func get_lot(lot_id: String) -> Dictionary:
 	if lot_id == HOME_LOT and lot.size != Vector2i.ZERO:
 		return { "id": HOME_LOT, "kind": "home", "name": "Your lot", "public": false, "rect": lot }
@@ -260,13 +302,47 @@ func _palette_index_for(tile_id: String) -> int:
 
 # --- saving --------------------------------------------------------------------
 
+## The tiles as compressed bytes in base64, since a big map would make a very long list of numbers.
+func _pack_tiles() -> String:
+	var bytes := PackedByteArray()
+	bytes.resize(tiles.size())
+	for i in tiles.size():
+		bytes[i] = tiles[i]
+	return Marshalls.raw_to_base64(bytes.compress(FileAccess.COMPRESSION_ZSTD))
+
+
+func _unpack_tiles(text: String) -> void:
+	var bytes := Marshalls.base64_to_raw(text).decompress(tiles.size(), FileAccess.COMPRESSION_ZSTD)
+	for i in mini(bytes.size(), tiles.size()):
+		tiles[i] = bytes[i]
+
+
+## Gives a world whose lots came from before there were towns one town around them all.
+func _adopt_lots_as_one_town() -> void:
+	var bounds := Rect2i()
+	for entry in lots:
+		bounds = (entry["rect"] as Rect2i) if bounds.size == Vector2i.ZERO else bounds.merge(entry["rect"])
+	if lot.size != Vector2i.ZERO:
+		bounds = lot if bounds.size == Vector2i.ZERO else bounds.merge(lot)
+	var town := { "id": "town_1", "name": "Ashford", "kind": "town", "profile": "town", "center": Vector2i(width / 2, height / 2), "rect": bounds, "home": true }
+	towns.append(town)
+	for entry in lots:
+		entry["town"] = "town_1"
+
 func to_dict() -> Dictionary:
 	return {
 		"seed": world_seed,
 		"width": width,
 		"height": height,
 		"palette": Array(palette),
-		"tiles": Array(tiles),
+		"tiles_z": _pack_tiles(),
+		"towns": towns.map(func(entry: Dictionary) -> Dictionary:
+			var rect: Rect2i = entry["rect"]
+			var center: Vector2i = entry["center"]
+			var saved: Dictionary = entry.duplicate()
+			saved["rect"] = [rect.position.x, rect.position.y, rect.size.x, rect.size.y]
+			saved["center"] = [center.x, center.y]
+			return saved),
 		"objects": objects.map(func(placed: PlacedObject) -> Dictionary: return placed.to_dict()),
 		"lot": [lot.position.x, lot.position.y, lot.size.x, lot.size.y],
 		"titles": titles.duplicate(),
@@ -287,10 +363,13 @@ static func from_dict(data: Dictionary) -> WorldState:
 	world.palette = PackedStringArray()
 	for tile_id in data.get("palette", []):
 		world.palette.append(str(tile_id))
-	var saved_tiles: Array = data.get("tiles", [])
 	world.tiles.resize(world.width * world.height)
-	for i in mini(saved_tiles.size(), world.tiles.size()):
-		world.tiles[i] = int(saved_tiles[i])  # JSON numbers load as floats
+	if data.has("tiles_z"):
+		world._unpack_tiles(str(data["tiles_z"]))
+	else:  # an older save wrote every tile out as a number
+		var saved_tiles: Array = data.get("tiles", [])
+		for i in mini(saved_tiles.size(), world.tiles.size()):
+			world.tiles[i] = int(saved_tiles[i])  # JSON numbers load as floats
 	for saved in data.get("objects", []):
 		if saved is Dictionary:
 			var placed := PlacedObject.from_dict(saved)
@@ -317,6 +396,16 @@ static func from_dict(data: Dictionary) -> WorldState:
 			entry["rect"] = Rect2i(int(rect[0]), int(rect[1]), int(rect[2]), int(rect[3]))
 			entry["public"] = bool(saved.get("public", false))
 			world.lots.append(entry)
+	for saved in data.get("towns", []):
+		if saved is Dictionary and saved.get("rect") is Array and saved["rect"].size() >= 4 and saved.get("center") is Array and saved["center"].size() >= 2:
+			var rect: Array = saved["rect"]
+			var entry: Dictionary = saved.duplicate()
+			entry["rect"] = Rect2i(int(rect[0]), int(rect[1]), int(rect[2]), int(rect[3]))
+			entry["center"] = Vector2i(int(saved["center"][0]), int(saved["center"][1]))
+			entry["home"] = bool(saved.get("home", false))
+			world.towns.append(entry)
+	if world.towns.is_empty() and not world.lots.is_empty():  # a save from the days of a single town
+		world._adopt_lots_as_one_town()
 	for saved in data.get("floors", []):
 		if saved is Array and saved.size() >= 3 and DataRegistry.has_def("floors", str(saved[2])):
 			world.floors[Vector2i(int(saved[0]), int(saved[1]))] = str(saved[2])

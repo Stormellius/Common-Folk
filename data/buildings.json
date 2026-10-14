@@ -29,7 +29,7 @@
       "#.b....l.#",
       "####+#####"
     ] },
-  { "id": "stone_house", "name": "Stone house", "kind": "house", "floor": "flagstone",
+  { "id": "stone_house", "name": "Stone house", "kind": "house", "floor": "flagstone", "class": "gentry",
     "grid": [
       "SSSSSSSSS",
       "Sb.b.b.pS",
@@ -90,5 +90,76 @@
       "          ",
       " n      n ",
       "          "
+    ] },
+  { "id": "longhouse", "name": "Longhouse", "kind": "house", "floor": "planks",
+    "grid": [
+      "#############",
+      "#b.b.b.#b.p.#",
+      "#......+....#",
+      "#w.c...#.h.l#",
+      "#......#....#",
+      "######+######"
+    ] },
+  { "id": "row_house", "name": "Row house", "kind": "house", "floor": "planks",
+    "grid": [
+      "#######",
+      "#b.b.p#",
+      "#....h#",
+      "#wc...#",
+      "###+###"
+    ] },
+  { "id": "weaver_cottage", "name": "Weaver's cottage", "kind": "house", "floor": "planks",
+    "grid": [
+      "##########",
+      "#b.b.....#",
+      "#......p.#",
+      "#.t.t...h#",
+      "#w.c....l#",
+      "####+#####"
+    ] },
+  { "id": "manor", "name": "Manor house", "kind": "house", "floor": "flagstone", "class": "gentry",
+    "grid": [
+      "SSSSSSSSSSS",
+      "Sb.b.S.b.bS",
+      "S....S....S",
+      "Sh.p.+...lS",
+      "S....S....S",
+      "Sw.c.S.t.tS",
+      "S.........S",
+      "S..t...t..S",
+      "SSSSS+SSSSS"
+    ] },
+  { "id": "inn", "name": "Inn", "kind": "tavern", "floor": "planks", "public": true,
+    "grid": [
+      "#############",
+      "#h.....l....#",
+      "#kkkkk......#",
+      "#m.m.m.m.m..#",
+      "#...........#",
+      "#n.n.n.n.n.a#",
+      "#.......r...#",
+      "#...........#",
+      "######+######"
+    ] },
+  { "id": "market_shop", "name": "Market shop", "kind": "shop", "floor": "planks", "public": true,
+    "grid": [
+      "###########",
+      "#f.f.f.f.r#",
+      "#.........#",
+      "#kkkkkk...#",
+      "#.........#",
+      "#.t..r..t.#",
+      "#.........#",
+      "#####+#####"
+    ] },
+  { "id": "chapel_small", "name": "Small chapel", "kind": "chapel", "floor": "flagstone", "public": true,
+    "grid": [
+      "SSSSSSS",
+      "S..A..S",
+      "S.....S",
+      "S.P.P.S",
+      "S.....S",
+      "S.P.P.S",
+      "SSS+SSS"
     ] }
 ]

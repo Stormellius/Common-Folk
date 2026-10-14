@@ -8,7 +8,7 @@ extends Camera2D
 const PAN_SPEED := 900.0  # screen pixels per second
 const FAST_MULTIPLIER := 2.5
 const ZOOM_STEP := 1.15
-const ZOOM_MIN := 0.25
+const ZOOM_MIN := 0.09
 const ZOOM_MAX := 4.0
 
 ## False while a menu is open: the keys and the mouse wheel leave the camera alone.

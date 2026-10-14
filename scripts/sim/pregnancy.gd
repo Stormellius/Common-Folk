@@ -15,6 +15,9 @@ extends RefCounted
 
 const HOUR := 60
 
+static var _infant_age := 2
+static var _infant_revision := -1
+
 
 static func config() -> Dictionary:
 	return DataRegistry.get_def("pregnancy", "pregnancy")
@@ -26,7 +29,10 @@ static func _number(key: String, fallback: float) -> float:
 
 ## Babies are carried until they are toddlers (data/life_stages.json).
 static func infant_age() -> int:
-	return Life.stage_start("toddler", int(config().get("infant_until_age", 2)))
+	if _infant_revision != DataRegistry.revision:
+		_infant_age = Life.stage_start("toddler", int(config().get("infant_until_age", 2)))
+		_infant_revision = DataRegistry.revision
+	return _infant_age
 
 
 ## How long a pregnancy lasts in this game, in minutes.

@@ -2,8 +2,6 @@ extends Node2D
 ## Ties the pieces together: the title screen, creating or loading a world, handing it to the
 ## views, the menus and keyboard shortcuts. Game rules do not belong here; they go in scripts/sim.
 
-const MAP_WIDTH := 128
-const MAP_HEIGHT := 96
 const SAVE_PATH := SaveSlots.QUICK
 const AUTOSAVE_PATH := SaveSlots.AUTO
 
@@ -23,6 +21,7 @@ var _loaded_view: Dictionary = {}  # the camera of the save just loaded
 @onready var shadow_layer: ShadowLayer = $ShadowLayer
 @onready var smoke_layer: SmokeLayer = $SmokeLayer
 @onready var death_layer: DeathLayer = $DeathLayer
+@onready var town_labels: TownLabels = $TownLabels
 @onready var cloud_shadows: CloudShadows = $CloudShadows
 @onready var weather: Weather = $Weather
 @onready var object_layer: ObjectLayer = $ObjectLayer
@@ -112,7 +111,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_C:
 			_center_on_selected()
 		KEY_HOME:
-			camera.center_on_world()
+			_center_on_home()
+		KEY_T:
+			_visit_next_town()
+		KEY_M:
+			_toggle_overview()
 		KEY_N:
 			_open_menu(menus.open_new_game)
 		KEY_F5:
@@ -393,9 +396,8 @@ func _describe_newest_save() -> String:
 
 func _start_new_world(world_seed: int, start_id: String = "", lifespan: String = "normal") -> void:
 	GameClock.reset()
-	var new_world := MapGenerator.generate(world_seed, MAP_WIDTH, MAP_HEIGHT)
+	var new_world := RegionGenerator.generate(world_seed)  # terrain, the towns, their roads, the player's lot
 	new_world.lifespan = lifespan if DataRegistry.has_def("lifespans", lifespan) else "normal"
-	TownGenerator.generate(new_world)  # roads, the player's lot and the buildings
 	if new_world.lot.size == Vector2i.ZERO:  # no town described in the data
 		new_world.lot = WorldState.centered_lot(new_world.width, new_world.height)
 	var begun := Starts.begin(new_world, start_id)  # the household, its land and its camp
@@ -424,6 +426,7 @@ func _show_world(new_world: WorldState, household: Household, town: Household = 
 	object_layer.bind(sim)
 	pawn_layer.bind(sim)
 	death_layer.bind(sim)
+	town_labels.bind(world)
 	build.bind(sim)
 	hud.close_action_menu()
 	hud.set_household(household)
@@ -440,6 +443,8 @@ func _process(_delta: float) -> void:
 		hud.set_events(sim.events.names())
 		hud.set_purse(sim.household.coins)
 		hud.set_realm(sim.realm.summary(sim))
+		var here := world.town_at(chosen.tile) if chosen != null else {}
+		hud.set_place(str(here["name"]) if not here.is_empty() else ("Open country" if chosen != null and not world.towns.is_empty() else ""))
 
 
 func _on_pawn_died(person: String, cause: String, successor: String) -> void:
@@ -556,6 +561,50 @@ func _on_pawn_chosen(id: int) -> void:
 		camera.focus_on(pawn_layer.visual_position(id))
 
 
+## The camera goes to the player's own town.
+func _center_on_home() -> void:
+	if world != null and not world.towns.is_empty():
+		camera.focus_on(Vector2(world.home_center()) * MapView.TILE_SIZE)
+	else:
+		camera.center_on_world()
+
+
+## The camera goes to the next town along, starting from whichever is nearest now.
+func _visit_next_town() -> void:
+	if world == null or world.towns.is_empty():
+		return
+	var nearest := 0
+	for i in world.towns.size():
+		var here := Vector2(world.towns[i]["center"]) * MapView.TILE_SIZE
+		if here.distance_to(camera.position) < (Vector2(world.towns[nearest]["center"]) * MapView.TILE_SIZE).distance_to(camera.position):
+			nearest = i
+	var current: Vector2 = Vector2(world.towns[nearest]["center"]) * MapView.TILE_SIZE
+	var next := nearest
+	if camera.position.distance_to(current) < MapView.TILE_SIZE * 12.0:
+		next = (nearest + 1) % world.towns.size()
+	camera.focus_on(Vector2(world.towns[next]["center"]) * MapView.TILE_SIZE)
+	camera.zoom = Vector2.ONE * clampf(camera.zoom.x, 0.45, 1.5)
+	hud.show_message("%s" % str(world.towns[next]["name"]), 2.0)
+
+
+var _overview_return := {}
+
+## Pulls the camera right back to see the whole map, and back again.
+func _toggle_overview() -> void:
+	if world == null:
+		return
+	if _overview_return.is_empty():
+		_overview_return = { "position": camera.position, "zoom": camera.zoom }
+		var view := get_viewport().get_visible_rect().size
+		var fit := minf(view.x / (world.width * MapView.TILE_SIZE), view.y / (world.height * MapView.TILE_SIZE))
+		camera.zoom = Vector2.ONE * maxf(CameraController.ZOOM_MIN, fit)
+		camera.position = Vector2(world.width, world.height) * MapView.TILE_SIZE / 2.0
+	else:
+		camera.zoom = _overview_return["zoom"]
+		camera.focus_on(_overview_return["position"])
+		_overview_return = {}
+
+
 func _center_on_selected() -> void:
 	var chosen := sim.household.selected() if sim != null else null
 	if chosen != null:
@@ -647,4 +696,6 @@ func _describe_tile(tile: Vector2i) -> String:
 	var walk := "walkable" if world.is_walkable(tile.x, tile.y) else "blocked"
 	var placed := world.object_at(tile)
 	var what := tile_name if placed == null else "%s with %s" % [tile_name, placed.display_name().to_lower()]
-	return "Tile (%d, %d): %s, %s\n%s" % [tile.x, tile.y, what, walk, footer]
+	var town := world.town_at(tile)
+	var place := "%s: " % str(town["name"]) if not town.is_empty() else ""
+	return "%sTile (%d, %d): %s, %s\n%s" % [place, tile.x, tile.y, what, walk, footer]

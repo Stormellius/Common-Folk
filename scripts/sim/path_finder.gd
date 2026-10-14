@@ -29,14 +29,26 @@ func rebuild(world: WorldState) -> void:
 	_grid.default_compute_heuristic = AStarGrid2D.HEURISTIC_OCTILE
 	_grid.default_estimate_heuristic = AStarGrid2D.HEURISTIC_OCTILE
 	_grid.update()
+	# Work out each kind of ground once, then go through the map by its palette numbers.
+	var open: Array[bool] = []
+	var cost: Array[float] = []
+	for tile_id in world.palette:
+		var def := DataRegistry.get_def("tiles", tile_id)
+		open.append(bool(def.get("walkable", true)))
+		cost.append(maxf(float(def.get("move_cost", 1.0)), 1.0))
+	var index := 0
 	for y in world.height:
 		for x in world.width:
-			var cell := Vector2i(x, y)
-			if world.is_walkable(x, y):
-				_grid.set_point_solid(cell, false)
-				_grid.set_point_weight_scale(cell, maxf(world.get_move_cost(x, y), 1.0))
+			var palette_index := world.tiles[index]
+			index += 1
+			if open[palette_index]:
+				if cost[palette_index] != 1.0:
+					_grid.set_point_weight_scale(Vector2i(x, y), cost[palette_index])
 			else:
-				_grid.set_point_solid(cell, true)
+				_grid.set_point_solid(Vector2i(x, y), true)
+	for placed in world.objects:
+		if placed.blocks_walking():
+			_grid.set_point_solid(placed.tile, true)
 
 
 ## Updates one cell after something was built or removed there (much cheaper than rebuild()).

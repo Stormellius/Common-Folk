@@ -146,7 +146,7 @@ float snow_cover(vec2 p, float amount) {
 }
 
 // --- surfaces --------------------------------------------------------------------
-// Styles: 0 flat, 1 grass, 2 dirt, 3 water, 4 stone, 5 forest ground
+// Styles: 0 flat, 1 grass, 2 dirt, 3 water, 4 stone, 5 forest ground, 6 cobbles, 7 plank bridge (boards across a north-south way), 8 the same turned for an east-west way
 // depth: 0 at the shore to 1 in open water (only used by water).
 
 vec3 terrain(int style, vec3 base, vec2 p, float depth) {
@@ -193,6 +193,32 @@ vec3 terrain(int style, vec3 base, vec2 p, float depth) {
 		col *= 1.0 + detail * (step(0.84, litter) * 0.30 - step(litter, 0.14) * 0.22);
 		col *= 1.0 + grain * 0.10 * detail;
 		col = mix(col, snow_color, snow_cover(p, 0.7));
+	} else if (style == 6) {
+		// Cobbled street: rows of small setts, each row shifted, with dark mortar and worn, mossy edges.
+		vec2 g = p * vec2(3.0, 4.0);
+		float row = floor(g.y);
+		g.x += 0.5 * mod(row, 2.0) + hash21(vec2(row, 3.7)) * 3.0;
+		vec2 cell = floor(g);
+		vec2 f = fract(g);
+		float shade = hash21(cell + 3.1);
+		col = base * (0.80 + 0.34 * shade);
+		col *= 0.92 + 0.16 * fbm(p * 2.2);
+		float edge = min(min(f.x, 1.0 - f.x) * 0.62, min(f.y, 1.0 - f.y) * 0.80);
+		col *= mix(0.58, 1.0, smoothstep(0.03, 0.13, edge));
+		col *= 1.0 + 0.16 * (1.0 - smoothstep(0.10, 0.34, f.y)) * smoothstep(0.03, 0.13, edge);  // top edge catches the light
+		col = mix(col, base * vec3(0.62, 0.74, 0.46), 0.22 * smoothstep(0.55, 0.85, vnoise(p * 6.0 + 4.0)) * detail);
+		col *= 1.0 + grain * 0.08 * detail;
+		col = mix(col, snow_color, snow_cover(p, 0.5));
+	} else if (style == 7 || style == 8) {
+		// A plank bridge: boards laid across the way, dark gaps between them.
+		vec2 q = style == 8 ? p.yx : p;
+		float board = fract(q.y * 5.0);
+		float board_id = floor(q.y * 5.0);
+		col = base * (0.80 + 0.30 * hash21(vec2(board_id, floor(q.x * 0.5))));
+		col *= 0.90 + 0.20 * vnoise(vec2(q.x * 3.0, q.y * 14.0) + board_id);
+		col *= mix(0.30, 1.0, smoothstep(0.0, 0.14, board) * (1.0 - smoothstep(0.90, 1.0, board)));
+		col *= 1.0 + grain * 0.08 * detail;
+		col = mix(col, snow_color, snow_cover(p, 0.6));
 	}
 	return col;
 }

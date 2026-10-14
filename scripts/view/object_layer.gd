@@ -6,6 +6,7 @@ extends Node2D
 var sim: Simulation
 
 var _views: Dictionary = {}  # object id -> ObjectView
+var _beds: Array[PlacedObject] = []  # what people lie in, so the sleepers can be shown
 var _watched: WorldState
 var _dirty := false
 
@@ -33,8 +34,11 @@ func _on_tile_changed(_tile: Vector2i) -> void:
 func _sync() -> void:
 	_dirty = false
 	var present := {}
+	_beds.clear()
 	for placed in sim.world.objects:
 		present[placed.id] = true
+		if placed.def().has("pose"):
+			_beds.append(placed)
 		var view: ObjectView = _views.get(placed.id)
 		if view == null:
 			view = ObjectView.new()
@@ -55,7 +59,7 @@ func _process(_delta: float) -> void:
 		return
 	if _dirty:
 		_sync()
-	for placed in sim.world.objects:
-		var user := sim.household.get_pawn(placed.user_id) if placed.user_id != 0 else null
+	for placed in _beds:
+		var user := sim.person(placed.user_id) if placed.user_id != 0 else null
 		if _views.has(placed.id):
 			_views[placed.id].occupied = user != null and user.job_stage == "using" and user.pose == "lie"
