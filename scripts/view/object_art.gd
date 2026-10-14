@@ -8,7 +8,7 @@ extends RefCounted
 ## `t` is the time in seconds, for flames and steam; `occupied` is true while someone sleeps in it.
 
 const OUTLINE := Color(0.06, 0.05, 0.05, 0.85)
-const ANIMATED := ["hearth", "cooking_pot", "watch_post", "altar"]
+const ANIMATED := ["hearth", "cooking_pot", "watch_post", "altar", "forge"]
 ## How tall the south face of a wall looks, in units. Light comes from the top-left, as in the
 ## terrain shader, so a wall shows a lit top and a shaded face to the south.
 const WALL_FACE := 12.0
@@ -18,6 +18,24 @@ const STONE := Color(0.57, 0.57, 0.56)
 
 static func is_animated(def_id: String) -> bool:
 	return def_id in ANIMATED
+
+
+## How far the crops have got: 0 bare earth, 1 seedlings, 2 growing, 3 ripe, 4 stubble. They are
+## sown in spring, ripen through summer and autumn, and the land lies bare in winter.
+static func crop_stage() -> int:
+	var seasons: Array = DataRegistry.get_list("seasons")
+	if seasons.is_empty():
+		return 3
+	var position := GameClock.get_season_position()
+	var progress := float(position["progress"])
+	match str(seasons[position["index"]].get("id", "")):
+		"spring":
+			return 0 if progress < 0.25 else 1
+		"summer":
+			return 2 if progress < 0.6 else 3
+		"autumn":
+			return 3 if progress < 0.55 else 4
+	return 0
 
 
 ## `connections` is a bitmask of neighbors that a wall or door should join up with
@@ -35,6 +53,32 @@ static func draw(ci: CanvasItem, def_id: String, u: float, t: float, occupied: b
 			_grave(ci, u)
 		"bed":
 			_bed(ci, u, occupied)
+		"cradle":
+			_cradle(ci, u)
+		"chopping_block":
+			_chopping_block(ci, u, cell)
+		"quarry_face":
+			_quarry_face(ci, u, cell)
+		"field_plot":
+			_field_plot(ci, u, cell)
+		"herb_bed":
+			_herb_bed(ci, u, cell)
+		"fishing_spot":
+			_fishing_spot(ci, u)
+		"lantern_post":
+			_lantern_post(ci, u, t)
+		"flower_bed":
+			_flower_bed(ci, u, cell)
+		"bush":
+			_bush(ci, u, cell)
+		"haystack":
+			_haystack(ci, u, cell)
+		"woodpile":
+			_woodpile(ci, u, cell)
+		"cart":
+			_cart(ci, u, cell)
+		"market_stall":
+			_market_stall(ci, u, cell)
 		"cooking_pot":
 			_cooking_pot(ci, u, t)
 		"hearth":
@@ -67,6 +111,12 @@ static func draw(ci: CanvasItem, def_id: String, u: float, t: float, occupied: b
 			_altar(ci, u, t)
 		"sickbed":
 			_sickbed(ci, u, occupied)
+		"forge":
+			_forge(ci, u, t)
+		"workbench":
+			_workbench(ci, u)
+		"tool_rack":
+			_tool_rack(ci, u)
 		_:
 			_crate(ci, u)
 
@@ -81,6 +131,218 @@ static func _bed(ci: CanvasItem, u: float, occupied: bool) -> void:
 	if not occupied:  # a folded blanket at the foot
 		_rect(ci, u, -13, 8, 26, 9, Color(0.49, 0.31, 0.31), 1.0)
 		ci.draw_line(Vector2(-12, 11) * u, Vector2(12, 11) * u, Color(0.62, 0.42, 0.42), maxf(1.0, u))
+
+
+## An iron post with a glass lantern on top, seen from above: its base, and the warm glow.
+static func _lantern_post(ci: CanvasItem, u: float, t: float) -> void:
+	_shadow(ci, u, 9.0)
+	ci.draw_circle(Vector2.ZERO, 8.0 * u, OUTLINE)
+	ci.draw_circle(Vector2.ZERO, 6.6 * u, Color(0.34, 0.34, 0.36))
+	ci.draw_circle(Vector2(-1.2, -1.2) * u, 3.2 * u, Color(0.50, 0.50, 0.52))
+	_rect(ci, u, -4.5, -4.5, 9, 9, Color(0.18, 0.17, 0.18), 1.0)  # the lantern's cage
+	var flicker := 0.92 + 0.08 * sin(t * 6.0)
+	ci.draw_circle(Vector2.ZERO, 3.8 * u, Color(1.0, 0.82, 0.40, 0.95 * flicker))
+	ci.draw_circle(Vector2.ZERO, 1.8 * u, Color(1.0, 0.97, 0.80))
+	ci.draw_line(Vector2(-4.5, 0) * u, Vector2(4.5, 0) * u, Color(0.18, 0.17, 0.18), maxf(1.0, 0.8 * u))
+	ci.draw_line(Vector2(0, -4.5) * u, Vector2(0, 4.5) * u, Color(0.18, 0.17, 0.18), maxf(1.0, 0.8 * u))
+
+
+## A bed of earth with flowers, a different mix on every tile.
+static func _flower_bed(ci: CanvasItem, u: float, cell: Vector2i) -> void:
+	_rect(ci, u, -16, -13, 32, 26, Color(0.33, 0.23, 0.15), 1.2)
+	_rect(ci, u, -14, -11, 28, 22, Color(0.26, 0.18, 0.12), 0.0)
+	var colors := [Color(0.92, 0.35, 0.40), Color(0.97, 0.85, 0.30), Color(0.93, 0.93, 0.95), Color(0.66, 0.48, 0.86), Color(0.98, 0.60, 0.25)]
+	var main_color: Color = colors[int(hash01(cell.x, cell.y, 31) * colors.size()) % colors.size()]
+	var other_color: Color = colors[int(hash01(cell.x, cell.y, 32) * colors.size()) % colors.size()]
+	for i in 11:
+		var at := Vector2(lerpf(-11.0, 11.0, hash01(cell.x, cell.y, 40 + i)), lerpf(-8.0, 8.0, hash01(cell.x, cell.y, 60 + i)))
+		_ellipse(ci, u, at + Vector2(0.0, 1.0), Vector2(3.4, 2.2), Color(0.28, 0.48, 0.24), 0.0)
+		ci.draw_circle((at + Vector2(0.0, -1.5)) * u, 2.5 * u, main_color if i % 3 != 0 else other_color)
+		ci.draw_circle((at + Vector2(0.0, -1.5)) * u, 0.9 * u, Color(0.98, 0.88, 0.40))
+
+
+## A round shrub of dark leaves, with highlights and a few berries.
+static func _bush(ci: CanvasItem, u: float, cell: Vector2i) -> void:
+	_shadow(ci, u, 17.0)
+	var tone := 0.9 + 0.2 * hash01(cell.x, cell.y, 5)
+	for blob in [[Vector2(-7, 3), 10.0], [Vector2(7, 3), 10.0], [Vector2(0, -5), 11.0], [Vector2(0, 5), 10.0]]:
+		ci.draw_circle(blob[0] * u, (blob[1] + 1.2) * u, OUTLINE)
+	for blob in [[Vector2(-7, 3), 10.0], [Vector2(7, 3), 10.0], [Vector2(0, -5), 11.0], [Vector2(0, 5), 10.0]]:
+		ci.draw_circle(blob[0] * u, blob[1] * u, Color(0.22, 0.38, 0.20) * tone)
+	for blob in [[Vector2(-8, 1), 4.5], [Vector2(5, -6), 4.5], [Vector2(1, 3), 3.8]]:
+		ci.draw_circle(blob[0] * u, blob[1] * u, Color(0.34, 0.54, 0.28) * tone)
+	if hash01(cell.x, cell.y, 6) < 0.5:
+		for i in 5:
+			var at := Vector2(lerpf(-10.0, 10.0, hash01(cell.x, cell.y, 70 + i)), lerpf(-9.0, 9.0, hash01(cell.x, cell.y, 80 + i)))
+			ci.draw_circle(at * u, 1.5 * u, Color(0.80, 0.18, 0.22))
+
+
+## A golden mound of hay.
+static func _haystack(ci: CanvasItem, u: float, cell: Vector2i) -> void:
+	_shadow(ci, u, 20.0)
+	_ellipse(ci, u, Vector2.ZERO, Vector2(19, 17), Color(0.78, 0.62, 0.26), 1.3)
+	_ellipse(ci, u, Vector2(-2, -2), Vector2(13, 11), Color(0.88, 0.73, 0.36), 0.0)
+	for i in 14:
+		var a := TAU * i / 14.0 + hash01(cell.x, cell.y, 9) * 0.5
+		ci.draw_line(Vector2(cos(a), sin(a)) * 3.0 * u, Vector2(cos(a), sin(a)) * (13.0 + 3.0 * hash01(cell.x, cell.y, 90 + i)) * u, Color(0.70, 0.54, 0.22), maxf(1.0, 0.9 * u))
+	_ellipse(ci, u, Vector2(-4, -5), Vector2(6, 3.5), Color(1, 1, 1, 0.16), 0.0)
+
+
+## Split logs stacked in a pile, their ends showing.
+static func _woodpile(ci: CanvasItem, u: float, cell: Vector2i) -> void:
+	_shadow(ci, u, 19.0)
+	_rect(ci, u, -19, -15, 38, 30, Color(0.30, 0.20, 0.12), 1.2)
+	for row in 4:
+		var y := -11.0 + row * 7.2
+		for col in 5:
+			var x := -14.5 + col * 7.2 + (3.6 if row % 2 == 1 else 0.0)
+			if x > 15.0:
+				continue
+			var shade := 0.85 + 0.3 * hash01(cell.x + col, cell.y + row, 12)
+			ci.draw_circle(Vector2(x, y) * u, 3.9 * u, OUTLINE)
+			ci.draw_circle(Vector2(x, y) * u, 3.3 * u, Color(0.70, 0.52, 0.30) * shade)
+			ci.draw_arc(Vector2(x, y) * u, 1.8 * u, 0.0, TAU, 10, Color(0.50, 0.34, 0.18), maxf(1.0, 0.7 * u))
+			ci.draw_circle(Vector2(x, y) * u, 0.7 * u, Color(0.42, 0.28, 0.14))
+
+
+## A two-wheeled handcart with sacks in the bed.
+static func _cart(ci: CanvasItem, u: float, cell: Vector2i) -> void:
+	_shadow(ci, u, 21.0)
+	_rect(ci, u, -9, 14, 18, 7, Color(0.36, 0.25, 0.15), 1.0)  # the shafts
+	for side in [-1.0, 1.0]:
+		_rect(ci, u, side * 19.0 - 2.5, -11, 5, 22, Color(0.24, 0.16, 0.10), 1.0)  # wheels, edge on
+		ci.draw_line(Vector2(side * 19.0, -9) * u, Vector2(side * 19.0, 9) * u, Color(0.45, 0.33, 0.20), maxf(1.0, 1.2 * u))
+	_rect(ci, u, -16, -15, 32, 30, Color(0.43, 0.30, 0.18), 1.3)
+	_rect(ci, u, -13, -12, 26, 24, Color(0.58, 0.42, 0.25), 0.0)
+	for i in 4:
+		ci.draw_line(Vector2(-13, -6 + i * 6) * u, Vector2(13, -6 + i * 6) * u, Color(0.40, 0.28, 0.16), maxf(1.0, 0.8 * u))
+	var sack := Color(0.80, 0.72, 0.52) if hash01(cell.x, cell.y, 3) < 0.5 else Color(0.62, 0.50, 0.34)
+	_ellipse(ci, u, Vector2(-5, -3), Vector2(7, 6), sack, 1.0)
+	_ellipse(ci, u, Vector2(6, 4), Vector2(6, 5), sack.darkened(0.08), 1.0)
+	ci.draw_circle(Vector2(-5, -8) * u, 1.6 * u, sack.darkened(0.3))
+
+
+## A trader's stall: a table under a striped awning, goods along the front.
+static func _market_stall(ci: CanvasItem, u: float, cell: Vector2i) -> void:
+	_shadow(ci, u, 22.0)
+	_rect(ci, u, -22, -18, 44, 36, Color(0.36, 0.25, 0.15), 1.4)
+	_rect(ci, u, -20, 4, 40, 12, Color(0.58, 0.42, 0.25), 0.0)  # the table showing under the awning
+	var palette := [[Color(0.74, 0.20, 0.18), Color(0.93, 0.89, 0.78)], [Color(0.22, 0.40, 0.62), Color(0.93, 0.89, 0.78)], [Color(0.28, 0.50, 0.28), Color(0.93, 0.89, 0.78)]]
+	var stripes: Array = palette[int(hash01(cell.x, cell.y, 14) * palette.size()) % palette.size()]
+	for i in 8:
+		_rect(ci, u, -20 + i * 5.0, -16, 5, 22, stripes[i % 2], 0.0)
+	ci.draw_line(Vector2(-20, 6) * u, Vector2(20, 6) * u, Color(0.0, 0.0, 0.0, 0.25), maxf(1.0, 1.4 * u))
+	for i in 6:  # goods on the table
+		var at := Vector2(-16.0 + i * 6.4, 11.0)
+		var goods := [Color(0.84, 0.30, 0.22), Color(0.95, 0.78, 0.30), Color(0.50, 0.68, 0.30), Color(0.80, 0.62, 0.40)]
+		ci.draw_circle(at * u, 2.8 * u, OUTLINE)
+		ci.draw_circle(at * u, 2.2 * u, goods[int(hash01(cell.x + i, cell.y, 16) * goods.size()) % goods.size()])
+
+
+## A stump with an axe stuck in it and chips of wood about.
+static func _chopping_block(ci: CanvasItem, u: float, cell: Vector2i) -> void:
+	_shadow(ci, u, 18.0)
+	for i in 6:  # chips
+		var at := Vector2(lerpf(-20.0, 20.0, hash01(cell.x, cell.y, 20 + i)), lerpf(-15.0, 17.0, hash01(cell.x, cell.y, 30 + i)))
+		_ellipse(ci, u, at, Vector2(3.0, 1.6), Color(0.76, 0.58, 0.34), 0.0)
+	_ellipse(ci, u, Vector2.ZERO, Vector2(15, 13), Color(0.33, 0.22, 0.13), 1.3)
+	_ellipse(ci, u, Vector2(0, -1), Vector2(12.5, 10.5), Color(0.72, 0.54, 0.33), 0.0)
+	for ring in [8.5, 5.0, 2.0]:
+		ci.draw_arc(Vector2(0, -1) * u, ring * u, 0.0, TAU, 14, Color(0.55, 0.38, 0.21), maxf(1.0, 0.8 * u))
+	ci.draw_line(Vector2(5, -3) * u, Vector2(13, -13) * u, Color(0.30, 0.20, 0.12), maxf(1.5, 3.0 * u))  # the axe's haft
+	var blade := PackedVector2Array([Vector2(1, -2), Vector2(7, -1), Vector2(9, -7), Vector2(3, -8)])
+	ci.draw_colored_polygon(_scaled(blade, u), Color(0.62, 0.64, 0.68))
+	ci.draw_polyline(_scaled(PackedVector2Array([Vector2(1, -2), Vector2(7, -1), Vector2(9, -7), Vector2(3, -8), Vector2(1, -2)]), u), OUTLINE, maxf(1.0, u))
+
+
+## A heap of cut and broken rock with a pick leaning on it.
+static func _quarry_face(ci: CanvasItem, u: float, cell: Vector2i) -> void:
+	_shadow(ci, u, 20.0)
+	for i in 9:
+		var at := Vector2(lerpf(-14.0, 14.0, hash01(cell.x, cell.y, 50 + i)), lerpf(-12.0, 12.0, hash01(cell.x, cell.y, 60 + i)))
+		var size := Vector2(lerpf(5.0, 9.5, hash01(cell.x, cell.y, 70 + i)), lerpf(4.0, 7.5, hash01(cell.x, cell.y, 80 + i)))
+		var shade := 0.78 + 0.35 * hash01(cell.x, cell.y, 90 + i)
+		_ellipse(ci, u, at, size, Color(0.62, 0.62, 0.60) * shade, 1.0)
+		_ellipse(ci, u, at + Vector2(-1.2, -1.4), size * 0.5, Color(1, 1, 1, 0.12), 0.0)
+	ci.draw_line(Vector2(-16, 14) * u, Vector2(6, -10) * u, OUTLINE, maxf(1.5, 3.8 * u))
+	ci.draw_line(Vector2(-16, 14) * u, Vector2(6, -10) * u, Color(0.45, 0.31, 0.18), maxf(1.0, 2.4 * u))
+	ci.draw_line(Vector2(0, -12) * u, Vector2(13, -6) * u, Color(0.55, 0.57, 0.60), maxf(1.5, 2.6 * u))  # the pick's head
+
+
+## One plot of a field: tilled furrows, and whatever the season has done to them.
+static func _field_plot(ci: CanvasItem, u: float, cell: Vector2i) -> void:
+	var stage := crop_stage()
+	_rect(ci, u, -24, -24, 48, 48, Color(0.38, 0.27, 0.18), 0.0)
+	for i in 6:
+		var y := -19.0 + i * 7.6
+		ci.draw_line(Vector2(-24, y) * u, Vector2(24, y) * u, Color(0.28, 0.19, 0.12), maxf(1.0, 2.2 * u))
+		ci.draw_line(Vector2(-24, y + 2.6) * u, Vector2(24, y + 2.6) * u, Color(0.47, 0.34, 0.22), maxf(1.0, 1.2 * u))
+	if stage == 0:
+		return
+	for row in 6:
+		var y := -19.0 + row * 7.6
+		for col in 8:
+			var x := -21.0 + col * 6.0 + 1.5 * hash01(cell.x + col, cell.y + row, 3)
+			match stage:
+				1:
+					ci.draw_line(Vector2(x, y + 2.0) * u, Vector2(x, y - 1.5) * u, Color(0.46, 0.68, 0.30), maxf(1.0, 1.4 * u))
+				2:
+					ci.draw_line(Vector2(x, y + 2.0) * u, Vector2(x + 0.5, y - 5.0) * u, Color(0.36, 0.60, 0.24), maxf(1.0, 1.8 * u))
+					ci.draw_line(Vector2(x, y + 2.0) * u, Vector2(x - 1.8, y - 3.5) * u, Color(0.42, 0.65, 0.27), maxf(1.0, 1.4 * u))
+				3:
+					ci.draw_line(Vector2(x, y + 2.0) * u, Vector2(x, y - 6.0) * u, Color(0.80, 0.66, 0.28), maxf(1.0, 1.8 * u))
+					ci.draw_line(Vector2(x, y - 6.0) * u, Vector2(x + 0.8, y - 9.5) * u, Color(0.93, 0.78, 0.32), maxf(1.0, 2.4 * u))
+					ci.draw_line(Vector2(x + 2.0, y + 2.0) * u, Vector2(x + 1.6, y - 4.0) * u, Color(0.74, 0.60, 0.25), maxf(1.0, 1.4 * u))
+				_:
+					ci.draw_line(Vector2(x, y + 2.0) * u, Vector2(x, y - 1.0) * u, Color(0.70, 0.60, 0.36), maxf(1.0, 1.4 * u))
+
+
+## A raised bed of herbs in a wooden frame.
+static func _herb_bed(ci: CanvasItem, u: float, cell: Vector2i) -> void:
+	var stage := crop_stage()
+	_rect(ci, u, -20, -20, 40, 40, Color(0.40, 0.28, 0.17), 1.2)
+	_rect(ci, u, -17, -17, 34, 34, Color(0.27, 0.19, 0.12), 0.0)
+	if stage == 0:
+		return
+	var leaf := Color(0.40, 0.62, 0.30) if stage < 4 else Color(0.62, 0.58, 0.30)
+	for i in 9:
+		var at := Vector2(lerpf(-12.0, 12.0, hash01(cell.x, cell.y, 100 + i)), lerpf(-12.0, 12.0, hash01(cell.x, cell.y, 110 + i)))
+		var grown := 3.0 if stage == 1 else 5.5
+		_ellipse(ci, u, at, Vector2(grown, grown * 0.8), leaf * (0.85 + 0.3 * hash01(cell.x, cell.y, 120 + i)), 0.0)
+		if stage in [2, 3] and i % 3 == 0:
+			ci.draw_circle((at + Vector2(0, -1)) * u, 1.8 * u, Color(0.70, 0.52, 0.86) if stage == 3 else Color(0.90, 0.85, 0.50))
+
+
+## The end of the jetty: a post with a coil of rope, a bucket of fish and a net.
+static func _fishing_spot(ci: CanvasItem, u: float) -> void:
+	_shadow(ci, u, 14.0)
+	ci.draw_circle(Vector2(-8, -6) * u, 6.5 * u, OUTLINE)
+	ci.draw_circle(Vector2(-8, -6) * u, 5.2 * u, Color(0.34, 0.22, 0.13))
+	ci.draw_circle(Vector2(-8, -6) * u, 3.2 * u, Color(0.55, 0.40, 0.24))
+	ci.draw_arc(Vector2(10, 6) * u, 6.0 * u, 0.0, TAU, 12, Color(0.72, 0.62, 0.40), maxf(1.5, 2.2 * u))  # rope
+	ci.draw_arc(Vector2(10, 6) * u, 3.4 * u, 0.0, TAU, 10, Color(0.62, 0.52, 0.32), maxf(1.0, 1.6 * u))
+	_ellipse(ci, u, Vector2(8, -9), Vector2(8, 6), Color(0.40, 0.28, 0.17), 1.0)
+	_ellipse(ci, u, Vector2(8, -10), Vector2(6, 4), Color(0.20, 0.34, 0.44), 0.0)
+	for fish in [Vector2(6, -10), Vector2(10, -9)]:
+		_ellipse(ci, u, fish, Vector2(3.2, 1.5), Color(0.70, 0.76, 0.82), 0.0)
+
+
+## A little wooden cradle on two rockers, with a straw tick and a folded blanket.
+static func _cradle(ci: CanvasItem, u: float) -> void:
+	_shadow(ci, u, 14.0)
+	for side in [-1.0, 1.0]:  # the rockers stick out past the ends
+		var runner := PackedVector2Array()
+		for i in 9:
+			var f := i / 8.0
+			runner.append(Vector2(side * (11.0 + 2.5 * sin(f * PI)), lerpf(-19.0, 19.0, f)) * u)
+		ci.draw_polyline(runner, OUTLINE, maxf(1.5, 3.4 * u))
+		ci.draw_polyline(runner, Color(0.36, 0.24, 0.14), maxf(1.0, 2.2 * u))
+	_rect(ci, u, -11, -15, 22, 30, Color(0.52, 0.36, 0.21), 1.2)
+	_rect(ci, u, -8, -12, 16, 24, Color(0.80, 0.70, 0.48), 0.0)
+	ci.draw_line(Vector2(-11, -15) * u, Vector2(11, -15) * u, Color(0.66, 0.48, 0.30), maxf(1.0, 1.5 * u))
+	_rect(ci, u, -6, -11, 12, 6, Color(0.93, 0.91, 0.85), 0.8)  # the little pillow
+	_rect(ci, u, -8, 3, 16, 9, Color(0.42, 0.50, 0.62), 0.8)
+	ci.draw_line(Vector2(-7, 6) * u, Vector2(7, 6) * u, Color(0.55, 0.63, 0.74), maxf(1.0, u))
 
 
 static func _cooking_pot(ci: CanvasItem, u: float, t: float) -> void:
@@ -445,6 +707,66 @@ static func _crate(ci: CanvasItem, u: float) -> void:
 	_rect(ci, u, -13, -13, 26, 26, Color(0.54, 0.42, 0.25), 1.2)
 	ci.draw_line(Vector2(-13, -13) * u, Vector2(13, 13) * u, Color(0.40, 0.30, 0.17), maxf(1.0, u))
 	ci.draw_line(Vector2(13, -13) * u, Vector2(-13, 13) * u, Color(0.40, 0.30, 0.17), maxf(1.0, u))
+
+
+## A stone forge with a glowing firebox and an anvil to its side.
+static func _forge(ci: CanvasItem, u: float, t: float) -> void:
+	_shadow(ci, u, 22.0)
+	ci.draw_circle(Vector2(-2, -2) * u, 26.0 * u, Color(1.0, 0.5, 0.15, 0.10))
+	_rect(ci, u, -22, -19, 31, 31, Color(0.46, 0.46, 0.48), 1.3)
+	for row in 3:  # courses of stone
+		var y := -13.0 + row * 9.0
+		ci.draw_line(Vector2(-22, y) * u, Vector2(9, y) * u, Color(0.33, 0.33, 0.35), maxf(1.0, 0.9 * u))
+		for col in 3:
+			var x := -17.0 + col * 10.0 + (4.0 if row % 2 == 0 else 0.0)
+			ci.draw_line(Vector2(x, y) * u, Vector2(x, y + 9.0) * u, Color(0.33, 0.33, 0.35), maxf(1.0, 0.9 * u))
+	_rect(ci, u, -17, -9, 21, 15, Color(0.10, 0.07, 0.06), 1.0)  # the firebox
+	var glow := 0.8 + 0.2 * sin(t * 6.0)
+	_ellipse(ci, u, Vector2(-6.5, 0), Vector2(8.5, 4.5), Color(0.95, 0.38, 0.10) * glow, 0.0)
+	_ellipse(ci, u, Vector2(-6.5, 0), Vector2(5.0, 2.5), Color(1.0, 0.78, 0.30) * glow, 0.0)
+	_flame(ci, u, Vector2(-9, 1), 8.0 + 2.5 * sin(t * 9.0), 5.0)
+	_flame(ci, u, Vector2(-3, 2), 7.0 + 2.5 * sin(t * 8.0 + 1.3), 4.5)
+	# the anvil
+	var anvil := PackedVector2Array([Vector2(12, -4), Vector2(23, -4), Vector2(25, -1), Vector2(21, 1), Vector2(21, 7), Vector2(24, 9), Vector2(11, 9), Vector2(14, 7), Vector2(14, 1), Vector2(12, 1)])
+	ci.draw_colored_polygon(_scaled(anvil, u), Color(0.30, 0.31, 0.35))
+	ci.draw_polyline(_scaled(anvil + PackedVector2Array([Vector2(12, -4)]), u), OUTLINE, maxf(1.0, u))
+	ci.draw_line(Vector2(13, -3) * u, Vector2(23, -3) * u, Color(0.55, 0.57, 0.62), maxf(1.0, 1.2 * u))
+	ci.draw_line(Vector2(5, 15) * u, Vector2(17, 11) * u, Color(0.32, 0.22, 0.13), maxf(1.5, 2.4 * u))  # tongs on the floor
+
+
+## A carpenter's bench with a plank on it, a saw and a mallet.
+static func _workbench(ci: CanvasItem, u: float) -> void:
+	_shadow(ci, u, 21.0)
+	_rect(ci, u, -22, -13, 44, 26, Color(0.40, 0.28, 0.17), 1.3)
+	_rect(ci, u, -22, -13, 44, 17, Color(0.64, 0.48, 0.30), 0.0)
+	ci.draw_line(Vector2(-22, 4) * u, Vector2(22, 4) * u, Color(0.30, 0.20, 0.12), maxf(1.0, u))
+	_rect(ci, u, -16, -9, 24, 6, Color(0.78, 0.64, 0.42), 0.9)  # a plank
+	ci.draw_line(Vector2(-12, -6) * u, Vector2(2, -6) * u, Color(0.60, 0.46, 0.28), maxf(1.0, 0.8 * u))
+	var saw := PackedVector2Array([Vector2(8, -2), Vector2(20, -6), Vector2(20, -1), Vector2(8, 2)])
+	ci.draw_colored_polygon(_scaled(saw, u), Color(0.66, 0.68, 0.72))
+	ci.draw_line(Vector2(8, 0) * u, Vector2(5, 3) * u, Color(0.30, 0.20, 0.12), maxf(1.5, 2.6 * u))
+	ci.draw_line(Vector2(-18, 8) * u, Vector2(-10, 8) * u, Color(0.30, 0.20, 0.12), maxf(1.5, 2.4 * u))  # mallet
+	_rect(ci, u, -11, 5, 6, 6, Color(0.48, 0.34, 0.20), 0.8)
+	_rect(ci, u, 13, 7, 4, 3, Color(0.78, 0.64, 0.42), 0.0)  # shavings
+	_rect(ci, u, 18, 9, 3, 2, Color(0.78, 0.64, 0.42), 0.0)
+
+
+## A wall rack hung with tools for sale.
+static func _tool_rack(ci: CanvasItem, u: float) -> void:
+	_shadow(ci, u, 20.0)
+	_rect(ci, u, -22, -13, 44, 26, Color(0.36, 0.26, 0.16), 1.3)
+	_rect(ci, u, -20, -11, 40, 22, Color(0.52, 0.38, 0.24), 0.0)
+	ci.draw_line(Vector2(-20, -1) * u, Vector2(20, -1) * u, Color(0.28, 0.19, 0.11), maxf(1.5, 2.0 * u))
+	# an axe, a pick, a sickle and a hammer, hanging by their hafts
+	ci.draw_line(Vector2(-14, -10) * u, Vector2(-14, 5) * u, Color(0.30, 0.20, 0.12), maxf(1.5, 2.2 * u))
+	ci.draw_colored_polygon(_scaled(PackedVector2Array([Vector2(-14, -9), Vector2(-8, -10), Vector2(-8, -3), Vector2(-14, -4)]), u), Color(0.64, 0.66, 0.70))
+	ci.draw_line(Vector2(-4, -10) * u, Vector2(-4, 6) * u, Color(0.30, 0.20, 0.12), maxf(1.5, 2.2 * u))
+	ci.draw_line(Vector2(-10, -9) * u, Vector2(2, -9) * u, Color(0.58, 0.60, 0.64), maxf(1.5, 2.4 * u))
+	ci.draw_arc(Vector2(7, -3) * u, 6.0 * u, PI * 0.9, PI * 2.1, 10, Color(0.68, 0.70, 0.74), maxf(1.5, 2.0 * u))
+	ci.draw_line(Vector2(7, 3) * u, Vector2(7, 8) * u, Color(0.30, 0.20, 0.12), maxf(1.5, 2.2 * u))
+	ci.draw_line(Vector2(16, -9) * u, Vector2(16, 7) * u, Color(0.30, 0.20, 0.12), maxf(1.5, 2.2 * u))
+	_rect(ci, u, 12, -10, 8, 5, Color(0.50, 0.52, 0.56), 0.8)
+	_rect(ci, u, -22, 9, 44, 4, Color(0.28, 0.19, 0.11), 0.0)
 
 
 # --- little shapes -----------------------------------------------------------------

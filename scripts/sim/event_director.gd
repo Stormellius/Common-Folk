@@ -122,6 +122,14 @@ func price_multiplier(object_def_id: String) -> float:
 	return factor
 
 
+## What the shop pays for goods now: more on a market day.
+func sell_multiplier() -> float:
+	var factor := 1.0
+	for def in active_defs():
+		factor *= float(def.get("sell_multiplier", 1.0))
+	return factor
+
+
 func to_dict() -> Dictionary:
 	return { "scheduled": scheduled.duplicate(true), "active": active.duplicate(true), "history": history.duplicate(true), "last_roll_day": last_roll_day }
 

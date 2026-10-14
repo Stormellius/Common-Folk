@@ -27,12 +27,14 @@ var connections := -1:
 var _light: PointLight2D
 var _light_energy := 1.0
 var _occluders: Array[LightOccluder2D] = []
+var _crop_stage := -1
 
 
 func setup(new_placed: PlacedObject) -> void:
 	placed = new_placed
 	position = (Vector2(placed.tile) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE
 	_add_light()
+	set_process(_light != null or ObjectArt.is_animated(placed.def_id) or placed.def().has("gather_seasons"))  # most things never change
 	queue_redraw()
 
 
@@ -41,12 +43,12 @@ func _add_light() -> void:
 	if not spec is Dictionary:
 		return
 	_light = PointLight2D.new()
-	_light.texture = _glow_texture()
+	_light.texture = glow_texture()
 	_light.color = Color(str(spec.get("color", "#ffa24f")))
 	_light.texture_scale = float(spec.get("radius", 4.0)) * MapView.TILE_SIZE / (LIGHT_TEXTURE_SIZE * 0.5)
 	_light_energy = float(spec.get("energy", 1.0))
 	_light.enabled = false
-	_light.shadow_enabled = true  # walls stop the light, so a fire indoors does not light the street
+	_light.shadow_enabled = bool(spec.get("shadow", true))  # walls stop the light, so a fire indoors does not light the street
 	_light.shadow_filter = Light2D.SHADOW_FILTER_PCF5
 	_light.shadow_filter_smooth = 1.5
 	add_child(_light)
@@ -77,8 +79,8 @@ func _update_occluders() -> void:
 		_occluders.append(occluder)
 
 
-## A soft round falloff, shared by every light.
-static func _glow_texture() -> GradientTexture2D:
+## A soft round falloff, shared by every light (and the ghosts' glow).
+static func glow_texture() -> GradientTexture2D:
 	if _light_texture == null:
 		var gradient := Gradient.new()
 		gradient.offsets = PackedFloat32Array([0.0, 0.25, 0.6, 1.0])
@@ -105,6 +107,11 @@ func _process(_delta: float) -> void:
 		return
 	if ObjectArt.is_animated(placed.def_id):
 		queue_redraw()
+	if placed.def().has("gather_seasons"):  # crops change with the season
+		var stage := ObjectArt.crop_stage()
+		if stage != _crop_stage:
+			_crop_stage = stage
+			queue_redraw()
 	if _light != null:
 		_light.enabled = DayNight.darkness > 0.01
 		if _light.enabled:

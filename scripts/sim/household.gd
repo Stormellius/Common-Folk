@@ -9,6 +9,10 @@ var selected_id := -1
 var dead: Array[Dictionary] = []
 ## The household's shared purse, in coins (see Economy). The town's people each carry their own.
 var coins := 0
+## What the household has gathered, by resource id (see Economy).
+var stock: Dictionary = {}
+## Minutes of use each kind of tool has had towards its next breaking (see Skills).
+var tool_wear: Dictionary = {}
 var _next_id := 1
 
 
@@ -17,9 +21,28 @@ func _init(first_id: int = 1) -> void:
 	_next_id = first_id
 
 
+func stock_of(resource_id: String) -> int:
+	return int(stock.get(resource_id, 0))
+
+
+func add_stock(resource_id: String, amount: int) -> void:
+	var total := maxi(0, stock_of(resource_id) + amount)
+	if total == 0:
+		stock.erase(resource_id)
+	else:
+		stock[resource_id] = total
+
+
 func add_pawn(pawn: Pawn) -> void:
 	pawn.id = _next_id
 	_next_id += 1
+	pawns.append(pawn)
+	if selected_id == -1 and not pawn.is_infant():
+		selected_id = pawn.id
+
+
+## Takes in someone who already has an id and a history (a partner moving in), without renumbering them.
+func adopt(pawn: Pawn) -> void:
 	pawns.append(pawn)
 	if selected_id == -1 and not pawn.is_infant():
 		selected_id = pawn.id
@@ -99,7 +122,7 @@ func to_dict() -> Dictionary:
 	var saved_pawns: Array = []
 	for pawn in pawns:
 		saved_pawns.append(pawn.to_dict())
-	return { "pawns": saved_pawns, "selected": selected_id, "next_id": _next_id, "dead": dead.duplicate(true), "coins": coins }
+	return { "pawns": saved_pawns, "selected": selected_id, "next_id": _next_id, "dead": dead.duplicate(true), "coins": coins, "stock": stock.duplicate(), "tool_wear": tool_wear.duplicate() }
 
 
 static func from_dict(data: Dictionary, first_id: int = 1) -> Household:
@@ -111,6 +134,14 @@ static func from_dict(data: Dictionary, first_id: int = 1) -> Household:
 		if entry is Dictionary:
 			household.dead.append({ "name": str(entry.get("name", "")), "cause": str(entry.get("cause", "")), "day": int(entry.get("day", 0)) })
 	household.coins = int(data.get("coins", Economy.start_coins()))  # an older save gets a starting purse
+	var saved_stock: Variant = data.get("stock", {})
+	if saved_stock is Dictionary:
+		for resource_id in saved_stock:
+			household.stock[str(resource_id)] = int(saved_stock[resource_id])
+	var saved_wear: Variant = data.get("tool_wear", {})
+	if saved_wear is Dictionary:
+		for tool_id in saved_wear:
+			household.tool_wear[str(tool_id)] = float(saved_wear[tool_id])
 	household._next_id = int(data.get("next_id", first_id + household.pawns.size()))
 	household.selected_id = int(data.get("selected", -1))
 	var chosen := household.get_pawn(household.selected_id)

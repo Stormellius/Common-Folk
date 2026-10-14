@@ -24,15 +24,33 @@ var class_id := "peasant"
 ## What this person is ill with, an id from data/illness.json ("" when well), and since which tick.
 var illness := ""
 var ill_since := 0
-## The day number a child was conceived ("" -1 when not expecting), and by whom (see Pregnancy).
+## A pregnancy (see Pregnancy): the tick she conceived (-1 when not expecting), how many minutes it
+## will last, by whom, how many babies are coming, whether the household has been told, and labour
+## (the tick it began, -1 before, and how long it will take).
 var pregnant_since := -1
+var pregnancy_minutes := 0
 var pregnancy_father := 0
-## A mother cannot conceive again before this day number (she is recovering from the birth).
-var recovered_on := 0
+var babies_due := 1
+var pregnancy_announced := false
+var labour_since := -1
+var labour_minutes := 0
+## A mother cannot conceive again before this tick (she is recovering from the birth).
+var recovered_at := 0
+## A baby's needs (see Babies), by id from "baby_care" in data/pregnancy.json, and since when one of
+## them has been empty (-1 while it is cared for).
+var care: Dictionary = {}
+var neglected_since := -1
 ## Day of the year (0 to 59) the person has their birthday, or -1 for "work it out from the id".
 var birthday := -1
 ## An infant is carried by someone from the household and cannot be controlled (see Pregnancy).
 var carried_by := 0
+## Someone whose time has come lies dying until Death takes them (see Mortality): what is killing
+## them ("" while alive and well), the tick they fell, where Death comes from, and whether anyone
+## has pleaded for them yet.
+var dying_cause := ""
+var dying_since := 0
+var death_from := Vector2i.ZERO
+var pleaded := false
 ## Colors as hex strings plus a hair style number; see PawnArt.
 var look: Dictionary = {}
 
@@ -69,6 +87,7 @@ var job_interaction := ""    # id from data/interactions.json
 var job_object := 0          # id of the PlacedObject being used
 var job_stage := ""          # "walking" on the way there, "using" once started
 var job_tile := Vector2i.ZERO  # where the person stands while using it
+var job_target := Vector2i.ZERO  # what they are working on, when it is a tile (a fire to put out)
 var job_minutes := 0         # how long the use has gone on
 ## "" standing, or "lie" while sleeping. Set by the simulation, read by the view.
 var pose := ""
@@ -85,6 +104,39 @@ var skip_work_day := -1
 ## What this person thinks of each other person they have met, -100 to 100, by that person's id
 ## (see Relations). Missing means a stranger: 0.
 var relations: Dictionary = {}
+## Romance (see Romance): how taken this person is with each other person, 0 to 100, by id; who they
+## are seeing (0 for nobody) and how far it has got ("dating", or "partners" once they live
+## together) and since which tick; where they lived before moving in with someone; and their parents,
+## so that family stay apart.
+var romance: Dictionary = {}
+var partner_id := 0
+var partner_status := ""
+var partner_since := 0
+var origin_lot := ""
+var parents: Array[int] = []
+## Marriage (see Romance): "" or "engaged" or "married" to `partner_id`, since which tick; the name they
+## were born with, kept once a wedding changes it; and the tick until which they are in wedding clothes.
+var bond := ""
+var bond_since := 0
+var maiden_name := ""
+var wed_until := 0
+## Illness (see Illness): the tick until which someone is immune to each illness they have had
+## (by illness id), the tick until which herbs are helping them recover, and how many minutes in a
+## row they have stood in fire (see Fire).
+var immune: Dictionary = {}
+var treated_until := 0
+var fire_minutes := 0
+## Skills (see Skills): xp by skill id; the skills they take to naturally; the skill their parents
+## were best at, which they learn the basics of when they grow up; the tool in their hand (and whether
+## the employer lent it); the recipe they are making at a forge or bench; and, not saved, how much
+## faster a master nearby has them learning.
+var skills: Dictionary = {}
+var talents: Array[String] = []
+var family_trade := ""
+var tool := ""
+var tool_lent := false
+var job_recipe := ""
+var mentor_gain := 1.0
 ## Ticks to wait before looking for something to do about a need again.
 var think_cooldown := 0
 
@@ -98,8 +150,38 @@ func is_infant() -> bool:
 	return age < Pregnancy.infant_age()
 
 
+## The name that fixes who this person is born to be (their looks' details, the age they will die
+## at): the one they were born with, so a wedding that changes their surname changes none of it.
+func seed_name() -> String:
+	return maiden_name if maiden_name != "" else display_name
+
+
+func given_name() -> String:
+	return display_name.get_slice(" ", 0)
+
+
+func surname() -> String:
+	return display_name.get_slice(" ", 1)
+
+
+func romance_for(other_id: int) -> float:
+	return float(romance.get(other_id, 0.0))
+
+
+func add_romance(other_id: int, delta: float) -> void:
+	var value := clampf(romance_for(other_id) + delta, 0.0, 100.0)
+	if value <= 0.0:
+		romance.erase(other_id)
+	else:
+		romance[other_id] = value
+
+
 func is_pregnant() -> bool:
 	return pregnant_since >= 0
+
+
+func is_dying() -> bool:
+	return dying_cause != ""
 
 
 func opinion_of(other_id: int) -> float:
@@ -122,9 +204,9 @@ func has_orders() -> bool:
 	return is_moving() or not path.is_empty()
 
 
-## True while walking somewhere or busy with an object.
+## True while walking somewhere, busy with an object, or lying dying.
 func is_busy() -> bool:
-	return has_orders() or job_kind != ""
+	return has_orders() or job_kind != "" or is_dying()
 
 
 ## 0 to 1 progress through the step in progress.
@@ -161,6 +243,7 @@ func tick(world: WorldState) -> void:
 			cost *= 1.41421
 		if slowed:
 			cost *= 1.5
+		cost *= Life.walk_multiplier(self)  # elders take their time
 		step_to = next
 		step_ticks_total = maxi(1, roundi(cost))
 		step_ticks_done = 0
@@ -188,17 +271,47 @@ func to_dict() -> Dictionary:
 		"class": class_id,
 		"illness": illness,
 		"ill_since": ill_since,
-		"pregnant_since": pregnant_since,
+		"pregnant_tick": pregnant_since,
+		"pregnancy_minutes": pregnancy_minutes,
 		"pregnancy_father": pregnancy_father,
-		"recovered_on": recovered_on,
+		"babies_due": babies_due,
+		"pregnancy_announced": pregnancy_announced,
+		"labour_since": labour_since,
+		"labour_minutes": labour_minutes,
+		"recovered_tick": recovered_at,
+		"care": _rounded(care),
+		"neglected_since": neglected_since,
 		"birthday": birthday,
 		"carried_by": carried_by,
+		"dying_cause": dying_cause,
+		"dying_since": dying_since,
+		"death_from": _vec_to_array(death_from),
+		"pleaded": pleaded,
 		"coins": coins,
 		"pay_carry": snappedf(pay_carry, 0.001),
 		"work_lot": work_lot,
 		"work_job": work_job,
 		"skip_work_day": skip_work_day,
 		"relations": _relations_for_save(),
+		"romance": _romance_for_save(),
+		"partner": partner_id,
+		"partner_status": partner_status,
+		"partner_since": partner_since,
+		"origin_lot": origin_lot,
+		"parents": Array(parents),
+		"bond": bond,
+		"bond_since": bond_since,
+		"maiden_name": maiden_name,
+		"wed_until": wed_until,
+		"immune": immune.duplicate(),
+		"treated_until": treated_until,
+		"fire_minutes": fire_minutes,
+		"skills": _rounded(skills),
+		"talents": Array(talents),
+		"family_trade": family_trade,
+		"tool": tool,
+		"tool_lent": tool_lent,
+		"job_recipe": job_recipe,
 		"look": look.duplicate(),
 		"tile": _vec_to_array(tile),
 		"facing": _vec_to_array(facing),
@@ -217,6 +330,7 @@ func to_dict() -> Dictionary:
 		"job_object": job_object,
 		"job_stage": job_stage,
 		"job_tile": _vec_to_array(job_tile),
+		"job_target": _vec_to_array(job_target),
 		"job_minutes": job_minutes,
 		"pose": pose,
 		"think": think_cooldown,
@@ -234,11 +348,29 @@ static func from_dict(data: Dictionary) -> Pawn:
 	pawn.class_id = str(data.get("class", "peasant"))
 	pawn.illness = str(data.get("illness", ""))
 	pawn.ill_since = int(data.get("ill_since", 0))
-	pawn.pregnant_since = int(data.get("pregnant_since", -1))
+	if data.has("pregnant_tick"):
+		pawn.pregnant_since = int(data["pregnant_tick"])
+		pawn.pregnancy_minutes = int(data.get("pregnancy_minutes", 0))
+	elif int(data.get("pregnant_since", -1)) >= 0:  # an older save counted the days of a 45-day pregnancy
+		pawn.pregnant_since = int(data["pregnant_since"]) * GameClock.MINUTES_PER_DAY
+		pawn.pregnancy_minutes = 45 * GameClock.MINUTES_PER_DAY
 	pawn.pregnancy_father = int(data.get("pregnancy_father", 0))
-	pawn.recovered_on = int(data.get("recovered_on", 0))
+	pawn.babies_due = int(data.get("babies_due", 1))
+	pawn.pregnancy_announced = bool(data.get("pregnancy_announced", true))
+	pawn.labour_since = int(data.get("labour_since", -1))
+	pawn.labour_minutes = int(data.get("labour_minutes", 0))
+	pawn.recovered_at = int(data.get("recovered_tick", int(data.get("recovered_on", 0)) * GameClock.MINUTES_PER_DAY))
+	var saved_care: Variant = data.get("care", {})
+	if saved_care is Dictionary:
+		for care_id in saved_care:
+			pawn.care[str(care_id)] = float(saved_care[care_id])
+	pawn.neglected_since = int(data.get("neglected_since", -1))
 	pawn.birthday = int(data.get("birthday", -1))
 	pawn.carried_by = int(data.get("carried_by", 0))
+	pawn.dying_cause = str(data.get("dying_cause", ""))
+	pawn.dying_since = int(data.get("dying_since", 0))
+	pawn.death_from = _array_to_vec(data.get("death_from", [0, 0]))
+	pawn.pleaded = bool(data.get("pleaded", false))
 	pawn.coins = int(data.get("coins", 0))
 	pawn.pay_carry = float(data.get("pay_carry", 0.0))
 	pawn.work_lot = str(data.get("work_lot", ""))
@@ -248,6 +380,36 @@ static func from_dict(data: Dictionary) -> Pawn:
 	if saved_relations is Dictionary:
 		for other_id in saved_relations:
 			pawn.relations[int(other_id)] = float(saved_relations[other_id])  # JSON keys are text
+	var saved_romance: Variant = data.get("romance", {})
+	if saved_romance is Dictionary:
+		for other_id in saved_romance:
+			pawn.romance[int(other_id)] = float(saved_romance[other_id])
+	pawn.partner_id = int(data.get("partner", 0))
+	pawn.partner_status = str(data.get("partner_status", ""))
+	pawn.partner_since = int(data.get("partner_since", 0))
+	pawn.origin_lot = str(data.get("origin_lot", ""))
+	for parent_id in data.get("parents", []):
+		pawn.parents.append(int(parent_id))
+	pawn.bond = str(data.get("bond", ""))
+	pawn.bond_since = int(data.get("bond_since", 0))
+	pawn.maiden_name = str(data.get("maiden_name", ""))
+	pawn.wed_until = int(data.get("wed_until", 0))
+	var saved_immune: Variant = data.get("immune", {})
+	if saved_immune is Dictionary:
+		for illness_id in saved_immune:
+			pawn.immune[str(illness_id)] = int(saved_immune[illness_id])
+	pawn.treated_until = int(data.get("treated_until", 0))
+	pawn.fire_minutes = int(data.get("fire_minutes", 0))
+	var saved_skills: Variant = data.get("skills", {})
+	if saved_skills is Dictionary:
+		for skill_id in saved_skills:
+			pawn.skills[str(skill_id)] = float(saved_skills[skill_id])
+	for talent in data.get("talents", []):
+		pawn.talents.append(str(talent))
+	pawn.family_trade = str(data.get("family_trade", ""))
+	pawn.tool = str(data.get("tool", ""))
+	pawn.tool_lent = bool(data.get("tool_lent", false))
+	pawn.job_recipe = str(data.get("job_recipe", ""))
 	var saved_look: Variant = data.get("look", {})
 	pawn.look = saved_look.duplicate() if saved_look is Dictionary else {}
 	if pawn.look.has("hair_style"):
@@ -268,7 +430,10 @@ static func from_dict(data: Dictionary) -> Pawn:
 	pawn.slowed = bool(data.get("slowed", false))
 	for saved_thought in data.get("thoughts", []):
 		if saved_thought is Dictionary and saved_thought.has("id"):
-			pawn.thoughts.append({ "id": str(saved_thought["id"]), "until": int(saved_thought.get("until", 0)) })
+			var thought := { "id": str(saved_thought["id"]), "until": int(saved_thought.get("until", 0)) }
+			if saved_thought.has("about"):
+				thought["about"] = str(saved_thought["about"])
+			pawn.thoughts.append(thought)
 	var saved_deprivation: Variant = data.get("deprivation", {})
 	if saved_deprivation is Dictionary:
 		for need_id in saved_deprivation:
@@ -279,10 +444,18 @@ static func from_dict(data: Dictionary) -> Pawn:
 	pawn.job_object = int(data.get("job_object", 0))
 	pawn.job_stage = str(data.get("job_stage", ""))
 	pawn.job_tile = _array_to_vec(data.get("job_tile", [0, 0]))
+	pawn.job_target = _array_to_vec(data.get("job_target", [0, 0]))
 	pawn.job_minutes = int(data.get("job_minutes", 0))
 	pawn.pose = str(data.get("pose", ""))
 	pawn.think_cooldown = int(data.get("think", 0))
 	return pawn
+
+
+func _romance_for_save() -> Dictionary:
+	var saved := {}
+	for other_id in romance:
+		saved[str(other_id)] = snappedf(float(romance[other_id]), 0.1)
+	return saved
 
 
 func _relations_for_save() -> Dictionary:

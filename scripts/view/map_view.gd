@@ -5,13 +5,13 @@ extends Node2D
 ## This node only reads the world; it never changes it. The map is handed to the GPU
 ## as two small textures (one pixel per tile, plus a palette built from data/tiles.json)
 ## and the shader paints it. A tile type chooses its look with two fields in tiles.json:
-##   "style":    flat, grass, dirt, water, stone or forest
+##   "style":    flat, grass, dirt, water, stone, forest, cobble, bridge or bridge_h
 ##   "priority": higher-priority tiles bleed over the edges of lower-priority ones
 ## The season look (foliage color, snow) comes from data/seasons.json.
 
 const TILE_SIZE := 48
 const TERRAIN_SHADER := preload("res://shaders/terrain.gdshader")
-const STYLES := { "flat": 0, "grass": 1, "dirt": 2, "water": 3, "stone": 4, "forest": 5 }
+const STYLES := { "flat": 0, "grass": 1, "dirt": 2, "water": 3, "stone": 4, "forest": 5, "cobble": 6, "bridge": 7, "bridge_h": 8 }
 const MAX_TILE_TYPES := 256
 ## The map is drawn in square chunks of this many tiles, so a light at night only has to be
 ## worked out for the few chunks it reaches instead of the whole map.

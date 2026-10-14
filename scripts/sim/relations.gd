@@ -27,6 +27,17 @@ static func label(opinion: float) -> String:
 	return "Rival"
 
 
+## Whether two people are family by blood: parent and child, or sisters and brothers. (Those who
+## merely share a house, or were never given parents, are not.)
+static func are_kin(a: Pawn, b: Pawn) -> bool:
+	if a.id in b.parents or b.id in a.parents:
+		return true
+	for parent_id in a.parents:
+		if parent_id != 0 and parent_id in b.parents:
+			return true
+	return false
+
+
 ## Makes everyone in the list fond of everyone else in it (a family).
 static func make_family(members: Array[Pawn]) -> void:
 	for a in members:

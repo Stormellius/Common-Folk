@@ -9,38 +9,54 @@ const TEST_MOD_DIR := "user://mods/smoke_test_mod"
 const TEST_SAVE := "user://smoke_test_save.json"
 
 var _failures := 0
+var _only := ""  # --only=marriage runs just that section
 
 
 func _ready() -> void:
-	_test_registry()
-	_test_mod_loading()
-	_test_clock()
-	_test_generator()
-	_test_map_view()
-	_test_hud()
-	_test_pathfinding()
-	_test_pawn_movement()
-	_test_household()
-	_test_actions()
-	_test_needs()
-	_test_building()
-	_test_town()
-	_test_economy()
-	_test_social()
-	_test_events()
-	_test_realm()
-	_test_faith_and_illness()
-	_test_conflict()
-	_test_pregnancy()
-	_test_death()
-	_test_mood()
-	_test_save_and_load()
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--only="):
+			_only = arg.trim_prefix("--only=")
+	_section("registry", _test_registry)
+	_section("mod_loading", _test_mod_loading)
+	_section("clock", _test_clock)
+	_section("generator", _test_generator)
+	_section("map_view", _test_map_view)
+	_section("hud", _test_hud)
+	_section("pathfinding", _test_pathfinding)
+	_section("pawn_movement", _test_pawn_movement)
+	_section("household", _test_household)
+	_section("actions", _test_actions)
+	_section("needs", _test_needs)
+	_section("building", _test_building)
+	_section("town", _test_town)
+	_section("region", _test_region)
+	_section("economy", _test_economy)
+	_section("work_sites", _test_work_sites)
+	_section("skills", _test_skills)
+	_section("social", _test_social)
+	_section("romance", _test_romance)
+	_section("marriage", _test_marriage)
+	_section("events", _test_events)
+	_section("realm", _test_realm)
+	_section("faith_and_illness", _test_faith_and_illness)
+	_section("conflict", _test_conflict)
+	_section("accidents", _test_accidents)
+	_section("pregnancy", _test_pregnancy)
+	_section("death", _test_death)
+	_section("life_and_death", _test_life_and_death)
+	_section("mood", _test_mood)
+	_section("save_and_load", _test_save_and_load)
 	print("")
 	if _failures == 0:
 		print("ALL CHECKS PASSED")
 	else:
 		print("%d CHECK(S) FAILED" % _failures)
 	get_tree().quit(1 if _failures > 0 else 0)
+
+
+func _section(name: String, run: Callable) -> void:
+	if _only == "" or _only == name:
+		run.call()
 
 
 func _check(condition: bool, label: String) -> void:
@@ -57,7 +73,7 @@ func _test_registry() -> void:
 	_check(DataRegistry.count("seasons") == 4, "seasons.json has four seasons")
 	_check(DataRegistry.count("needs") >= 7, "needs.json has at least the seven starting needs")
 	_check(DataRegistry.count("traits") >= 6, "traits.json loaded")
-	_check(DataRegistry.count("names") == 3 and DataRegistry.count("appearance") == 4 and DataRegistry.count("objects") >= 6, "names, appearance and objects loaded")
+	_check(DataRegistry.count("names") == 4 and DataRegistry.count("appearance") == 4 and DataRegistry.count("objects") >= 6, "names, appearance and objects loaded")
 	_check(DataRegistry.has_def("tiles", "grass"), "grass tile exists")
 	_check(not DataRegistry.has_def("tiles", "nonexistent"), "unknown id reports missing")
 	_check(DataRegistry.get_def("tiles", "nonexistent").is_empty(), "unknown id gives an empty Dictionary")
@@ -72,16 +88,16 @@ func _test_mod_loading() -> void:
 	DirAccess.make_dir_recursive_absolute(TEST_MOD_DIR)
 	_write_file(TEST_MOD_DIR + "/mod.json", '{"name": "Smoke Test Mod", "load_order": 5}')
 	_write_file(TEST_MOD_DIR + "/tiles.json", '[{"id":"grass","name":"Grass","color":"#123456","walkable":true},{"id":"water","_remove":true},{"id":"lava","name":"Lava","color":"#ff0000","walkable":false}]')
-	_write_file(TEST_MOD_DIR + "/recipes.json", '[{"id":"bread","name":"Bread"}]')
+	_write_file(TEST_MOD_DIR + "/gizmos.json", '[{"id":"bread","name":"Bread"}]')
 	DataRegistry.reload()
 
 	_check("Smoke Test Mod" in DataRegistry.loaded_mods, "mod in user://mods is discovered")
 	_check(str(DataRegistry.get_def("tiles", "grass").get("color")) == "#123456", "mod replaces an existing entry by id")
 	_check(DataRegistry.has_def("tiles", "lava"), "mod adds a new entry")
 	_check(not DataRegistry.has_def("tiles", "water"), "mod removes an entry with _remove")
-	_check(DataRegistry.count("recipes") == 1, "mod can add a brand new kind of content")
+	_check(DataRegistry.count("gizmos") == 1, "mod can add a brand new kind of content")
 
-	for file_name in ["mod.json", "tiles.json", "recipes.json"]:
+	for file_name in ["mod.json", "tiles.json", "gizmos.json"]:
 		DirAccess.remove_absolute(TEST_MOD_DIR + "/" + file_name)
 	DirAccess.remove_absolute(TEST_MOD_DIR)
 	DataRegistry.reload()
@@ -89,6 +105,14 @@ func _test_mod_loading() -> void:
 	_check("Smoke Test Mod" not in DataRegistry.loaded_mods, "mod is gone after its folder is removed")
 	_check(str(DataRegistry.get_def("tiles", "grass").get("color")) == original_color, "base data is restored")
 	_check(DataRegistry.has_def("tiles", "water"), "removed entry comes back with base data")
+
+
+## Runs the clock for `seconds` of real time in small frames, as the game would.
+func _run_clock(seconds: float) -> void:
+	var left := seconds
+	while left > 0.0:
+		GameClock._process(minf(left, 0.05))
+		left -= 0.05
 
 
 func _test_clock() -> void:
@@ -125,18 +149,38 @@ func _test_clock() -> void:
 	_check(GameClock.tick == before, "paused clock does not advance")
 
 	GameClock.set_speed(1)
+	_check(is_equal_approx(GameClock.DAY_SECONDS, 3600.0) and is_equal_approx(GameClock.MINUTE_SECONDS * GameClock.MINUTES_PER_DAY, 3600.0), "a day takes an hour at normal speed")
+	var motion := [0]
+	var count_motion := func() -> void: motion[0] += 1
+	GameClock.motion_ticked.connect(count_motion)
+	GameClock.set_time(0, 6)
 	before = GameClock.tick
-	GameClock._process(1.0)
-	_check(absi(GameClock.tick - before - 10) <= 1, "1x runs about 10 ticks per second")
+	_run_clock(GameClock.MINUTE_SECONDS * 4.0 + 0.01)
+	_check(GameClock.tick - before == 4, "1x runs a game minute every two and a half seconds (%d)" % (GameClock.tick - before))
+	_check(motion[0] == 4 * GameClock.SUBSTEPS_PER_MINUTE, "and gives people %d steps to walk in between (%d)" % [GameClock.SUBSTEPS_PER_MINUTE, motion[0]])
+	GameClock.set_time(0, 6)
+	motion[0] = 0
+	GameClock.advance_one_tick()
+	_check(motion[0] == GameClock.SUBSTEPS_PER_MINUTE, "a minute advanced by hand carries its motion too")
+	GameClock.motion_ticked.disconnect(count_motion)
 
+	GameClock.set_speed(2)
+	GameClock.set_time(0, 6)
+	before = GameClock.tick
+	_run_clock(GameClock.MINUTE_SECONDS * 2.0 + 0.01)
+	_check(GameClock.tick - before == 6, "3x runs three times as fast (%d)" % (GameClock.tick - before))
 	GameClock.set_speed(3)
+	GameClock.set_time(0, 6)
 	before = GameClock.tick
-	GameClock._process(1.0)
-	_check(absi(GameClock.tick - before - 30) <= 1, "3x runs about 30 ticks per second")
+	_run_clock(GameClock.MINUTE_SECONDS + 0.01)
+	_check(GameClock.tick - before == 10, "and 10x ten times (%d)" % (GameClock.tick - before))
+	GameClock.set_speed(9)
+	_check(GameClock.speed_level == 4, "speed stops at the fastest level")
 
+	GameClock.set_time(0, 6)
 	before = GameClock.tick
-	GameClock._process(10.0)
-	_check(GameClock.tick - before == GameClock.MAX_TICKS_PER_FRAME, "a very long frame is capped")
+	GameClock._process(1000.0)
+	_check(GameClock.tick - before <= GameClock.MAX_SUBSTEPS_PER_FRAME / GameClock.SUBSTEPS_PER_MINUTE + 1, "a very long frame is capped")
 
 	GameClock.set_speed(2)
 	GameClock.toggle_pause()
@@ -229,21 +273,72 @@ func _test_hud() -> void:
 	_check(hud._build_tabs["Floors"].visible and not hud._build_tabs["Structure"].visible, "tabs switch")
 	hud.set_build_mode(false)
 	_check(not hud._build_panel.visible and not hud._build_button.button_pressed, "turning it off hides the palette")
-	# The start screen.
-	var picked: Array[String] = []
-	hud.start_chosen.connect(func(id: String) -> void: picked.append(id))
-	_check(not hud.is_start_choice_open(), "the start screen is hidden until asked for")
-	hud.show_start_choice(DataRegistry.get_list("starts"))
-	_check(hud.is_start_choice_open() and hud._start_buttons.size() == 3, "it shows a button for each way of beginning")
-	hud._start_buttons["arrived"].pressed.emit()
-	_check(picked == ["arrived"], "picking one reports it")
-	hud.hide_start_choice()
-	_check(not hud.is_start_choice_open(), "and it can be put away")
 	hud.set_realm("Burgher, Freehold")
 	_check(hud._realm_label.visible and hud._realm_label.text == "Burgher, Freehold", "the realm lines show under the purse")
+	_check(not hud._help_panel.visible, "the help panel starts hidden")
+	hud.toggle_help()
+	_check(hud._help_panel.visible, "H shows the keys")
 	GameClock.reset()
 	GameClock.set_speed(1)
 	hud.queue_free()
+	_test_menus()
+
+
+func _test_menus() -> void:
+	print("Menus, saves and settings")
+	var menus := Menus.new()
+	add_child(menus)
+	_check(not menus.is_open(), "no menu shows until asked for")
+	menus.show_title("The Brook family, Spring 3, year 1")
+	_check(menus.current() == "title" and not menus._continue_button.disabled and menus._continue_note.text.begins_with("The Brook"), "the title screen offers to continue the newest save")
+	menus.show_title("")
+	_check(menus._continue_button.disabled, "and cannot continue when there is no save")
+	var begun: Array = []
+	menus.new_game_requested.connect(func(world_seed: int, start_id: String, lifespan: String) -> void: begun.append([world_seed, start_id, lifespan]))
+	menus.open_new_game_from_title()
+	_check(menus.current() == "new" and menus._start_buttons.size() == 3, "New Game shows a button for each way of beginning")
+	menus._start_buttons["arrived"].pressed.emit()
+	menus._seed_field.text = "1234"
+	menus._begin_button.pressed.emit()
+	_check(begun == [[1234, "arrived", "normal"]], "Begin reports the start, the seed and the lifespan (normal unless chosen)")
+	_check(Menus.seed_from_text("77") == 77 and Menus.seed_from_text("Thornbury") == Menus.seed_from_text("Thornbury") and Menus.seed_from_text("Thornbury") >= 0, "a typed seed is a number, or any word always makes the same one")
+	var back := InputEventKey.new()
+	back.keycode = KEY_ESCAPE
+	back.pressed = true
+	menus._unhandled_input(back)
+	_check(menus.current() == "title", "Esc goes back to where the screen was opened from")
+	var closes := [0]
+	menus.closed.connect(func() -> void: closes[0] += 1)
+	menus.show_pause("Spring 3")
+	menus.open_settings()
+	menus._unhandled_input(back)
+	_check(menus.current() == "pause", "settings opened from the pause menu go back to it")
+	menus._unhandled_input(back)
+	_check(not menus.is_open() and closes[0] == 1, "and Esc on the pause menu closes it, so the game carries on")
+	menus.queue_free()
+
+	_check(SaveSlots.slot_path("The Brook family, Spring 3") == "user://saves/The_Brook_family__Spring_3.json" and SaveSlots.slot_path("../../etc") == "user://saves/______etc.json" and SaveSlots.slot_path("  ") == "user://saves/save.json", "a save's name always makes a safe file name in the saves folder")
+	SaveSlots.make_dir()
+	var path := SaveSlots.slot_path("Smoke test slot")
+	var world := MapGenerator.generate(3, 32, 24)
+	_check(SaveGame.save(path, world) == OK and SaveSlots.write_meta(path, { "name": "Smoke test slot", "family": "Brook", "folk": 3, "date": "Spring 3, year 1", "time": "12:00" }) == OK, "a named save is written with what it is beside it")
+	var found := {}
+	for entry in SaveSlots.all():
+		if entry["path"] == path:
+			found = entry
+	_check(found.get("kind") == "slot" and found.get("title") == "Smoke test slot" and found["meta"].get("family") == "Brook", "the list of saves shows it by its name, with its family")
+	_check("The Brook family, 3 folk" in Menus.describe_save(found) and "Spring 3, year 1, 12:00" in Menus.describe_save(found), "and describes it")
+	SaveSlots.remove(path)
+	_check(not FileAccess.file_exists(path) and not FileAccess.file_exists(path + ".meta"), "deleting a save takes its description with it")
+
+	var scale_before := Settings.ui_scale
+	var changes: Array[String] = []
+	Settings.changed.connect(func(key: String) -> void: changes.append(key))
+	Settings.set_value("ui_scale", 1.3)
+	_check(Settings.ui_scale == 1.3 and changes == ["ui_scale"], "changing a setting applies it and says so")
+	var stored := ConfigFile.new()
+	_check(stored.load(Settings.PATH) == OK and is_equal_approx(float(stored.get_value("display", "ui_scale")), 1.3), "and keeps it in the settings file")
+	Settings.set_value("ui_scale", scale_before)
 
 
 ## A 12x8 meadow with a wall of water down column 6 that has one gap at row 7,
@@ -697,12 +792,14 @@ func _test_town() -> void:
 	for entry in world.lots:
 		rects.append(entry["rect"])
 	for i in rects.size():
-		var on_road := rects[i].intersects(Rect2i(center.x - 44, center.y, 89, 2)) or rects[i].intersects(Rect2i(center.x, center.y - 26, 2, 55))
+		var on_road := rects[i].intersects(Rect2i(center.x - 62, center.y, 125, 3)) or rects[i].intersects(Rect2i(center.x, center.y - 36, 3, 75))
 		apart = apart and not on_road
 		for j in range(i + 1, rects.size()):
 			apart = apart and not rects[i].intersects(rects[j])
 	_check(apart, "no two lots overlap and none sits on a road")
-	_check(world.get_tile_id(center.x, center.y) == "dirt" and world.get_tile_id(center.x + 1, center.y + 1) == "dirt", "the roads cross in the middle")
+	_check(world.get_tile_id(center.x, center.y) == "cobble" and world.get_tile_id(center.x + 2, center.y + 2) == "cobble" and world.get_tile_id(center.x - 20, center.y + 1) == "cobble", "the cobbled streets cross in the middle")
+	_check(world.object_at(Vector2i(center.x + 1, center.y + 1)) != null and world.object_at(Vector2i(center.x + 1, center.y + 1)).def_id == "well", "with a well in the square")
+	_check(world.towns.size() == 1 and world.home_town()["center"] == center and world.lots.all(func(entry: Dictionary) -> bool: return entry["town"] == world.towns[0]["id"]), "the lots belong to the town")
 	_check(world.lot.size == Vector2i(16, 13), "the player's lot is the size worldgen.json says")
 	var home_ground := true
 	for y in range(world.lot.position.y, world.lot.end.y):
@@ -881,6 +978,128 @@ func _work_setup() -> Dictionary:
 	world.add_object("counter", Vector2i(16, 4))
 	world.add_object("counter", Vector2i(17, 4))
 	return setup
+
+
+func _test_region() -> void:
+	print("The region and its towns")
+	var started := Time.get_ticks_msec()
+	var world := RegionGenerator.generate(7)
+	var elapsed := Time.get_ticks_msec() - started
+	var region := DataRegistry.get_def("worldgen", "region")
+	_check(world.width == int(region["width"]) and world.height == int(region["height"]) and world.width * world.height > 100000, "the map is big (%d by %d)" % [world.width, world.height])
+	_check(elapsed < 4000, "and is made in a moment (%d ms)" % elapsed)
+	_check(world.towns.size() == region["settlements"].size(), "with %d settlements" % world.towns.size())
+	var home := world.home_town()
+	_check(not home.is_empty() and home["center"] == Vector2i(world.width / 2, world.height / 2) and world.towns.filter(func(t: Dictionary) -> bool: return bool(t["home"])).size() == 1, "the player's town is in the middle, and only one is theirs")
+	var names := {}
+	var apart := true
+	for a in world.towns:
+		names[a["name"]] = true
+		for b in world.towns:
+			if a != b:
+				apart = apart and Vector2(a["center"]).distance_to(b["center"]) > 120.0
+	_check(names.size() == world.towns.size() and apart, "each has its own name, and they lie a long walk apart")
+	var every_building := true
+	for town in world.towns:
+		var wanted: Dictionary = DataRegistry.get_def("worldgen", town["profile"])["buildings"]
+		var got := {}
+		for lot in world.lots:
+			if lot.get("town", "") == town["id"]:
+				got[lot["kind"]] = int(got.get(lot["kind"], 0)) + 1
+		for kind in wanted:
+			every_building = every_building and int(got.get(kind, 0)) == int(wanted[kind])
+	_check(every_building, "every town has all the buildings its kind calls for")
+	_check(home["rect"].has_point(world.lot.get_center()) and world.lot_at(world.lot.get_center())["id"] == WorldState.HOME_LOT, "the player's lot is in their town")
+	var kinds := {}
+	for town in world.towns:
+		kinds[town["kind"]] = true
+	_check(kinds.has("town") and kinds.has("village") and kinds.has("hamlet"), "there are towns, villages and a hamlet")
+
+	# Streets and decoration make it look like a town.
+	var lanterns := 0
+	var stalls := 0
+	var beds := 0
+	for placed in world.objects:
+		lanterns += 1 if placed.def_id == "lantern_post" else 0
+		stalls += 1 if placed.def_id == "market_stall" else 0
+		beds += 1 if placed.def_id == "flower_bed" else 0
+	_check(lanterns >= 30 and stalls >= 4 and beds >= 10, "lanterns, stalls and flower beds finish it (%d, %d, %d)" % [lanterns, stalls, beds])
+	var cobbles := 0
+	for y in range(home["rect"].position.y, home["rect"].end.y):
+		cobbles += 1 if world.get_tile_id(home["center"].x + 1, y) == "cobble" else 0
+	_check(cobbles > 40, "the avenue is cobbled")
+
+	# The towns are joined: someone can walk from the home town to each of the others.
+	var finder := PathFinder.new(world)
+	var joined := true
+	for town in world.towns:
+		if town != home:
+			joined = joined and not finder.find_path(home["center"], Vector2i(town["center"].x, town["center"].y)).is_empty()
+	_check(joined, "a road joins every town to the player's")
+	var road_tiles := 0
+	for y in world.height:
+		for x in range(0, world.width, 1):
+			road_tiles += 1 if world.get_tile_id(x, y) == "dirt" else 0
+	_check(road_tiles > 1500, "the roads between them are laid in earth (%d tiles)" % road_tiles)
+
+	# Finding a place.
+	var other: Dictionary = world.towns[1]
+	_check(world.town_at(other["center"])["id"] == other["id"] and world.town_at(Vector2i(2, 2)).is_empty(), "a tile knows which town it is in, or none")
+	_check(world.town_of_lot(world.lots.filter(func(l: Dictionary) -> bool: return l["town"] == other["id"])[0]["id"])["id"] == other["id"] and world.town_of_lot(WorldState.HOME_LOT)["id"] == home["id"], "and a lot knows its town")
+
+	# The people live in their own towns, and work there.
+	var household := HouseholdGenerator.create(world)
+	CampGenerator.place(world, household)
+	var town_people := NpcGenerator.create(world)
+	var per_town := {}
+	var works_at_home := true
+	for pawn in town_people.pawns:
+		var where := str(world.town_of_lot(pawn.home_lot).get("id", ""))
+		per_town[where] = int(per_town.get(where, 0)) + 1
+		if pawn.work_lot != "":
+			works_at_home = works_at_home and str(world.town_of_lot(pawn.work_lot).get("id", "")) == where
+	var counts_ok := per_town.size() == world.towns.size()
+	for town in world.towns:
+		counts_ok = counts_ok and int(per_town.get(town["id"], 0)) > 0 and int(per_town.get(town["id"], 0)) <= int(DataRegistry.get_def("worldgen", town["profile"])["npc_count"])
+	_check(counts_ok and town_people.pawns.size() > 80, "every town has its people (%d in all)" % town_people.pawns.size())
+	_check(works_at_home, "and they work in the town they live in")
+	var surnames := {}
+	for pawn in town_people.pawns:
+		surnames[pawn.display_name.get_slice(" ", 1)] = true
+	_check(surnames.size() >= 30, "from many different families (%d surnames)" % surnames.size())
+
+	# Walkers stay near home, apart from the odd visit.
+	var sim := Simulation.new(world, household, town_people)
+	var villager: Pawn = town_people.pawns[0]
+	var villager_town := world.town_of_lot(villager.home_lot)
+	var strayed := 0
+	var trips := 0
+	for trip in 4000:
+		villager.path.clear()
+		villager.job_kind = ""
+		villager.tile = villager_town["center"]
+		villager.step_to = villager.tile
+		sim._roam(villager, 12 * 60)
+		var goal := villager.goal_tile()
+		if goal != villager.tile:
+			trips += 1
+			strayed += 1 if world.town_at(goal, 0).get("id", "") != villager_town["id"] else 0
+	_check(trips > 20 and strayed * 4 < trips, "townsfolk take their walks in their own town, and only seldom visit another (%d of %d)" % [strayed, trips])
+
+	# Saving keeps the towns and the tiles.
+	_check(SaveGame.save(TEST_SAVE, world, household, {}) == OK, "the big map is saved")
+	var back := SaveGame.load_from(TEST_SAVE)
+	_check(back["ok"] and back["world"].tiles == world.tiles and back["world"].towns.size() == world.towns.size() and back["world"].towns[1]["center"] == world.towns[1]["center"] and back["world"].home_town()["name"] == home["name"], "and they come back")
+	var packed_size := FileAccess.get_file_as_string(TEST_SAVE).length()
+	_check(packed_size < 1500000, "in a save that is not enormous (%d bytes)" % packed_size)
+	var old_world: Dictionary = world.to_dict()
+	old_world.erase("towns")
+	old_world.erase("tiles_z")
+	old_world["tiles"] = Array(world.tiles)
+	var from_old := WorldState.from_dict(old_world)
+	_check(from_old.tiles == world.tiles and from_old.towns.size() == 1 and from_old.towns[0]["home"], "a save from before there were towns gets one around its lots, with its tiles as written")
+	DirAccess.remove_absolute(TEST_SAVE)
+	GameClock.reset()
 
 
 func _test_economy() -> void:
@@ -1123,6 +1342,477 @@ func _interaction_entries(sim: Simulation, from: Pawn, to: Pawn) -> Dictionary:
 	return found
 
 
+func _test_work_sites() -> void:
+	print("Work sites, resources and materials")
+	var ids := Economy.resource_ids()
+	_check(str(ids) == str(["wood", "stone", "grain", "fish", "herbs", "ring"]), "there are five resources and the rings (%s)" % str(ids))
+	_check(Economy.resource_price("wood") == 2 and Economy.sell_price("wood", 10) == 14 and Economy.sell_price("wood", 10, 1.3) == 18, "the shop pays a share of the price, and more on a market day")
+
+	# The region has sites at every town's edge.
+	var region := RegionGenerator.generate(42)
+	var kinds := {}
+	var all_public := true
+	for lot in region.lots:
+		if str(lot["kind"]) in ["farm", "woodlot", "quarry", "herb_garden", "jetty"]:
+			kinds[lot["kind"]] = int(kinds.get(lot["kind"], 0)) + 1
+			all_public = all_public and bool(lot["public"]) and str(lot.get("town", "")) != ""
+	_check(kinds.has("farm") and kinds.has("woodlot") and kinds.has("quarry") and kinds.has("herb_garden") and kinds.has("jetty") and all_public, "fields, woodlots, quarries, herb gardens and a jetty are public lots of their towns (%s)" % str(kinds))
+	var sites_worked := {}
+	var plots := 0
+	for placed in region.objects:
+		plots += 1 if placed.def_id == "field_plot" else 0
+	var region_people := NpcGenerator.create(region)
+	for pawn in region_people.pawns:
+		if pawn.work_job in ["woodcutter", "quarryman", "farmhand", "herbalist", "fisher"]:
+			sites_worked[pawn.work_job] = int(sites_worked.get(pawn.work_job, 0)) + 1
+			if str(region.town_of_lot(pawn.work_lot).get("id", "")) != str(region.town_of_lot(pawn.home_lot).get("id", "")):
+				sites_worked["far"] = 1
+	_check(plots >= 60 and sites_worked.size() >= 3 and not sites_worked.has("far"), "townsfolk work the land near their homes (%s, %d field plots)" % [str(sites_worked), plots])
+	var site_finder := PathFinder.new(region)
+	var every_site_reachable := true
+	for lot in region.lots:
+		if str(lot["kind"]) in ["farm", "woodlot", "quarry", "herb_garden", "jetty"]:
+			var home_town := region.get_town(str(lot["town"]))
+			var found := false
+			for placed in region.objects:
+				if (lot["rect"] as Rect2i).has_point(placed.tile) and str(placed.def().get("category", "")) == "worksite":
+					for step in [Vector2i(0, 0), Vector2i(0, 1), Vector2i(1, 0), Vector2i(0, -1), Vector2i(-1, 0)]:
+						var spot: Vector2i = placed.tile + step
+						if region.is_walkable(spot.x, spot.y):
+							found = not site_finder.find_path(home_town["center"], spot).is_empty()
+							break
+					break
+			every_site_reachable = every_site_reachable and found
+	_check(every_site_reachable, "and every site can be walked to from its town")
+
+	# A small world to gather in.
+	GameClock.set_time(0, 8)  # spring
+	var setup := _romance_setup()
+	var world: WorldState = setup["world"]
+	var household: Household = setup["household"]
+	var sim: Simulation = setup["sim"]
+	var anna: Pawn = setup["anna"]
+	var ben: Pawn = setup["ben"]
+	var cara: Pawn = setup["cara"]
+	household.add_stock("axe", 1)
+	household.add_stock("sickle", 1)
+	world.lots.append({ "id": "lot_5", "kind": "woodlot", "name": "Woodlot", "template": "woodlot", "facing": "south", "rect": Rect2i(20, 14, 12, 8), "public": true, "town": "t1" })
+	world.lots.append({ "id": "lot_6", "kind": "farm", "name": "Fields", "template": "farm", "facing": "south", "rect": Rect2i(34, 14, 12, 8), "public": true, "town": "t1" })
+	world.lots.append({ "id": "lot_7", "kind": "shop", "name": "Shop", "template": "shop", "facing": "south", "rect": Rect2i(50, 14, 10, 8), "public": true, "town": "t1" })
+	var block := world.add_object("chopping_block", Vector2i(24, 16))
+	var plot := world.add_object("field_plot", Vector2i(36, 16))
+	var counter := world.add_object("counter", Vector2i(54, 16))
+	var board := world.add_object("notice_board", Vector2i(44, 12))
+	anna.tile = Vector2i(22, 18)
+	anna.step_to = anna.tile
+	var chop := PawnActions.list_for(sim, anna, block.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("use:"))
+	_check(chop.size() == 1 and "Chop wood" in str(chop[0]["label"]) and "3 wood" in str(chop[0]["label"]) and chop[0]["enabled"], "the chopping block offers to chop wood, and says what it yields (%s)" % str(chop))
+	var before_rest := float(anna.needs["rest"])
+	var started := PawnActions.perform(sim, anna, str(chop[0]["id"]), block.tile)
+	_check(started["ok"] and anna.job_kind == "use", "she sets off to chop")
+	for i in 120:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		if anna.job_kind == "":
+			break
+	_check(household.stock_of("wood") == 3 and anna.job_kind == "", "after a spell of work three wood is in the stockpile (%s)" % str(household.stock))
+	_check(float(anna.needs["rest"]) < before_rest - 5.0, "and she is tired for it")
+	_check(anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "gathered"), "and has a hard day's work behind her")
+	ben.age = 70
+	ben.traits = [] as Array[String]
+	_check("heavy" in sim.use_blocker(ben, block), "an elder keeps clear of the axe (%s)" % sim.use_blocker(ben, block))
+	var kid := Pawn.new()
+	kid.display_name = "Kid Marsh"
+	kid.age = 8
+	kid.adult = false
+	kid.tile = Vector2i(9, 6)
+	kid.step_to = kid.tile
+	household.add_pawn(kid)
+	_check("young" in sim.use_blocker(kid, plot), "and a child from the plough")
+	_check("only your own" in sim.use_blocker(cara, block), "the town's people do not gather for your household")
+	_check("until summer" in sim.use_blocker(anna, plot), "nothing is ripe in the fields in spring (%s)" % sim.use_blocker(anna, plot))
+	GameClock.set_time(20, 8)  # summer
+	_check(sim.use_blocker(anna, plot) == "" and ObjectArt.crop_stage() >= 2, "but in summer the crops are coming on")
+	GameClock.set_time(31, 8)
+	_check(ObjectArt.crop_stage() == 3, "ripe late in summer")
+	GameClock.set_time(50, 8)
+	_check(ObjectArt.crop_stage() == 0 and "until" in sim.use_blocker(anna, plot), "and the land lies bare in winter")
+	GameClock.set_time(31, 8)
+	anna.tile = Vector2i(36, 17)
+	anna.step_to = anna.tile
+	PawnActions.perform(sim, anna, "use:%d" % plot.id, plot.tile)
+	for i in 80:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		if anna.job_kind == "":
+			break
+	_check(household.stock_of("grain") == 4, "harvesting brings in grain (%s)" % str(household.stock))
+
+	# Building takes materials, or coin for what is lacking.
+	household.stock = { "wood": 5 }
+	household.coins = 20
+	var price := Economy.build_price("bed", household.stock)
+	_check(price["coins"] == 12 and price["uses"] == { "wood": 3 }, "wood you hold stands in for coin (%s)" % str(price))
+	_check(Economy.build_price("bed", {})["coins"] == 18, "without it you pay the whole price")
+	var built := sim.build_place("bed", Vector2i(10, 5))
+	_check(built["ok"] and household.stock_of("wood") == 2 and household.coins == 8, "a bed takes three wood and 12d (%d wood, %dd left)" % [household.stock_of("wood"), household.coins])
+	household.coins = 3
+	household.stock = { "wood": 1 }
+	var refused := sim.build_blocker("bed", Vector2i(10, 6))
+	_check("bed" not in refused and "wood" in refused and "3d" in refused, "a builder who cannot afford it is told what it takes (%s)" % refused)
+	_check("wood" in Economy.cost_text("wall") and "d" in Economy.cost_text("wall"), "the build menu shows what a thing costs in coin and in wood (%s)" % Economy.cost_text("stone_wall"))
+
+	# Selling.
+	household.stock = { "wood": 10, "grain": 3 }
+	household.coins = 0
+	var sells := PawnActions.list_for(sim, anna, counter.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("sell:"))
+	_check(sells.size() == 2 and "Sell your 10 wood (14d)" in str(sells[0]["label"]), "a shop counter buys what you have gathered (%s)" % str(sells.map(func(e: Dictionary) -> String: return str(e["label"]))))
+	var sold := PawnActions.perform(sim, anna, "sell:wood", counter.tile)
+	_check(sold["ok"] and household.coins == 14 and household.stock_of("wood") == 0 and "14d" in str(sold["message"]), "selling pays out (%s)" % str(sold["message"]))
+	sim.events.active.append({ "id": "market_day", "until": GameClock.tick + 600 })
+	_check(sim.sale_price("grain") == Economy.sell_price("grain", 3, 1.3), "and pays more on market day")
+	_check(not sim.sell_stock("fish")["ok"], "nothing to sell, nothing paid")
+	var empty := PawnActions.list_for(sim, anna, counter.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "none")
+	household.stock = {}
+	var none_left := PawnActions.list_for(sim, anna, counter.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "none" and not e["enabled"])
+	_check(none_left.size() >= 1 and empty.size() == 0, "with an empty stockpile the counter says there is nothing to sell")
+
+	# The notice board lists the jobs of its own town.
+	world.lots.append({ "id": "lot_8", "kind": "shop", "name": "Shop", "template": "shop", "facing": "south", "rect": Rect2i(46, 24, 10, 6), "public": true, "town": "t1" })
+	var board_entries := PawnActions.list_for(sim, anna, board.tile).map(func(e: Dictionary) -> String: return str(e["id"]))
+	_check(board_entries.has("hire:lot_7:shop_clerk") and board_entries.has("hire:lot_5:woodcutter") and not board_entries.has("hire:lot_4:shop_clerk"), "the board in the town lists its jobs (shop, woodlot) and not those of another town")
+
+	# Saving the stockpile.
+	household.stock = { "stone": 4, "herbs": 2 }
+	_check(SaveGame.save(TEST_SAVE, world, household, {}) == OK, "a household with a stockpile is saved")
+	var loaded := SaveGame.load_from(TEST_SAVE)
+	_check(loaded["ok"] and loaded["household"].stock == { "stone": 4, "herbs": 2 } and loaded["household"].stock_of("stone") == 4, "and its stockpile comes back")
+	DirAccess.remove_absolute(TEST_SAVE)
+	GameClock.reset()
+
+
+func _test_skills() -> void:
+	print("Skills, tools and trades")
+	# The data hangs together.
+	var skill_ids := Skills.skill_ids()
+	_check(skill_ids.size() == 11 and "woodcutting" in skill_ids and "smithing" in skill_ids and "music" in skill_ids, "there are eleven skills (%d)" % skill_ids.size())
+	var tools_ok := true
+	for tool_id in Skills.tool_ids():
+		tools_ok = tools_ok and Skills.skill_ids().has(str(DataRegistry.get_def("tools", tool_id)["skill"])) and Skills.tool_price(tool_id) > 0
+	for def in DataRegistry.get_list("objects"):
+		if def.has("tool"):
+			tools_ok = tools_ok and Skills.is_tool_id(str(def["tool"])) and Skills.skill_ids().has(str(def.get("skill", "")))
+	_check(tools_ok, "every tool names a real skill and every object that wants a tool names a real one")
+	var recipes_ok := true
+	for recipe in DataRegistry.get_list("recipes"):
+		var station := DataRegistry.get_def("objects", str(recipe["station"]))
+		recipes_ok = recipes_ok and bool(station.get("recipes", false)) and Skills.skill_ids().has(str(recipe["skill"]))
+		for item_id in recipe["outputs"]:
+			recipes_ok = recipes_ok and (Skills.is_tool_id(str(item_id)) or Economy.resource_ids().has(str(item_id)))
+		for item_id in recipe["inputs"]:
+			recipes_ok = recipes_ok and Economy.resource_ids().has(str(item_id))
+	_check(recipes_ok, "every recipe has a real station, skill and goods")
+
+	# Levels.
+	var learner := Pawn.new()
+	learner.age = 30
+	_check(Skills.level(learner, "mining") == 0 and Skills.rank_name(0) == "Untrained" and Skills.rank_name(10) == "Master", "a stranger to a skill is at level 0; level 10 is a master")
+	learner.skills["mining"] = 20.0
+	_check(Skills.level(learner, "mining") == 1 and Skills.level_of_xp(59.0) == 1 and Skills.level_of_xp(60.0) == 2 and Skills.level_of_xp(99999.0) == Skills.max_level(), "xp turns into levels")
+	learner.skills["mining"] = 40.0
+	_check(absf(Skills.progress(learner, "mining") - 0.5) < 0.01, "and shows how far to the next one")
+
+	# Practice, and who learns faster.
+	var setup := _romance_setup()
+	var world: WorldState = setup["world"]
+	var household: Household = setup["household"]
+	var sim: Simulation = setup["sim"]
+	var anna: Pawn = setup["anna"]
+	var ben: Pawn = setup["ben"]
+	var notices: Array[String] = []
+	sim.health_notice.connect(func(text: String) -> void: notices.append(text))
+	for i in 30:
+		Skills.practice(sim, anna, "woodcutting")
+	var adult_xp := Skills.xp(anna, "woodcutting")
+	_check(adult_xp > 2.0 and adult_xp < 3.0, "thirty minutes at the axe teach an adult a little (%.2f xp)" % adult_xp)
+	var youth := Pawn.new()
+	youth.age = 15
+	youth.adult = false
+	var toddler := Pawn.new()
+	toddler.age = 3
+	var elder := Pawn.new()
+	elder.age = 66
+	for who in [youth, toddler, elder]:
+		for i in 30:
+			Skills.practice(sim, who, "woodcutting")
+	_check(Skills.xp(youth, "woodcutting") > adult_xp and Skills.xp(elder, "woodcutting") < adult_xp and Skills.xp(toddler, "woodcutting") == 0.0, "the young learn faster, the old slower, and a toddler not at all")
+	var gifted := Pawn.new()
+	gifted.age = 30
+	gifted.talents = ["woodcutting"] as Array[String]
+	for i in 30:
+		Skills.practice(sim, gifted, "woodcutting")
+	_check(Skills.xp(gifted, "woodcutting") > adult_xp * 1.4, "someone with a talent for it learns faster still")
+	var master := Pawn.new()
+	master.id = 901
+	master.age = 40
+	master.tile = Vector2i(9, 9)
+	master.skills["woodcutting"] = Skills.xp_for_level(6)
+	master.job_kind = "work"
+	master.job_stage = "using"
+	var pupil := Pawn.new()
+	pupil.id = 902
+	pupil.age = 20
+	pupil.tile = Vector2i(10, 9)
+	household.pawns.append(master)
+	household.pawns.append(pupil)
+	GameClock.set_time(3, 12)
+	for i in 40:
+		Skills.practice(sim, pupil, "woodcutting")
+		GameClock.advance_one_tick()
+	_check(Skills.xp(pupil, "woodcutting") > 40.0 * 0.08 * 1.6, "an apprentice beside a master learns about twice as fast (%.2f xp)" % Skills.xp(pupil, "woodcutting"))
+	household.pawns.erase(master)
+	household.pawns.erase(pupil)
+	notices.clear()
+	anna.skills["fishing"] = Skills.xp_for_level(1) - 0.01
+	Skills.practice(sim, anna, "fishing", 1.0)
+	_check(Skills.level(anna, "fishing") == 1 and notices.any(func(t: String) -> bool: return "fishing is now 1" in t), "a new level is announced (%s)" % str(notices))
+
+	# What levels do.
+	var expert := Pawn.new()
+	expert.age = 30
+	expert.skills["farming"] = Skills.xp_for_level(10)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	var total := 0
+	for i in 200:
+		total += Skills.yield_amount(expert, "farming", 4, rng)
+	var novice_total := 0
+	for i in 200:
+		novice_total += Skills.yield_amount(learner, "farming", 4, rng)
+	_check(novice_total == 800 and total > 1500, "a master farmer brings in about twice the harvest (%d against %d)" % [total, novice_total])
+	_check(Skills.safety_multiplier(expert, "farming") == 1.0 and absf(Skills.safety_multiplier(Pawn.new(), "mining") - 1.0) < 0.001, "a skill with no safety effect does not change the risk")
+	expert.skills["woodcutting"] = Skills.xp_for_level(10)
+	_check(Skills.safety_multiplier(expert, "woodcutting") < 0.5, "a practised woodcutter is hurt less often")
+
+	# Tools: the chopping block wants an axe.
+	GameClock.set_time(0, 8)
+	world.lots.append({ "id": "lot_5", "kind": "woodlot", "name": "Woodlot", "template": "woodlot", "facing": "south", "rect": Rect2i(20, 14, 12, 8), "public": true, "town": "t1" })
+	var block := world.add_object("chopping_block", Vector2i(24, 16))
+	anna.tile = Vector2i(22, 18)
+	anna.step_to = anna.tile
+	ben.tile = Vector2i(23, 18)
+	ben.step_to = ben.tile
+	var blocked := sim.use_blocker(anna, block)
+	_check("axe" in blocked, "without an axe the household cannot chop (%s)" % blocked)
+	household.add_stock("axe", 1)
+	_check(sim.use_blocker(anna, block) == "", "with one in the stockpile they can")
+	var result := PawnActions.perform(sim, anna, "use:%d" % block.id, block.tile)
+	_check(result["ok"], "she goes to chop")
+	for i in 40:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		if anna.job_stage == "using":
+			break
+	_check(anna.tool == "axe" and household.stock_of("axe") == 0 and not anna.tool_lent, "she takes the axe from the stockpile when she starts (%s)" % anna.tool)
+	_check("in use" in sim.use_blocker(ben, block) or sim.use_blocker(ben, block) != "", "and nobody else can use the same axe (%s)" % sim.use_blocker(ben, block))
+	var skill_before := Skills.xp(anna, "woodcutting")
+	for i in 120:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		if anna.job_kind == "":
+			break
+	_check(anna.tool == "" and household.stock_of("axe") == 1 and household.stock_of("wood") >= 3, "when the work is done the axe goes back and the wood is in (%s)" % str(household.stock))
+	_check(Skills.xp(anna, "woodcutting") > skill_before + 1.0, "and she has learned from it")
+	_check(float(household.tool_wear.get("axe", 0.0)) > 20.0, "and the axe is a little worn (%.0f)" % float(household.tool_wear.get("axe", 0.0)))
+
+	# A tool at the end of its life breaks in the middle of the work.
+	household.tool_wear["axe"] = float(DataRegistry.get_def("tools", "axe")["durability"]) - 1.5
+	household.stock.erase("wood")
+	notices.clear()
+	PawnActions.perform(sim, anna, "use:%d" % block.id, block.tile)
+	for i in 120:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		if anna.job_kind == "":
+			break
+	_check(household.stock_of("axe") == 0 and anna.tool == "" and anna.job_kind == "" and notices.any(func(t: String) -> bool: return "axe broke" in t), "a worn-out axe breaks and is gone (%s)" % str(notices))
+
+	# Wage work: the employer lends the tool.
+	var hired := sim.hire(anna, "lot_5", "woodcutter")
+	_check(hired["ok"], "she can take the woodcutter's job")
+	GameClock.set_time(1, 7)
+	for i in 300:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		if anna.job_stage == "using":
+			break
+	_check(anna.job_kind == "work" and anna.tool == "axe" and anna.tool_lent and household.stock_of("axe") == 0, "at a wage job the employer's axe is in her hand (%s %s)" % [anna.job_kind, anna.tool])
+	sim.quit_job(anna)
+	_check(anna.tool == "" and household.stock_of("axe") == 0, "and it is not hers to keep")
+
+	# Crafting at a forge and a bench.
+	var forge := world.add_object("forge", Vector2i(10, 8))
+	var bench := world.add_object("workbench", Vector2i(12, 8))
+	anna.tile = Vector2i(10, 6)
+	anna.step_to = anna.tile
+	anna.job_kind = ""
+	household.stock = {}
+	var entries := PawnActions.list_for(sim, anna, forge.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("craft:"))
+	_check(entries.size() >= 5 and "Forge an axe" in str(entries[0]["label"]) and not entries[0]["enabled"], "the forge lists what it can make, switched off without what it takes (%d entries)" % entries.size())
+	household.stock = { "wood": 1, "stone": 2 }
+	entries = PawnActions.list_for(sim, anna, forge.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "craft:forge_axe:%d" % forge.id)
+	_check(entries.size() == 1 and not entries[0]["enabled"] and "hammer" in str(entries[0]["reason"]), "and a smith needs a smith's hammer (%s)" % str(entries))
+	household.add_stock("smiths_hammer", 1)
+	entries = PawnActions.list_for(sim, anna, forge.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "craft:forge_axe:%d" % forge.id)
+	_check(entries.size() == 1 and entries[0]["enabled"], "with the hammer it can be made")
+	var smithing_before := Skills.xp(anna, "smithing")
+	result = PawnActions.perform(sim, anna, "craft:forge_axe:%d" % forge.id, forge.tile)
+	_check(result["ok"] and anna.job_recipe == "forge_axe", "she sets about forging an axe")
+	notices.clear()
+	for i in 200:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		if anna.job_kind == "":
+			break
+	_check(household.stock_of("axe") == 1 and household.stock_of("wood") == 0 and household.stock_of("stone") == 0 and household.stock_of("smiths_hammer") == 1, "an axe comes out, the materials are used up and the hammer is back (%s)" % str(household.stock))
+	_check(Skills.xp(anna, "smithing") > smithing_before + 5.0 and notices.any(func(t: String) -> bool: return "made 1 axe" in t), "and she has practised smithing (%s)" % str(notices))
+	var skilled := Pawn.new()
+	skilled.age = 30
+	skilled.skills["smithing"] = Skills.xp_for_level(8)
+	_check(Skills.recipe_minutes(skilled, DataRegistry.get_def("recipes", "forge_axe")) < Skills.recipe_minutes(Pawn.new(), DataRegistry.get_def("recipes", "forge_axe")), "a better smith works faster")
+	household.stock = { "wood": 2 }
+	household.add_stock("hammer", 1)
+	entries = PawnActions.list_for(sim, anna, bench.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "craft:carve_rod:%d" % bench.id)
+	_check(entries.size() == 1 and entries[0]["enabled"], "the workbench carves a fishing rod from wood")
+
+	# Buying tools at a shop's rack.
+	world.lots.append({ "id": "lot_7", "kind": "shop", "name": "Shop", "template": "shop", "facing": "south", "rect": Rect2i(50, 14, 10, 8), "public": true, "town": "t1" })
+	var rack := world.add_object("tool_rack", Vector2i(54, 16))
+	household.coins = 20
+	household.stock = {}
+	var rack_entries := PawnActions.list_for(sim, anna, rack.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("buy:"))
+	_check(rack_entries.size() == Skills.tool_ids().size() and "Buy an axe" in str(rack_entries[0]["label"]) and rack_entries[0]["enabled"], "a tool rack sells every tool (%d)" % rack_entries.size())
+	var bought := PawnActions.perform(sim, anna, "buy:axe", rack.tile)
+	_check(bought["ok"] and household.stock_of("axe") == 1 and household.coins == 20 - Skills.tool_price("axe"), "buying an axe costs its price (%d left)" % household.coins)
+	household.coins = 1
+	_check(not PawnActions.perform(sim, anna, "buy:pickaxe", rack.tile)["ok"], "and an empty purse cannot buy another")
+
+	# Nursing wants the satchel, and a good healer nurses longer.
+	var patient := Pawn.new()
+	patient.id = 903
+	patient.age = 30
+	patient.illness = "fever"
+	patient.tile = anna.tile + Vector2i(1, 0)
+	household.pawns.append(patient)
+	household.stock = { "herbs": 2 }
+	_check("satchel" in sim.treat_blocker(anna, patient), "nursing needs a healer's satchel (%s)" % sim.treat_blocker(anna, patient))
+	household.stock = { "herbs": 2, "healers_satchel": 1 }
+	anna.skills["healing"] = Skills.xp_for_level(8)
+	GameClock.set_time(5, 8)
+	var nursed := sim.treat(anna, patient)
+	_check(nursed["ok"] and patient.treated_until - GameClock.tick > 3 * GameClock.MINUTES_PER_DAY * 1.3, "a skilled healer's nursing lasts longer")
+	household.pawns.erase(patient)
+
+	# Trades pass on.
+	var mother := Pawn.new()
+	mother.age = 35
+	mother.talents = ["smithing", "music"] as Array[String]
+	mother.skills["smithing"] = Skills.xp_for_level(6)
+	var father := Pawn.new()
+	father.age = 36
+	father.skills["music"] = Skills.xp_for_level(2)
+	var heirs_with_talent := 0
+	var trade_ok := true
+	for i in 60:
+		var baby := Pawn.new()
+		Skills.inherit(baby, [mother, father] as Array[Pawn], rng)
+		trade_ok = trade_ok and baby.family_trade == "smithing" and baby.talents.size() <= 2
+		heirs_with_talent += 1 if "smithing" in baby.talents else 0
+	_check(trade_ok and heirs_with_talent > 10 and heirs_with_talent < 40, "children take the family trade and sometimes a talent (%d of 60)" % heirs_with_talent)
+	anna.skills["smithing"] = Skills.xp_for_level(6)
+	var heir_pawn := Pawn.new()
+	heir_pawn.display_name = "Kit Marsh"
+	heir_pawn.age = 13
+	heir_pawn.adult = false
+	household.add_pawn(heir_pawn)
+	heir_pawn.family_trade = "smithing"
+	heir_pawn.parents = [anna.id] as Array[int]
+	Skills.take_up_trade(sim, heir_pawn)
+	_check(absf(Skills.xp(heir_pawn, "smithing") - Skills.xp_for_level(6) * 0.3) < 1.0, "a youth is shown the basics of the family trade (%.0f xp)" % Skills.xp(heir_pawn, "smithing"))
+
+	# Lessons.
+	ben.skills.clear()
+	anna.skills = { "woodcutting": Skills.xp_for_level(5) }
+	_check(sim.interaction_blocker(anna, ben, "lesson") == "", "someone who knows more can give a lesson")
+	var taught := Skills.give_lesson(sim, anna, ben)
+	_check(Skills.xp(ben, "woodcutting") >= 40.0 and "taught" in taught, "and the other learns (%s)" % taught)
+	ben.skills = { "woodcutting": Skills.xp_for_level(5) }
+	_check("anything to teach" in sim.interaction_blocker(anna, ben, "lesson"), "but not between equals (%s)" % sim.interaction_blocker(anna, ben, "lesson"))
+
+	# Townsfolk without work look for it, trades first.
+	var local_town: Household = setup["town"]
+	local_town.add_pawn(_townsperson("Smith Junior", "male", 20, 0))
+	var young := local_town.pawns[local_town.pawns.size() - 1]
+	young.home_lot = "lot_1"
+	young.family_trade = "trading"
+	young.skills["trading"] = Skills.xp_for_level(3)
+	world.lots.append({ "id": "lot_8", "kind": "shop", "name": "Shop", "template": "shop", "facing": "south", "rect": Rect2i(70, 14, 10, 8), "public": true, "town": "t1" })
+	Skills.find_work(sim, rng, 5)
+	_check(young.work_job == "shop_clerk" and young.work_lot == "lot_8", "an unemployed youth takes the post that suits their trade (%s at %s)" % [young.work_job, young.work_lot])
+
+	# The generated region has places to buy and make tools, and people who know their trades.
+	var region := RegionGenerator.generate(42)
+	var shops_with_racks := 0
+	var racks := 0
+	var forges := 0
+	var benches := 0
+	for placed in region.objects:
+		racks += 1 if placed.def_id == "tool_rack" else 0
+		forges += 1 if placed.def_id == "forge" else 0
+		benches += 1 if placed.def_id == "workbench" else 0
+	var smithies := 0
+	var workshops := 0
+	for lot in region.lots:
+		smithies += 1 if str(lot["kind"]) == "smithy" else 0
+		workshops += 1 if str(lot["kind"]) == "workshop" else 0
+		if str(lot["kind"]) == "shop":
+			for placed in region.objects:
+				if placed.def_id == "tool_rack" and (lot["rect"] as Rect2i).has_point(placed.tile):
+					shops_with_racks += 1
+					break
+	_check(smithies >= 3 and workshops >= 2 and forges >= 2 * smithies and benches >= 2 * workshops and racks >= smithies + workshops + shops_with_racks and shops_with_racks >= 5, "the towns have smithies, workshops and tool racks in their shops (%d smithies, %d workshops, %d forges, %d benches, %d racks, %d shops with one)" % [smithies, workshops, forges, benches, racks, shops_with_racks])
+	var region_folk := NpcGenerator.create(region)
+	var skilled_folk := 0
+	var adults := 0
+	var smiths := 0
+	var smith_levels_ok := true
+	var heirs := 0
+	for person in region_folk.pawns:
+		if person.adult:
+			adults += 1
+			skilled_folk += 1 if not Skills.known(person).is_empty() else 0
+		elif person.family_trade != "":
+			heirs += 1
+		if person.work_job in ["smith", "carpenter"]:
+			smiths += 1
+			smith_levels_ok = smith_levels_ok and Skills.level(person, Skills.job_skill(DataRegistry.get_def("jobs", person.work_job))) >= 1
+	_check(adults > 0 and skilled_folk * 10 >= adults * 8, "most grown townsfolk know some trade (%d of %d)" % [skilled_folk, adults])
+	_check(smiths >= 3 and smith_levels_ok, "the smiths and carpenters are practised at it (%d)" % smiths)
+	_check(heirs >= 5, "the children of the town's families are heirs to a trade (%d)" % heirs)
+
+	# All of it is saved.
+	var copy := Pawn.from_dict(anna.to_dict())
+	anna.talents = ["music"] as Array[String]
+	anna.family_trade = "smithing"
+	anna.tool = "axe"
+	anna.tool_lent = true
+	copy = Pawn.from_dict(anna.to_dict())
+	_check(copy.skills == anna.skills and copy.talents == anna.talents and copy.family_trade == "smithing" and copy.tool == "axe" and copy.tool_lent, "skills, talents, family trade and the tool in hand come back from a save")
+	household.tool_wear = { "axe": 12.5 }
+	var restored := Household.from_dict(household.to_dict())
+	_check(float(restored.tool_wear.get("axe", 0.0)) == 12.5, "and so does the wear on the household's tools")
+
+
 func _test_social() -> void:
 	print("Chatting and opinions")
 	_check(Relations.label(65.0) == "Close friend" and Relations.label(35.0) == "Friend" and Relations.label(0.0) == "Acquaintance" and Relations.label(-50.0) == "Rival", "an opinion is described in words")
@@ -1302,7 +1992,7 @@ func _test_social() -> void:
 	var strangers_met := 0
 	for minute in 2 * GameClock.MINUTES_PER_DAY:
 		GameClock.advance_one_tick()
-		big_sim.step()
+		big_sim.step(GameClock.SUBSTEPS_PER_MINUTE)  # as in the live game, where walking is quick
 		if minute % 60 == 0:
 			for villager in town.pawns:
 				lowest_social = minf(lowest_social, float(villager.needs["social"]))
@@ -1326,6 +2016,497 @@ func _collect_events(world_seed: int, days: int) -> Array[Dictionary]:
 				if change["kind"] == "started":
 					found.append({ "id": change["id"], "day": day, "season": GameClock.get_date()["season_id"] })
 	return found
+
+
+## A small world for courtship: your lot with beds for three, two town houses, a green, and a shop in
+## another town. Returns the world, your household (Anna and Ben), the town (Cara of the first
+## house, with a job in the other town, and Dan of the second) and a simulation.
+func _romance_setup() -> Dictionary:
+	GameClock.set_time(3, 12)
+	var world := WorldState.new(90, 40, 3, "grass")
+	world.lot = Rect2i(2, 2, 12, 8)
+	world.lots = [
+		{ "id": "lot_1", "kind": "house", "name": "House", "template": "cottage", "facing": "south", "rect": Rect2i(20, 2, 10, 8), "public": false, "town": "t1" },
+		{ "id": "lot_2", "kind": "house", "name": "House", "template": "cottage", "facing": "south", "rect": Rect2i(34, 2, 10, 8), "public": false, "town": "t1" },
+		{ "id": "lot_3", "kind": "park", "name": "Village green", "template": "green", "facing": "south", "rect": Rect2i(50, 2, 14, 10), "public": true, "town": "t1" },
+		{ "id": "lot_4", "kind": "shop", "name": "Shop", "template": "shop", "facing": "south", "rect": Rect2i(70, 2, 10, 8), "public": true, "town": "t2" },
+	]
+	world.towns = [
+		{ "id": "t1", "name": "Testford", "kind": "town", "profile": "town", "center": Vector2i(40, 10), "rect": Rect2i(0, 0, 66, 40), "home": true },
+		{ "id": "t2", "name": "Faraway", "kind": "village", "profile": "village", "center": Vector2i(75, 10), "rect": Rect2i(66, 0, 24, 40), "home": false },
+	]
+	for lot_rect in [Rect2i(20, 2, 10, 8), Rect2i(34, 2, 10, 8)]:
+		for y in range(lot_rect.position.y, lot_rect.end.y):
+			for x in range(lot_rect.position.x, lot_rect.end.x):
+				world.set_floor(Vector2i(x, y), "planks")
+	for bed_tile in [Vector2i(4, 4), Vector2i(6, 4), Vector2i(8, 4), Vector2i(22, 4), Vector2i(24, 4), Vector2i(36, 4)]:
+		world.add_object("bed", bed_tile)
+	var household := Household.new()
+	household.coins = 40
+	var town := Household.new(NpcGenerator.FIRST_ID)
+	var specs := [
+		[household, "Anna Marsh", "female", 25, ["straight"], WorldState.HOME_LOT, Vector2i(5, 6)],
+		[household, "Ben Marsh", "male", 27, ["straight"], WorldState.HOME_LOT, Vector2i(7, 6)],
+		[town, "Cara Cooper", "female", 24, ["bisexual"], "lot_1", Vector2i(23, 6)],
+		[town, "Dan Hollis", "male", 26, ["straight"], "lot_2", Vector2i(37, 6)],
+	]
+	var people: Array[Pawn] = []
+	for spec in specs:
+		var person := Pawn.new()
+		person.display_name = spec[1]
+		person.gender = spec[2]
+		person.age = spec[3]
+		person.adult = true
+		for trait_id in spec[4]:
+			person.traits.append(str(trait_id))
+		person.home_lot = spec[5]
+		person.tile = spec[6]
+		person.step_to = person.tile
+		_fill_needs(person)
+		spec[0].add_pawn(person)
+		people.append(person)
+	people[2].work_lot = "lot_4"
+	people[2].work_job = "shop_clerk"
+	Relations.make_family([people[0], people[1]] as Array[Pawn])
+	var sim := Simulation.new(world, household, town)
+	return { "world": world, "household": household, "town": town, "sim": sim, "anna": people[0], "ben": people[1], "cara": people[2], "dan": people[3] }
+
+
+func _test_romance() -> void:
+	print("Courtship, dates and moving in")
+	var setup := _romance_setup()
+	var sim: Simulation = setup["sim"]
+	var world: WorldState = setup["world"]
+	var household: Household = setup["household"]
+	var town: Household = setup["town"]
+	var anna: Pawn = setup["anna"]
+	var ben: Pawn = setup["ben"]
+	var cara: Pawn = setup["cara"]
+	var dan: Pawn = setup["dan"]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 9
+	var interactions := DataRegistry.get_list("interactions")
+	var kinds := interactions.map(func(i: Dictionary) -> String: return str(i["id"]))
+	_check("flirt" in kinds and "kiss" in kinds and "ask_out" in kinds, "flirting, kissing and asking someone out are interactions")
+	_check(float(Romance.config()["ask_out_romance"]) > 0.0 and Romance.config()["date_venues"].has("park"), "courtship is data (relationships.json)")
+
+	# Who can flirt with whom.
+	anna.set_opinion(dan.id, 20.0)
+	dan.set_opinion(anna.id, 20.0)
+	_check(sim.interaction_blocker(anna, dan, "flirt") == "", "a woman and a man who are drawn to each other may flirt")
+	_check("interested" in sim.interaction_blocker(anna, cara, "flirt"), "but not with someone she is not drawn to (%s)" % sim.interaction_blocker(anna, cara, "flirt"))
+	var child := Pawn.new()
+	child.display_name = "Kid Marsh"
+	child.age = 9
+	child.adult = false
+	child.tile = Vector2i(9, 6)
+	child.step_to = child.tile
+	_fill_needs(child)
+	household.add_pawn(child)
+	_check(sim.interaction_blocker(anna, child, "flirt") != "", "or with a child")
+	var sister := Pawn.new()
+	sister.display_name = "Sis Marsh"
+	sister.gender = "male"
+	sister.traits = ["bisexual"] as Array[String]
+	sister.age = 30
+	sister.tile = Vector2i(10, 6)
+	sister.step_to = sister.tile
+	_fill_needs(sister)
+	household.add_pawn(sister)
+	anna.traits = ["bisexual"] as Array[String]
+	sister.parents = [anna.id] as Array[int]
+	sister.set_opinion(anna.id, 50.0)
+	anna.set_opinion(sister.id, 50.0)
+	_check("family" in sim.interaction_blocker(anna, sister, "flirt") and Relations.are_kin(anna, sister), "or with family (%s)" % sim.interaction_blocker(anna, sister, "flirt"))
+	var twin := Pawn.new()
+	twin.parents = [anna.id] as Array[int]
+	_check(Relations.are_kin(twin, sister) and not Relations.are_kin(ben, anna), "siblings are family, housemates are not")
+	household.remove_pawn(sister.id)
+	household.remove_pawn(child.id)
+	anna.traits = ["straight"] as Array[String]
+
+	# Flirting warms romance on both sides.
+	var flirt := DataRegistry.get_def("interactions", "flirt")
+	var tries := 0
+	while anna.romance_for(dan.id) < 25.0 and tries < 40:
+		anna.job_interaction = "flirt"
+		sim._finish_interaction(anna, dan, flirt)
+		tries += 1
+	_check(anna.romance_for(dan.id) >= 25.0 and dan.romance_for(anna.id) >= 25.0, "flirting warms them both (after %d tries)" % tries)
+	_check(anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "flirted") and tries > 2, "and it lifts the mood, though a flirt can fall flat")
+	var kiss_entry: Dictionary = _interaction_entries(sim, anna, dan)["kiss"]
+	_check(kiss_entry["enabled"] or "ready" in str(kiss_entry["reason"]), "a kiss waits until they are warm enough (%s)" % str(kiss_entry))
+	dan.romance[anna.id] = 10.0
+	_check("ready" in sim.interaction_blocker(anna, dan, "kiss") and "ready" in sim.interaction_blocker(anna, dan, "ask_out"), "she cannot kiss or ask out someone who is not ready (%s)" % sim.interaction_blocker(anna, dan, "ask_out"))
+	dan.romance[anna.id] = 30.0
+	anna.romance[dan.id] = 30.0
+	dan.set_opinion(anna.id, 30.0)
+	anna.set_opinion(dan.id, 30.0)
+
+	# Asking out.
+	_check(sim.interaction_blocker(anna, dan, "ask_out") == "" and _interaction_entries(sim, anna, dan)["ask_out"]["enabled"], "once both are ready she can ask him out")
+	var asked := sim.order_interact(anna, dan, "ask_out")
+	_check(asked["ok"] and dan.job_kind == "interact", "asking sends her to him")
+	for i in 90:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		if anna.partner_id != 0:
+			break
+	_check(anna.partner_id == dan.id and dan.partner_id == anna.id and anna.partner_status == "dating" and Romance.together(anna, dan), "he says yes: they are dating")
+	_check(anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "new_romance" and t.get("about", "") == "Dan") and _has_part(Mood.evaluate(anna, household, GameClock.tick), "partnered"), "and both are glad of it")
+	_check(sim.relationship_lines(anna)[0]["name"] == "Dan Hollis" and sim.relationship_lines(anna)[0]["label"] == "Dating", "the panel lists a partner first")
+	_check("together" in sim.interaction_blocker(anna, dan, "ask_out"), "nobody asks out their own partner")
+	var cara_flirt := sim.interaction_blocker(cara, anna, "flirt")
+	var ben_flirt := sim.interaction_blocker(ben, anna, "flirt")
+	_check("seeing someone" in sim.interaction_blocker(dan, cara, "flirt") or "interested" in sim.interaction_blocker(dan, cara, "flirt"), "a taken person is not flirted with, and does not flirt")
+	dan.partner_id = 0
+	anna.partner_id = 0
+	cara.set_opinion(anna.id, 40.0)
+	anna.set_opinion(cara.id, 40.0)
+	dan.partner_id = anna.id
+	anna.partner_id = dan.id
+	_check(cara_flirt != "" and ben_flirt != "", "(%s; %s)" % [cara_flirt, ben_flirt])
+
+	# The menu and a date.
+	var entries := PawnActions.list_for(sim, anna, dan.tile).map(func(e: Dictionary) -> String: return str(e["id"]))
+	_check(entries.has("date:%d" % dan.id) and entries.has("breakup:%d" % dan.id) and entries.has("move:invite:%d" % dan.id) and entries.has("move:join:%d" % dan.id), "a couple's menu offers a date, moving in and a break-up")
+	GameClock.set_time(3, 23)
+	_check("hour" in Romance.date_blocker(sim, anna, dan), "nobody goes out on a date in the dead of night")
+	GameClock.set_time(3, 12)
+	_check(Romance.date_blocker(sim, anna, dan) == "", "by day they can")
+	var before_romance := anna.romance_for(dan.id)
+	var before_opinion := anna.opinion_of(dan.id)
+	var date_result := PawnActions.perform(sim, anna, "date:%d" % dan.id, dan.tile)
+	_check(date_result["ok"] and anna.job_kind == "date" and dan.job_kind == "date" and "date" in sim.describe_activity(anna).to_lower(), "she asks him on a date and both set off (%s)" % sim.describe_activity(anna))
+	var date_minutes := 0
+	for i in 220:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		date_minutes += 1
+		if anna.job_kind == "" and dan.job_kind == "":
+			break
+	_check(anna.job_kind == "" and dan.job_kind == "" and anna.romance_for(dan.id) > before_romance + 8.0 and anna.opinion_of(dan.id) > before_opinion, "after an hour at the green they are closer (%d min)" % date_minutes)
+	_check(dan.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "had_date") and Rect2i(50, 2, 14, 10).has_point(anna.tile), "and remember it with joy")
+	dan.job_kind = "use"
+	_check("busy" in Romance.date_blocker(sim, anna, dan), "a busy partner cannot be taken out")
+	dan.job_kind = ""
+
+	# Moving in.
+	anna.romance[dan.id] = 50.0
+	dan.romance[anna.id] = 50.0
+	anna.partner_since = GameClock.tick
+	dan.partner_since = GameClock.tick
+	_check("long enough" in Romance.invite_blocker(sim, anna, dan), "they must have been together a while (%s)" % Romance.invite_blocker(sim, anna, dan))
+	anna.partner_since = GameClock.tick - 2 * GameClock.MINUTES_PER_DAY
+	dan.partner_since = anna.partner_since
+	_check(Romance.spare_beds(sim, WorldState.HOME_LOT) == 1 and Romance.invite_blocker(sim, anna, dan) == "", "with a bed to spare at home she can ask him to move in")
+	var told := Romance.invite(sim, anna, dan)
+	_check(household.get_pawn(dan.id) != null and town.get_pawn(dan.id) == null and dan.id >= NpcGenerator.FIRST_ID, "he joins your household and keeps his own number (%s)" % told)
+	_check(dan.home_lot == WorldState.HOME_LOT and dan.origin_lot == "lot_2" and dan.partner_status == "partners" and anna.partner_status == "partners", "and lives on your lot now")
+	_check(Romance.spare_beds(sim, WorldState.HOME_LOT) == 0 and household.select(dan.id), "the beds are full, and you can play him")
+	_check(dan.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "moved_in") and anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "moved_in"), "they are glad to be together")
+	var hud_lines := PawnActions.list_for(sim, anna, dan.tile).map(func(e: Dictionary) -> String: return str(e["id"]))
+	_check(not hud_lines.has("move:invite:%d" % dan.id), "once he lives with her there is no more asking")
+
+	# Breaking up sends the one who moved in home.
+	var leaving := Romance.break_up(sim, anna, dan)
+	_check(anna.partner_id == 0 and dan.partner_id == 0 and anna.romance_for(dan.id) == 0.0 and anna.opinion_of(dan.id) < 0.0, "a break-up ends it, and sours the friendship (%s)" % leaving)
+	_check(household.get_pawn(dan.id) == null and town.get_pawn(dan.id) != null and dan.home_lot == "lot_2" and dan.origin_lot == "", "and he goes back to the town and his own house")
+	_check(dan.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "heartbroken") and anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "broke_up"), "one is heartbroken and one is sorry")
+
+	# Moving in with them: Anna and Cara (Anna turns out to like women).
+	anna.traits = ["bisexual"] as Array[String]
+	Romance.begin_dating(sim, anna, cara)
+	anna.romance[cara.id] = 60.0
+	cara.romance[anna.id] = 60.0
+	anna.partner_since = GameClock.tick - 3 * GameClock.MINUTES_PER_DAY
+	cara.partner_since = anna.partner_since
+	_check(Romance.invite_blocker(sim, anna, cara) == "" and Romance.join_blocker(sim, anna, cara) != "" == false, "she could ask Cara in, or move in with her")
+	world.add_object("bed", Vector2i(26, 4))
+	var moved := Romance.join(sim, anna, cara)
+	_check(anna.home_lot == "lot_1" and anna.origin_lot == WorldState.HOME_LOT and household.get_pawn(anna.id) != null and "moved in" in moved, "Anna moves into Cara's house and stays one of your folk (%s)" % moved)
+	_check(anna.opinion_of(cara.id) >= Relations.FAMILY_START, "the family there take to her")
+	var home_entries := PawnActions.list_for(sim, anna, Vector2i(5, 5)).map(func(e: Dictionary) -> String: return str(e["id"]))
+	_check(home_entries.has("move_home") and sim.use_blocker(anna, world.object_at(Vector2i(4, 4))) != "", "she can no longer use the beds on your lot, and may move back")
+	_check(sim.use_blocker(anna, world.object_at(Vector2i(26, 4))) == "", "but she can use the ones at Cara's")
+	var back_home := PawnActions.perform(sim, anna, "move_home", Vector2i(5, 5))
+	_check(back_home["ok"] and anna.home_lot == WorldState.HOME_LOT and anna.partner_status == "dating", "moving back puts them back to dating")
+
+	# A job in another town cannot be kept.
+	_check(cara.work_job == "shop_clerk", "Cara works at the shop in the other town")
+	anna.partner_since = GameClock.tick - 3 * GameClock.MINUTES_PER_DAY
+	cara.partner_since = anna.partner_since
+	world.add_object("bed", Vector2i(10, 4))
+	Romance.invite(sim, anna, cara)
+	_check(cara.work_job == "" and household.get_pawn(cara.id) != null, "a partner who moves to your lot gives up a job in another town")
+
+	# A partner dies.
+	Romance.break_up(sim, anna, cara)
+	Romance.begin_dating(sim, anna, ben)
+	Mortality.fall(sim, ben, "starved")
+	sim.die(ben, "starved")
+	_check(anna.partner_id == 0 and anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "widowed"), "if a partner dies the other is on their own, in grief")
+
+	# Among the town's people.
+	var civic := _romance_setup()
+	var civic_sim: Simulation = civic["sim"]
+	var civic_town: Household = civic["town"]
+	var extra: Array[Pawn] = []
+	for spec in [["Eve Hollis", "female", "lot_2"], ["Finn Cooper", "male", "lot_1"]]:
+		var person := Pawn.new()
+		person.display_name = spec[0]
+		person.gender = spec[1]
+		person.age = 25
+		person.traits = ["straight"] as Array[String]
+		person.home_lot = spec[2]
+		person.tile = Vector2i(37, 7) if spec[2] == "lot_2" else Vector2i(23, 7)
+		person.step_to = person.tile
+		_fill_needs(person)
+		civic_town.add_pawn(person)
+		extra.append(person)
+	var civic_cara: Pawn = civic["cara"]
+	civic_cara.traits = ["straight"] as Array[String]
+	civic_cara.work_lot = ""
+	civic_cara.work_job = ""
+	var civic_dan: Pawn = civic["dan"]
+	var eve: Pawn = extra[0]
+	var finn: Pawn = extra[1]
+	# Dan and Eve share a house, Cara and Finn another: they pair up and live as partners.
+	var days := 0
+	while (civic_dan.partner_id == 0 or civic_cara.partner_id == 0) and days < 60:
+		GameClock.set_time(10 + days, 0)
+		Romance.new_day(civic_sim, rng)
+		days += 1
+	_check(civic_dan.partner_id == eve.id and civic_dan.partner_status == "partners" and civic_cara.partner_id == finn.id, "two grown-ups of the town under one roof soon become partners (after %d days)" % days)
+	# Singles of different houses: free Dan and Cara's partners and let them meet.
+	for pawn in [civic_dan, eve, civic_cara, finn]:
+		pawn.partner_id = 0
+		pawn.partner_status = ""
+		pawn.romance.clear()
+	eve.traits = ["asexual"] as Array[String]  # nobody else under their roofs is drawn to them
+	finn.traits = ["asexual"] as Array[String]
+	civic["world"].add_object("bed", Vector2i(26, 4))  # a spare bed in each house
+	civic["world"].add_object("bed", Vector2i(38, 4))
+	var courted := 0
+	for day in 2000:
+		GameClock.set_time(100 + day, 0)
+		Romance.new_day(civic_sim, rng)
+		if civic_cara.partner_id == civic_dan.id:
+			courted = day
+			break
+	_check(civic_cara.partner_id == civic_dan.id and civic_cara.partner_status == "dating", "singles of one town in time take to each other (day %d)" % courted)
+	var settled := false
+	for day in 60:
+		GameClock.set_time(2200 + day, 0)
+		Romance.new_day(civic_sim, rng)
+		if civic_cara.partner_status == "partners":
+			settled = true
+			break
+	_check(settled and civic_cara.home_lot == civic_dan.home_lot and (civic_cara.origin_lot != "" or civic_dan.origin_lot != ""), "and a dating couple move under one roof, if there is a bed (%s and %s live at %s)" % [civic_cara.display_name, civic_dan.display_name, civic_dan.home_lot])
+
+	# Cooling off.
+	var cold := _romance_setup()
+	var cold_a: Pawn = cold["anna"]
+	var cold_d: Pawn = cold["dan"]
+	cold_a.romance[cold_d.id] = 20.0
+	Romance.new_day(cold["sim"], rng)
+	_check(cold_a.romance_for(cold_d.id) < 20.0, "romance cools if it is not kept up")
+	cold_a.romance[cold_d.id] = 60.0
+	cold_a.partner_id = cold_d.id
+	cold_d.partner_id = cold_a.id
+	Romance.new_day(cold["sim"], rng)
+	_check(cold_a.romance_for(cold_d.id) > 60.0, "but a couple's grows")
+
+	# Saving.
+	cold_a.parents = [7, 8] as Array[int]
+	cold_a.origin_lot = "lot_2"
+	cold_a.partner_status = "dating"
+	cold_a.partner_since = 1234
+	_check(SaveGame.save(TEST_SAVE, cold["world"], cold["household"], {}) == OK, "a household in love is saved")
+	var loaded := SaveGame.load_from(TEST_SAVE)
+	var loaded_anna: Pawn = loaded["household"].pawns[0]
+	_check(loaded["ok"] and loaded["household"].to_dict() == cold["household"].to_dict() and is_equal_approx(loaded_anna.romance_for(cold_d.id), cold_a.romance_for(cold_d.id)) and loaded_anna.partner_id == cold_d.id and loaded_anna.partner_status == "dating" and loaded_anna.parents == [7, 8] and loaded_anna.origin_lot == "lot_2" and loaded_anna.partner_since == 1234, "and the romance, partner, family and where she came from survive a round trip")
+	DirAccess.remove_absolute(TEST_SAVE)
+
+	# Babies are born with parents.
+	var parents := _family_setup()
+	var mum: Pawn = parents["mother"]
+	var dad: Pawn = parents["father"]
+	GameClock.set_time(0, 0)
+	Pregnancy.begin(parents["sim"], mum, dad, rng)
+	mum.babies_due = 2
+	_deliver(parents["sim"], mum, rng)
+	var newborns: Array[Pawn] = []
+	for pawn in parents["household"].pawns:
+		if pawn.is_infant():
+			newborns.append(pawn)
+	_check(newborns.size() == 2 and newborns[0].parents == [mum.id, dad.id] and Relations.are_kin(newborns[0], newborns[1]) and Relations.are_kin(newborns[0], mum), "a baby knows its parents, and its twin is its sibling")
+	GameClock.reset()
+
+
+func _minutes(sim: Simulation, minutes: int, until: Callable = Callable()) -> void:
+	for i in minutes:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		if until.is_valid() and until.call():
+			return
+
+
+func _test_marriage() -> void:
+	print("Rings, engagements and weddings")
+	var setup := _romance_setup()
+	var world: WorldState = setup["world"]
+	var household: Household = setup["household"]
+	var town: Household = setup["town"]
+	var sim: Simulation = setup["sim"]
+	var anna: Pawn = setup["anna"]
+	var ben: Pawn = setup["ben"]
+	var cara: Pawn = setup["cara"]
+	var dan: Pawn = setup["dan"]
+	var notices: Array[String] = []
+	sim.health_notice.connect(func(text: String) -> void: notices.append(text))
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 11
+
+	# A shop counter sells rings.
+	world.lots.append({ "id": "lot_7", "kind": "shop", "name": "Shop", "template": "shop", "facing": "south", "rect": Rect2i(60, 24, 10, 8), "public": true, "town": "t1" })
+	var counter := world.add_object("counter", Vector2i(64, 26))
+	household.coins = 60
+	var counter_entries := PawnActions.list_for(sim, anna, counter.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "buy:ring")
+	_check(counter_entries.size() == 1 and "Buy a ring (20d)" in str(counter_entries[0]["label"]) and counter_entries[0]["enabled"], "a shop counter sells rings (%s)" % str(counter_entries))
+	_check(PawnActions.perform(sim, anna, "buy:ring", counter.tile)["ok"] and household.stock_of("ring") == 1 and household.coins == 40, "and buying one takes 20d")
+	household.add_stock("ring", -1)
+	var forge_recipe := DataRegistry.get_def("recipes", "forge_ring")
+	_check(str(forge_recipe.get("station", "")) == "forge" and int(forge_recipe.get("min_level", 0)) >= 2, "a smith of some skill can forge one")
+
+	# Asking: it takes a couple, time together, trust and a ring.
+	_check("not seeing" in sim.interaction_blocker(anna, dan, "propose"), "only a couple can propose (%s)" % sim.interaction_blocker(anna, dan, "propose"))
+	anna.set_opinion(dan.id, 60.0)
+	dan.set_opinion(anna.id, 60.0)
+	anna.tile = Vector2i(10, 12)
+	anna.step_to = anna.tile
+	dan.tile = Vector2i(11, 12)
+	dan.step_to = dan.tile
+	Romance.begin_dating(sim, anna, dan)
+	_check("long enough" in sim.interaction_blocker(anna, dan, "propose"), "not on the first day (%s)" % sim.interaction_blocker(anna, dan, "propose"))
+	anna.partner_since -= 3 * GameClock.MINUTES_PER_DAY
+	dan.partner_since = anna.partner_since
+	anna.romance[dan.id] = 70.0
+	dan.romance[anna.id] = 70.0
+	_check("ring" in sim.interaction_blocker(anna, dan, "propose"), "nor without a ring (%s)" % sim.interaction_blocker(anna, dan, "propose"))
+	household.add_stock("ring", 1)
+	dan.romance[anna.id] = 30.0
+	_check("isn't ready" in sim.interaction_blocker(anna, dan, "propose"), "nor if they are not ready (%s)" % sim.interaction_blocker(anna, dan, "propose"))
+	dan.romance[anna.id] = 70.0
+	_check(sim.interaction_blocker(anna, dan, "propose") == "", "but with all of that she can")
+	var labels := PawnActions.list_for(sim, anna, dan.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "interact:propose:%d" % dan.id)
+	_check(labels.size() == 1 and "Propose to Dan" in str(labels[0]["label"]), "his menu offers it")
+	var started := PawnActions.perform(sim, anna, "interact:propose:%d" % dan.id, dan.tile)
+	_check(started["ok"], "she proposes")
+	notices.clear()
+	_minutes(sim, 40, func() -> bool: return anna.job_kind == "" and anna.bond != "")
+	_check(anna.bond == "engaged" and dan.bond == "engaged" and Romance.is_engaged(anna, dan), "he says yes: they are engaged")
+	_check(household.stock_of("ring") == 0 and notices.any(func(t: String) -> bool: return "engaged" in t), "the ring is spent and the household told (%s)" % str(notices))
+	_check(anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "got_engaged") and Romance.tie_name(anna, dan) == "Fiancé" and Romance.tie_name(dan, anna) == "Fiancée", "they are glad of it, and called fiancé and fiancée")
+	_check(not Mood.evaluate(anna, household, GameClock.tick)["parts"].filter(func(part: Dictionary) -> bool: return part["id"] == "engaged").is_empty(), "and engaged is a good thing to be")
+	_check("already engaged" in Romance.proposal_blocker(sim, anna, dan), "nobody proposes twice")
+
+	# A wedding needs time, a chapel, an hour of the day and room to live together.
+	_check("only just" in Romance.wedding_blocker(sim, anna, dan), "the wedding waits a day (%s)" % Romance.wedding_blocker(sim, anna, dan))
+	anna.bond_since -= 3 * GameClock.MINUTES_PER_DAY
+	dan.bond_since = anna.bond_since
+	GameClock.set_time(6, 21)
+	_check("hour" in Romance.wedding_blocker(sim, anna, dan), "and not at night (%s)" % Romance.wedding_blocker(sim, anna, dan))
+	GameClock.set_time(6, 10)
+	_check("chapel" in Romance.wedding_blocker(sim, anna, dan), "nor where there is no chapel (%s)" % Romance.wedding_blocker(sim, anna, dan))
+	world.lots.append({ "id": "lot_9", "kind": "chapel", "name": "Chapel", "template": "chapel", "facing": "south", "rect": Rect2i(50, 14, 12, 10), "public": true, "town": "t1" })
+	for y in range(14, 24):
+		for x in range(50, 62):
+			world.set_floor(Vector2i(x, y), "flagstone")
+	world.add_object("altar", Vector2i(55, 15))
+	_check(Romance.wedding_blocker(sim, anna, dan) == "", "with a chapel, the morning and a bed at home, it can be done (%s)" % Romance.wedding_blocker(sim, anna, dan))
+	var entries := PawnActions.list_for(sim, anna, dan.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "wed:%d" % dan.id)
+	_check(entries.size() == 1 and entries[0]["enabled"] and "Marry Dan" in str(entries[0]["label"]), "the menu offers to marry him at the chapel")
+	var breakups := PawnActions.list_for(sim, anna, dan.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("breakup:"))
+	_check(breakups.size() == 1 and "engagement" in str(breakups[0]["label"]), "or to break off the engagement")
+
+	# The day itself: guests come, the vows are said.
+	cara.set_opinion(anna.id, 50.0)
+	anna.set_opinion(cara.id, 50.0)
+	var death_age_before := Life.death_age(anna)
+	var outfit_seed_before := anna.seed_name()
+	var wedding := PawnActions.perform(sim, anna, "wed:%d" % dan.id, dan.tile)
+	_check(wedding["ok"] and anna.job_kind == "wed" and dan.job_kind == "wed", "the couple set off for the chapel")
+	_check(ben.job_kind == "guest" and cara.job_kind == "guest", "the household and a friend go too (%s, %s)" % [ben.job_kind, cara.job_kind])
+	_check("wedding" in sim.describe_activity(ben) and "married" in sim.describe_activity(anna).to_lower(), "and the panel says so (%s / %s)" % [sim.describe_activity(ben), sim.describe_activity(anna)])
+	notices.clear()
+	_minutes(sim, 120, func() -> bool: return anna.bond == "married")
+	_check(anna.bond == "married" and dan.bond == "married" and Romance.is_married(anna, dan), "they say their vows and are married")
+	_minutes(sim, 3)
+	_check(ben.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "at_wedding") and cara.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "at_wedding"), "the guests enjoyed it")
+	_check(ben.job_kind == "" and cara.job_kind == "" and anna.job_kind == "" and dan.job_kind == "", "and everyone is free again")
+	_check(anna.home_lot == dan.home_lot and household.get_pawn(dan.id) != null and town.get_pawn(dan.id) == null, "he has moved in with her and joined the household")
+	_check(anna.display_name == "Anna Hollis" and anna.maiden_name == "Anna Marsh" and dan.display_name == "Dan Hollis", "the wife has taken the husband's name (%s, née %s)" % [anna.display_name, anna.maiden_name])
+	_check(Life.death_age(anna) == death_age_before and anna.seed_name() == outfit_seed_before, "which changes nothing about how she is made")
+	_check(anna.wed_until > GameClock.tick and PawnArt.outfit_for(anna)["wedding"] and not PawnArt.outfit_for(ben)["wedding"], "and she is in wedding clothes for the day")
+	_check(notices.any(func(t: String) -> bool: return "Anna and Dan are married" in t), "the household hears of it (%s)" % str(notices))
+	_check(Romance.tie_name(anna, dan) == "Husband" and Romance.tie_name(dan, anna) == "Wife" and anna.partner_status == "partners", "they are husband and wife")
+
+	# A marriage is for life.
+	_check(Romance.break_up(sim, anna, dan) == "" and anna.bond == "married", "a married couple cannot simply break up")
+	var married_entries := PawnActions.list_for(sim, anna, dan.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("breakup:") or str(e["id"]).begins_with("wed:"))
+	_check(married_entries.is_empty(), "and the menu does not offer it")
+	_check("share a home" in Romance.move_home_blocker(sim, dan) or "already" in Romance.move_home_blocker(sim, dan), "nor does one move out")
+	var saved := Pawn.from_dict(anna.to_dict())
+	_check(saved.bond == "married" and saved.maiden_name == "Anna Marsh" and saved.wed_until == anna.wed_until and saved.bond_since == anna.bond_since, "marriage and a maiden name are saved")
+	Romance.on_death(sim, dan)
+	_check(anna.bond == "" and anna.partner_id == 0 and anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "widowed"), "if he dies she is a widow, free to marry again")
+
+	# Engagements can be broken off.
+	var erin := Pawn.new()
+	erin.display_name = "Erin Fox"
+	erin.gender = "female"
+	erin.age = 24
+	erin.adult = true
+	var finn := Pawn.new()
+	finn.display_name = "Finn Reed"
+	finn.gender = "male"
+	finn.age = 26
+	finn.adult = true
+	household.add_pawn(erin)
+	household.add_pawn(finn)
+	Romance.begin_dating(sim, erin, finn)
+	Romance.engage(sim, erin, finn)
+	var broke := Romance.break_up(sim, erin, finn)
+	_check("parted" in broke and erin.bond == "" and finn.bond == "" and erin.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "engagement_off"), "a broken engagement leaves nobody engaged")
+
+	# Same-sex couples take a name by the same rule.
+	var gil := Pawn.new()
+	gil.display_name = "Gil Archer"
+	gil.gender = "male"
+	gil.id = 70
+	var hal := Pawn.new()
+	hal.display_name = "Hal Brewer"
+	hal.gender = "male"
+	hal.id = 71
+	Romance._take_surname(gil, hal)
+	_check(gil.display_name == "Gil Archer" and hal.display_name == "Hal Archer" and hal.maiden_name == "Hal Brewer", "two men marrying: the later one takes the other's name")
+
+	# The town's own couples marry without anyone asking.
+	var gwen := _townsperson("Gwen Tanner", "female", 30, 0)
+	var hugh := _townsperson("Hugh Cooper", "male", 32, 0)
+	gwen.home_lot = "lot_1"
+	hugh.home_lot = "lot_1"
+	town.add_pawn(gwen)
+	town.add_pawn(hugh)
+	Romance.begin_dating(sim, gwen, hugh, "partners")
+	gwen.partner_since -= 5 * GameClock.MINUTES_PER_DAY
+	hugh.partner_since = gwen.partner_since
+	for day in 80:
+		Romance._marry_townsfolk(sim, rng)
+		if gwen.bond == "married":
+			break
+	_check(gwen.bond == "married" and hugh.bond == "married" and gwen.display_name == "Gwen Cooper" and gwen.wed_until == 0, "a townsfolk couple under one roof marry by themselves (%s)" % gwen.display_name)
 
 
 func _test_events() -> void:
@@ -1839,38 +3020,96 @@ func _test_pregnancy() -> void:
 	var townswoman := false
 	for i in 50:
 		townswoman = townswoman or Pregnancy.try_conceive(men_sim, men["father"], stranger, 1.0, rng)
-	_check(not townswoman, "townswomen never conceive")
+	_check(not townswoman, "a woman who is not in the world cannot conceive")
 
-	# The months go by.
+	# The months go by (by the calendar a year is 60 days, so this pregnancy lasts 45).
 	var heard: Array[String] = []
 	var changes := [0]
+	var born: Array = []
 	sim.household_changed.connect(func() -> void: changes[0] += 1)
-	mother.pregnant_since = 0
+	sim.babies_born.connect(func(ids: Array[int]) -> void: born.append_array(ids))
+	GameClock.set_time(0, 0)
+	Pregnancy.begin(sim, mother, father, rng)
+	mother.babies_due = 1
+	_check(Pregnancy.length_minutes(sim.world) == 45 * GameClock.MINUTES_PER_DAY and mother.pregnancy_minutes == 45 * GameClock.MINUTES_PER_DAY, "a pregnancy lasts three quarters of a year of life")
+	var short := WorldState.new(10, 10, 1, "grass")
+	short.lifespan = "normal"
+	_check(Pregnancy.length_minutes(short) == roundi(0.75 * Life.days_per_year(short) * GameClock.MINUTES_PER_DAY), "and is shorter on a shorter lifespan")
 	GameClock.set_time(5, 0)
 	var feel := Mood.evaluate(mother, household, GameClock.tick)
-	_check(not Pregnancy.is_known(mother) and Pregnancy.new_day(sim, rng).is_empty() and not _has_part(feel, "expecting"), "early on nobody knows")
-	GameClock.set_time(12, 0)
-	heard = Pregnancy.new_day(sim, rng)
+	_check(Pregnancy.trimester(mother) == 1 and not Pregnancy.is_known(mother) and Pregnancy.bump(mother) == 0.0 and not _has_part(feel, "expecting"), "early on nobody knows, and nothing shows")
+	var sick := false
+	for day in range(1, 12):
+		GameClock.set_time(day, 7)
+		Pregnancy.step(sim, rng)
+		sick = sick or mother.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "morning_sick")
+	_check(sick, "some mornings early on are queasy")
+	GameClock.set_time(13, 0)
+	heard = Pregnancy.step(sim, rng)
 	_check(Pregnancy.is_known(mother) and heard.size() == 1 and "expecting" in heard[0], "after a while she is known to be expecting (%s)" % str(heard))
+	_check(Pregnancy.step(sim, rng).is_empty(), "which is only announced once")
 	_check(_has_part(Mood.evaluate(mother, household, GameClock.tick), "expecting"), "and it lifts her spirits")
 	_check(is_equal_approx(float(Pregnancy.drain_multipliers(mother, {})["hunger"]), 1.3) and Pregnancy.drain_multipliers(father, {}).is_empty(), "she gets hungrier and more tired")
-	_check(not sim._needs_break(mother), "and still works")
+	_check(not sim.needs_break(mother), "and still works")
+	GameClock.set_time(20, 0)
+	_check(Pregnancy.trimester(mother) == 2 and Pregnancy.bump(mother) > 0.0 and float(PawnArt.outfit_for(mother)["bump"]) > 0.0, "in the second trimester her belly shows")
+	var craving := false
+	for day in range(16, 30):
+		GameClock.set_time(day, 11)
+		Pregnancy.step(sim, rng)
+		craving = craving or mother.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "craving")
+	_check(craving, "she craves something sweet now and then")
+	Pregnancy.after_eating(mother)
+	_check(not mother.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "craving") and mother.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "craving_met"), "and a meal satisfies it")
 	GameClock.set_time(34, 0)
-	_check(Pregnancy.is_heavy(mother) and sim._needs_break(mother) and _has_part(Mood.evaluate(mother, household, GameClock.tick), "heavy") and not _has_part(Mood.evaluate(mother, household, GameClock.tick), "expecting"), "in the last weeks she is heavy, low and off work")
-	_check("expecting" in sim.describe_activity(mother), "and the panel says so")
+	var late := Mood.evaluate(mother, household, GameClock.tick)
+	_check(Pregnancy.trimester(mother) == 3 and Pregnancy.is_heavy(mother) and sim.needs_break(mother) and _has_part(late, "heavy") and not _has_part(late, "expecting"), "in the last weeks she is heavy, low and off work")
+	_check("expecting" in sim.describe_activity(mother) and Pregnancy.bump(mother) > 0.6, "the panel says so, and the belly is big")
+	_check(PawnArt.outfit_for(mother)["belt"] == false, "her belt has come off")
+
+	# Labour.
+	var bed := sim.world.add_object("bed", Vector2i(10, 3))
+	mother.tile = Vector2i(5, 6)
+	mother.step_to = mother.tile
+	father.tile = Vector2i(7, 7)
+	father.step_to = father.tile
+	GameClock.set_time(45, 6)
+	heard = Pregnancy.step(sim, rng)
+	_check(Pregnancy.in_labour(mother) and mother.job_kind == "labour" and heard.size() == 1 and "labour" in heard[0], "near the end her labour begins (%s)" % str(heard))
+	_check(mother.labour_minutes >= 3 * 60 and mother.labour_minutes <= 8 * 60, "and lasts a few hours")
+	_check(not sim.order_move(mother, Vector2i(3, 3))["ok"] and sim.use_blocker(mother, bed) != "", "a woman in labour cannot be sent off")
+	var her_menu := PawnActions.list_for(sim, mother, Vector2i(3, 3))
+	_check(her_menu.size() == 1 and not her_menu[0]["enabled"] and "labour" in str(her_menu[0]["label"]), "her menu only says she is in labour")
+	var attend_entry := PawnActions.list_for(sim, father, mother.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "attend:%d" % mother.id)
+	_check(attend_entry.size() == 1 and attend_entry[0]["enabled"], "someone else can stay with her for the birth")
+	_check(sim.attend_blocker(child, mother) != "", "but not a child")
+	mother.labour_minutes = 600
+	for i in 120:
+		GameClock.advance_one_tick()
+		sim.step()
+	_check(mother.job_stage == "using" and mother.pose == "lie" and Pregnancy.birth_bed(sim, mother) == bed, "she makes for a bed and lies down")
+	_check(father.job_kind == "attend" and father.job_stage == "using" and Pregnancy.midwife_present(sim, mother), "and John goes to stay with her of his own accord")
+	_check(Pregnancy.complication_chance(sim, mother) < 0.03, "a bed and a midwife make the birth much safer (%.3f)" % Pregnancy.complication_chance(sim, mother))
+	_check("labour" in sim.describe_activity(mother).to_lower() and "birth" in sim.describe_activity(father), "the panel says what they are doing")
+	_check(_has_part(Mood.evaluate(mother, household, GameClock.tick), "in_labour"), "labour is hard going")
 
 	# The birth.
-	GameClock.set_time(45, 0)
 	var before := household.pawns.size()
-	heard = Pregnancy.new_day(sim, rng)
+	changes[0] = 0
+	mother.labour_minutes = GameClock.tick - mother.labour_since
+	heard = Pregnancy.step(sim, rng)
 	_check(household.pawns.size() == before + 1 and not mother.is_pregnant() and heard.size() == 1 and "gave birth" in heard[0], "the baby is born into the household (%s)" % str(heard))
 	var baby: Pawn = household.pawns[household.pawns.size() - 1]
+	_check(born == [baby.id] and changes[0] == 1, "the household is told, and asked to name the baby")
+	_check(mother.job_kind == "" and father.job_kind == "" and bed.user_id == 0, "mother gets up and the midwife goes about their day")
 	_check(baby.age == 0 and baby.is_infant() and not baby.adult and baby.traits.size() == 2 and baby.home_lot == mother.home_lot and baby.display_name.ends_with("Brook"), "a newborn, with two traits and the family name")
 	_check(baby.opinion_of(mother.id) == Relations.FAMILY_START and mother.opinion_of(baby.id) == Relations.FAMILY_START and father.opinion_of(baby.id) == Relations.FAMILY_START, "the family loves it")
-	_check(changes[0] == 1 and mother.recovered_on == 45 + 15 and not Pregnancy.can_conceive(mother), "the household was told, and mother needs time to recover")
-	GameClock.set_time(60, 0)
+	var recovery := roundi(0.25 * 60 * GameClock.MINUTES_PER_DAY)
+	_check(mother.recovered_at >= GameClock.tick + recovery and not Pregnancy.can_conceive(mother), "mother needs time to recover")
+	GameClock.set_time(45 + 31, 0)
 	_check(Pregnancy.can_conceive(mother), "and may conceive again later")
-	_check(mother.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "new_baby"), "everyone is glad of the baby")
+	_check(mother.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "new_baby") and mother.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "gave_birth"), "everyone is glad of the baby")
+	_check(sim.rename(baby, "  wilfred ")["ok"] and baby.display_name == "Wilfred Brook" and not sim.rename(baby, "  ")["ok"], "the baby can be named")
 
 	# A baby is carried and cannot be controlled.
 	_check(not household.select(baby.id) and household.selected_id != baby.id, "a baby cannot be chosen")
@@ -1880,27 +3119,56 @@ func _test_pregnancy() -> void:
 		household.cycle_selection(1)
 		landed.append(household.selected_id)
 	_check(not (baby.id in landed) and household.playable().size() == before, "cycling through the household skips the baby")
+	GameClock.set_time(80, 12)
 	mother.tile = Vector2i(9, 9)
 	mother.step_to = mother.tile
 	Pregnancy.carry_infants(sim)
-	_check(baby.tile == mother.tile and baby.carried_by == mother.id, "the baby goes where its mother goes")
-	_check(sim.interaction_blocker(father, baby, "chat") != "" and PawnActions.list_for(sim, father, baby.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).ends_with(":%d" % baby.id)).is_empty(), "nobody chats with a baby")
+	_check(baby.tile == mother.tile and baby.carried_by == mother.id and baby.pose == "", "by day the baby goes where its mother goes")
+	_check(sim.interaction_blocker(father, baby, "chat") != "" and PawnActions.list_for(sim, father, baby.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("interact:") and str(e["id"]).ends_with(":%d" % baby.id)).is_empty(), "nobody chats with a baby")
 	var hunger_before := float(baby.needs["hunger"])
 	for i in 30:
 		GameClock.advance_one_tick()
 		sim.step()
-	_check(float(baby.needs["hunger"]) == hunger_before, "a baby does not go hungry or wander")
-	sim.die(mother, "fell ill")
+	_check(float(baby.needs["hunger"]) == hunger_before, "a baby has no needs of a grown-up's and does not wander")
+
+	# Babies need care.
+	_check(Babies.worst_care(baby) > 90.0 and not Babies.is_crying(baby), "a newborn is fed, comfortable and clean")
+	var cradle := sim.world.add_object("cradle", Vector2i(4, 3))
+	GameClock.set_time(81, 22)
 	Pregnancy.carry_infants(sim)
-	_check(household.get_pawn(baby.carried_by) != null and baby.carried_by != mother.id and not sim.is_game_over(), "if mother dies someone else carries the baby, and the household carries on")
+	_check(baby.tile == cradle.tile and baby.pose == "lie" and Babies.cradle_for(sim, baby) == cradle, "at night the baby sleeps in the cradle")
+	GameClock.set_time(82, 9)
+	Pregnancy.carry_infants(sim)
+	_check(baby.tile != cradle.tile and baby.pose == "", "and is picked up in the morning")
+	for person in household.pawns:
+		sim.order_stop(person)
+	baby.care["fed"] = 30.0
+	var care_menu := PawnActions.list_for(sim, father, baby.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "tend:fed:%d" % baby.id)
+	_check(care_menu.size() == 1 and care_menu[0]["enabled"] and "Feed Wilfred" in str(care_menu[0]["label"]), "right-click a baby to feed it (%s)" % str(care_menu))
+	_check(PawnActions.list_for(sim, child, baby.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("tend:") and e["enabled"]).is_empty(), "a child is too young to see to it")
+	var cared := false
+	for i in 120:
+		GameClock.advance_one_tick()
+		sim.step()
+		cared = cared or (household.pawns.any(func(p: Pawn) -> bool: return p.job_kind == "tend" and p.job_partner == baby.id))
+		if float(baby.care["fed"]) >= Needs.FULL - 0.01:
+			break
+	_check(cared and float(baby.care["fed"]) >= Needs.FULL - 0.5, "when the baby is hungry someone goes to feed it of their own accord")
+	_check(household.pawns.any(func(p: Pawn) -> bool: return p.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "tended_baby")), "and is glad to have done it")
+	baby.care["comfort"] = 10.0
+	_check(Babies.is_crying(baby), "a baby that is left wanting cries")
+	GameClock.set_time(83, 12)
+	Babies.step(sim)
+	_check(father.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "baby_crying"), "and the household hears it")
+	_check(PawnActions.perform(sim, father, "tend:comfort:%d" % baby.id, baby.tile)["ok"] and father.job_kind == "tend" and father.job_interaction == "comfort", "you can send someone to soothe it")
 
 	# Growing up.
 	GameClock.set_time(45 + 60, 0)
-	Pregnancy.new_day(sim, rng)
+	Life.new_day(sim, rng)
 	_check(baby.age == 1 and baby.is_infant(), "a year later the baby is one")
 	GameClock.set_time(45 + 120, 0)
 	changes[0] = 0
-	heard = Pregnancy.new_day(sim, rng)
+	heard = Life.new_day(sim, rng)
 	_check(baby.age == 2 and not baby.is_infant() and changes[0] == 1 and household.select(baby.id), "at two it runs about and can be controlled (%s)" % str(heard))
 	var teen := Pawn.new()
 	teen.display_name = "Teen Brook"
@@ -1909,18 +3177,85 @@ func _test_pregnancy() -> void:
 	teen.traits = ["lazy"] as Array[String]
 	household.add_pawn(teen)
 	GameClock.set_time(240 + Pregnancy.birthday_of(teen), 0)
-	heard = Pregnancy.new_day(sim, rng)
+	heard = Life.new_day(sim, rng)
 	var orientation_found := false
 	for trait_id in teen.traits:
 		orientation_found = orientation_found or str(DataRegistry.get_def("traits", trait_id).get("group", "")) == "orientation"
 	_check(teen.age == 18 and teen.adult and orientation_found and not heard.is_empty(), "at eighteen a child comes of age and finds their orientation (%s)" % str(heard))
 
+	# Twins.
+	var pair := _family_setup()
+	var pair_sim: Simulation = pair["sim"]
+	var pair_born: Array = []
+	pair_sim.babies_born.connect(func(ids: Array[int]) -> void: pair_born.append_array(ids))
+	GameClock.set_time(0, 0)
+	Pregnancy.begin(pair_sim, pair["mother"], pair["father"], rng)
+	pair["mother"].babies_due = 2
+	GameClock.set_time(34, 0)
+	_check("twins" in pair_sim.describe_activity(pair["mother"]), "late on you can tell it is twins")
+	heard = _deliver(pair_sim, pair["mother"], rng)
+	_check(pair_born.size() == 2 and pair["household"].pawns.size() == 5 and "twins" in heard[-1], "twins are born together, and both are to be named (%s)" % str(heard))
+	var twins_seen := 0
+	for _i in 2000:
+		var test_mother := Pawn.new()
+		Pregnancy.begin(pair_sim, test_mother, null, rng)
+		twins_seen += 1 if test_mother.babies_due > 1 else 0
+	_check(twins_seen > 30 and twins_seen < 150, "about one birth in twenty-five is twins or more (%d in 2000)" % twins_seen)
+
+	# The town's couples have children too.
+	var town_setup := _family_setup()
+	var town_sim: Simulation = town_setup["sim"]
+	var wife := _townsperson("Alys Cooper", "female", 24, 1001)
+	var husband := _townsperson("Hugh Cooper", "male", 26, 1002)
+	town_sim.town.add_pawn(wife)
+	town_sim.town.add_pawn(husband)
+	Relations.make_family([wife, husband] as Array[Pawn])
+	var days := 0
+	while not wife.is_pregnant() and days < 2000:
+		Pregnancy.new_day(town_sim, rng)
+		days += 1
+	_check(wife.is_pregnant() and wife.pregnancy_father == husband.id, "a couple of the town who live together start a family (after %d days)" % days)
+	GameClock.set_time(0, 0)
+	wife.pregnant_since = 0
+	wife.pregnancy_minutes = Pregnancy.length_minutes(town_sim.world)
+	GameClock.set_time(45, 1)
+	var town_before := town_sim.town.pawns.size()
+	heard = Pregnancy.step(town_sim, rng)
+	var town_baby: Pawn = town_sim.town.pawns[town_sim.town.pawns.size() - 1]
+	_check(heard.is_empty() and town_sim.town.pawns.size() >= town_before + 1 and town_baby.is_infant() and town_baby.home_lot == wife.home_lot and town_baby.display_name.ends_with("Cooper"), "and the baby is born at home, quietly")
+	Pregnancy.carry_infants(town_sim)
+	_check(town_sim.person(town_baby.carried_by) != null and town_sim.person(town_baby.carried_by).home_lot == wife.home_lot, "its family carries it")
+	var neighbours := 0
+	for i in 8:
+		town_sim.town.add_pawn(_townsperson("Child Cooper %d" % i, "male", 5, 1100 + i))
+	wife.recovered_at = 0
+	for i in 2000:
+		Pregnancy.new_day(town_sim, rng)
+		neighbours += 1 if wife.is_pregnant() else 0
+	_check(neighbours == 0, "but not in a house that is already full")
+
+	# A baby left uncared for is taken away.
+	var neglect := _family_setup()
+	var neglect_sim: Simulation = neglect["sim"]
+	GameClock.set_time(0, 0)
+	Pregnancy.begin(neglect_sim, neglect["mother"], neglect["father"], rng)
+	neglect["mother"].babies_due = 1
+	_deliver(neglect_sim, neglect["mother"], rng)
+	var waif: Pawn = neglect["household"].pawns[neglect["household"].pawns.size() - 1]
+	for care_id in waif.care:
+		waif.care[care_id] = 0.0
+	waif.neglected_since = GameClock.tick - 12 * 60
+	heard = Babies.step(neglect_sim)
+	_check(neglect["household"].get_pawn(waif.id) == null and heard.size() == 1 and "parish" in heard[0], "a baby neglected too long is taken in by the parish")
+	_check(neglect["father"].thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "baby_taken"), "and the household grieves")
+
 	# Only babies left: nobody to play.
 	var lone := _family_setup()
 	var lone_sim: Simulation = lone["sim"]
-	GameClock.set_time(45, 0)
-	lone["mother"].pregnant_since = 0
-	Pregnancy.new_day(lone_sim, rng)
+	GameClock.set_time(0, 0)
+	Pregnancy.begin(lone_sim, lone["mother"], lone["father"], rng)
+	lone["mother"].babies_due = 1
+	_deliver(lone_sim, lone["mother"], rng)
 	lone_sim.die(lone["father"], "fell ill")
 	lone_sim.die(lone["child"], "fell ill")
 	_check(not lone_sim.is_game_over(), "mother and baby carry on")
@@ -1929,23 +3264,58 @@ func _test_pregnancy() -> void:
 
 	# Saving.
 	var saved := _family_setup()
-	saved["mother"].pregnant_since = 0
-	saved["mother"].pregnancy_father = saved["father"].id
-	saved["mother"].recovered_on = 7
-	GameClock.set_time(45, 0)
-	Pregnancy.new_day(saved["sim"], rng)
+	GameClock.set_time(0, 0)
+	Pregnancy.begin(saved["sim"], saved["mother"], saved["father"], rng)
+	saved["mother"].babies_due = 1
+	_deliver(saved["sim"], saved["mother"], rng)
+	var saved_baby: Pawn = saved["household"].pawns[saved["household"].pawns.size() - 1]
+	saved_baby.care["clean"] = 40.0
 	_check(SaveGame.save(TEST_SAVE, saved["world"], saved["household"], {}) == OK, "a household with a baby is saved")
 	var back := SaveGame.load_from(TEST_SAVE)
-	_check(back["ok"] and back["household"].to_dict() == saved["household"].to_dict(), "and the baby, its carer and the mother's recovery survive a round trip")
+	_check(back["ok"] and back["household"].to_dict() == saved["household"].to_dict(), "and the baby, its care, its carer and the mother's recovery survive a round trip")
 	var newborn: Pawn = back["household"].pawns[back["household"].pawns.size() - 1]
-	_check(newborn.is_infant() and newborn.birthday == 45 % 60 and back["household"].selected_id == saved["household"].selected_id, "including its birthday")
+	_check(newborn.is_infant() and newborn.birthday == 46 % 60 and is_equal_approx(float(newborn.care["clean"]), 40.0) and back["household"].selected_id == saved["household"].selected_id, "including its birthday and how clean it is")
 	var midway := _family_setup()
-	midway["mother"].pregnant_since = 4
+	GameClock.set_time(3, 0)
+	Pregnancy.begin(midway["sim"], midway["mother"], null, rng)
+	midway["mother"].babies_due = 2
 	SaveGame.save(TEST_SAVE, midway["world"], midway["household"], {})
 	back = SaveGame.load_from(TEST_SAVE)
-	_check(back["household"].pawns[0].pregnant_since == 4 and back["household"].pawns[0].pregnancy_father == 0, "an unfinished pregnancy survives a round trip")
+	var resumed: Pawn = back["household"].pawns[0]
+	_check(resumed.pregnant_since == 3 * GameClock.MINUTES_PER_DAY and resumed.pregnancy_minutes == 45 * GameClock.MINUTES_PER_DAY and resumed.babies_due == 2 and resumed.pregnancy_father == 0, "an unfinished pregnancy survives a round trip")
+	var old: Dictionary = midway["mother"].to_dict()
+	for key in ["pregnant_tick", "pregnancy_minutes", "babies_due", "pregnancy_announced", "labour_since", "labour_minutes", "recovered_tick", "care", "neglected_since"]:
+		old.erase(key)
+	old["pregnant_since"] = 4
+	old["recovered_on"] = 7
+	var migrated := Pawn.from_dict(old)
+	_check(migrated.pregnant_since == 4 * GameClock.MINUTES_PER_DAY and migrated.pregnancy_minutes == 45 * GameClock.MINUTES_PER_DAY and migrated.recovered_at == 7 * GameClock.MINUTES_PER_DAY and migrated.babies_due == 1, "a pregnancy from an older save, counted in days, carries on")
 	DirAccess.remove_absolute(TEST_SAVE)
 	GameClock.reset()
+
+
+## Brings a pregnancy to term at once: labour begins and the babies are born. Returns the messages.
+func _deliver(sim: Simulation, mother: Pawn, rng: RandomNumberGenerator) -> Array[String]:
+	GameClock.set_time(int((mother.pregnant_since + mother.pregnancy_minutes) / GameClock.MINUTES_PER_DAY) + 1, 0)
+	var heard := Pregnancy.step(sim, rng)
+	mother.labour_minutes = GameClock.tick - mother.labour_since
+	heard.append_array(Pregnancy.step(sim, rng))
+	return heard
+
+
+func _townsperson(full_name: String, gender: String, age: int, id: int) -> Pawn:
+	var person := Pawn.new()
+	person.display_name = full_name
+	person.gender = gender
+	person.age = age
+	person.adult = age >= 18
+	person.id = id
+	person.home_lot = "house_cooper"
+	person.tile = Vector2i(20, 10)
+	person.step_to = person.tile
+	for need_id in Needs.active_ids():
+		person.needs[need_id] = 100.0
+	return person
 
 
 func _has_part(result: Dictionary, thought_id: String) -> bool:
@@ -1979,7 +3349,7 @@ func _test_faith_and_illness() -> void:
 	TownGenerator.generate(town_world)
 	var chapels := town_world.lots.filter(func(entry: Dictionary) -> bool: return str(entry["kind"]) == "chapel")
 	var inside := _objects_in(town_world, chapels[0]["rect"]) if chapels.size() == 1 else {}
-	_check(chapels.size() == 1 and bool(chapels[0]["public"]) and int(inside.get("altar", 0)) == 1 and int(inside.get("pew", 0)) == 8, "the town has a public chapel with an altar and eight pews (%s)" % str(inside))
+	_check(chapels.size() == 1 and bool(chapels[0]["public"]) and int(inside.get("altar", 0)) == 1 and int(inside.get("pew", 0)) >= 4, "the town has a public chapel with an altar and pews (%s)" % str(inside))
 	var clinic_lot := town_world.lots.filter(func(entry: Dictionary) -> bool: return str(entry["kind"]) == "clinic")
 	_check(int(_objects_in(town_world, clinic_lot[0]["rect"]).get("sickbed", 0)) == 3, "and the clinic has three sickbeds")
 
@@ -2103,8 +3473,12 @@ func _test_faith_and_illness() -> void:
 	var buried := [0]
 	sim.town_death.connect(func(_name: String, cause: String) -> void: buried[0] += 1 if "fever" in cause else 0)
 	sim._roll_illness(doomed)
-	var still_ill := doomed.filter(func(p: Pawn) -> bool: return p.illness != "" and sim.town.get_pawn(p.id) != null)
-	_check(still_ill.is_empty() and buried[0] > 12 and buried[0] < 40, "a fever that has dragged on too long either breaks or kills (%d of 40 died)" % buried[0])
+	var still_ill := doomed.filter(func(p: Pawn) -> bool: return p.illness != "" and not p.is_dying())
+	var fallen := doomed.filter(func(p: Pawn) -> bool: return p.is_dying() and "fever" in p.dying_cause)
+	_check(still_ill.is_empty() and fallen.size() > 12 and fallen.size() < 40, "a fever that has dragged on too long either breaks or lays them low (%d of 40 dying)" % fallen.size())
+	GameClock.advance_ticks(int(Mortality.config()["takes_after_minutes"]))
+	Mortality.step(sim)
+	_check(buried[0] == fallen.size() and sim.town.pawns.filter(func(p: Pawn) -> bool: return p.is_dying()).is_empty(), "and when Death comes for them they are buried (%d)" % buried[0])
 	var carrier := Pawn.new()
 	carrier.illness = "fever"
 	carrier.ill_since = 777
@@ -2371,6 +3745,301 @@ func _test_building() -> void:
 	controller.queue_free()
 
 
+func _test_accidents() -> void:
+	print("Fire, accidents at work and plague")
+	GameClock.set_time(3, 12)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 21
+	var setup := _romance_setup()
+	var sim: Simulation = setup["sim"]
+	var world: WorldState = setup["world"]
+	var household: Household = setup["household"]
+	var town: Household = setup["town"]
+	var anna: Pawn = setup["anna"]
+	var ben: Pawn = setup["ben"]
+	var cara: Pawn = setup["cara"]
+	var dan: Pawn = setup["dan"]
+	world.lots[0]["name"] = "Cooper house"
+	var bed := world.add_object("bed", Vector2i(30, 20))
+	var stone := world.add_object("stone_wall", Vector2i(31, 20))
+	var plain := Vector2i(33, 20)
+	world.set_floor(Vector2i(32, 20), "planks")
+	world.set_floor(Vector2i(34, 20), "flagstone")
+
+	# What burns.
+	_check(Fire.flammability(world, bed.tile) > 0.7 and Fire.flammability(world, stone.tile) == 0.0 and Fire.flammability(world, Vector2i(32, 20)) > 0.5 and Fire.flammability(world, Vector2i(34, 20)) == 0.0 and Fire.flammability(world, plain) == 0.0, "beds and planks burn, stone and bare ground do not")
+	_check(not Fire.ignite(world, stone.tile) and not Fire.ignite(world, plain) and Fire.ignite(world, bed.tile) and not Fire.ignite(world, bed.tile), "only something that can burn catches, and only once")
+	var bed_fuel := int(world.fires[bed.tile]["fuel"])
+	world.set_floor(Vector2i(32, 20), "straw")
+	Fire.ignite(world, Vector2i(32, 20))
+	_check(int(world.fires[Vector2i(32, 20)]["fuel"]) > bed_fuel, "straw burns longer than a bed (%d against %d)" % [int(world.fires[Vector2i(32, 20)]["fuel"]), bed_fuel])
+	world.fires.clear()
+
+	# Spread and burning out.
+	for x in range(26, 30):
+		world.add_object("bed", Vector2i(x, 24))
+	world.add_object("stone_wall", Vector2i(30, 24))
+	world.add_object("bed", Vector2i(31, 24))
+	Fire.ignite(world, Vector2i(26, 24))
+	var notices: Array[String] = []
+	for minute in 150:
+		GameClock.advance_one_tick()
+		notices.append_array(Fire.step(sim, rng))
+		if world.fires.is_empty():
+			break
+	var burned_beds := 0
+	for x in range(26, 30):
+		burned_beds += 1 if world.object_at(Vector2i(x, 24)) == null else 0
+	_check(world.fires.is_empty() and burned_beds >= 2, "a fire spreads from bed to bed and burns out (%d of four beds gone)" % burned_beds)
+	_check(world.object_at(Vector2i(30, 24)) != null and world.object_at(Vector2i(31, 24)) != null, "but not past a stone wall")
+
+	# Sparks from a hearth.
+	var hearth := world.add_object("hearth", Vector2i(40, 20))
+	var spark_bed := world.add_object("bed", Vector2i(41, 20))
+	DataRegistry.get_def("accidents", "fire")["spark_chance_per_day"] = 100000.0
+	GameClock.set_time(3, 12)
+	Fire.step(sim, rng)  # minute 720: a multiple of ten
+	DataRegistry.get_def("accidents", "fire")["spark_chance_per_day"] = 0.006
+	_check(world.fires.has(spark_bed.tile), "a hearth can throw a spark onto a bed beside it")
+	world.fires.clear()
+	_check(float(DataRegistry.get_def("accidents", "fire")["spark_chance_per_day"]) < 0.02, "though it is rare")
+
+	# People and fire.
+	var victim := Pawn.new()
+	victim.display_name = "Vic Tim"
+	victim.age = 30
+	victim.tile = Vector2i(10, 20)
+	victim.step_to = victim.tile
+	household.add_pawn(victim)
+	world.add_object("bed", Vector2i(10, 20))
+	Fire.ignite(world, Vector2i(10, 20))
+	var told := Fire.step(sim, rng)
+	_check(victim.illness == "burns" and victim.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "burned") and "burned" in " ".join(told), "someone caught in the flames is burned (%s)" % str(told))
+	for i in 4:
+		Fire.step(sim, rng)
+	_check(not victim.is_dying(), "a few moments in the flames are survived")
+	for i in 3:
+		Fire.step(sim, rng)
+	_check(victim.is_dying() and victim.dying_cause == "burned to death", "but if they stay they die of it")
+	world.fires.clear()
+	household.remove_pawn(victim.id)
+	world.remove_object(world.object_at(Vector2i(10, 20)).id)
+
+	# Running from it, and putting it out.
+	anna.tile = Vector2i(5, 6)
+	anna.step_to = anna.tile
+	ben.tile = Vector2i(9, 9)
+	ben.step_to = ben.tile
+	var table := world.add_object("table", Vector2i(6, 5))
+	Fire.ignite(world, table.tile)
+	_check(Fire.nearest(world, anna.tile, 3) == table.tile and Fire.nearest(world, Vector2i(30, 30), 3) == Vector2i(-1, -1), "folk know when a fire is close")
+	var fuel_before := int(world.fires[table.tile]["fuel"])
+	sim._react_to_fire(anna)
+	_check(anna.has_orders() and Fire.nearest(world, anna.goal_tile(), 4).x < 0, "someone beside a fire runs from it")
+	sim._react_to_fire(ben)
+	_check(ben.job_kind == "extinguish" and "fire" in sim.describe_activity(ben).to_lower(), "an idle grown-up farther off goes to put it out (%s)" % sim.describe_activity(ben))
+	var menu_entries := PawnActions.list_for(sim, ben, table.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "fight_fire")
+	_check(menu_entries.size() == 1 and menu_entries[0]["enabled"], "the right-click menu offers to beat out the flames")
+	for i in 60:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		if world.fires.is_empty():
+			break
+	_check(world.fires.is_empty() and world.object_at(table.tile) != null and int(fuel_before) > 0, "he beats it out before it takes the table")
+	for i in 5:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+	_check(ben.job_kind == "" and ben.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "fought_fire"), "and is proud of it")
+	_check(anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "saw_fire"), "while the one who ran was frightened")
+
+	# A firefighter whose own ground catches fire runs, and nobody fights a blaze that is too big.
+	Fire.ignite(world, table.tile)
+	ben.tile = Vector2i(7, 5)
+	ben.step_to = ben.tile
+	world.set_floor(ben.tile, "planks")
+	ben.job_kind = "extinguish"
+	ben.job_stage = "using"
+	ben.job_target = table.tile
+	Fire.ignite(world, ben.tile)
+	sim._react_to_fire(ben)
+	_check(ben.job_kind == "" and ben.has_orders(), "a firefighter whose own ground catches fire runs for it")
+	world.fires.clear()
+	world.set_floor(ben.tile, "")
+	var safe_stand := sim._plan_fire_stand(ben, table.tile)
+	world.set_floor(Vector2i(6, 6), "planks")
+	var stand := sim._plan_fire_stand(anna, table.tile)
+	Fire.ignite(world, table.tile)
+	_check(not stand.is_empty() and Fire.flammability(world, stand["tile"]) == 0.0 and not safe_stand.is_empty(), "firefighters pick ground that will not burn to stand on")
+	world.fires.clear()
+	for dx in 12:
+		world.add_object("bed", Vector2i(20 + dx, 28))
+		Fire.ignite(world, Vector2i(20 + dx, 28))
+	var idle := Pawn.new()
+	idle.display_name = "Idle Hand"
+	idle.age = 30
+	idle.tile = Vector2i(26, 31)
+	idle.step_to = idle.tile
+	household.add_pawn(idle)
+	sim._react_to_fire(idle)
+	_check(idle.job_kind != "extinguish", "nobody takes on a blaze that is too big to fight")
+	world.fires.clear()
+	household.remove_pawn(idle.id)
+
+	# A fire is saved.
+	Fire.ignite(world, table.tile)
+	_check(SaveGame.save(TEST_SAVE, world, household, {}) == OK, "a map on fire is saved")
+	var loaded := SaveGame.load_from(TEST_SAVE)
+	_check(loaded["ok"] and loaded["world"].fires.has(table.tile) and int(loaded["world"].fires[table.tile]["fuel"]) == int(world.fires[table.tile]["fuel"]), "and the fire is still burning when it is loaded")
+	DirAccess.remove_absolute(TEST_SAVE)
+	world.fires.clear()
+
+	# Accidents at work.
+	var tree_def: Dictionary = DataRegistry.get_def("objects", "chopping_block").duplicate(true)
+	tree_def["accident"]["chance_per_hour"] = 6000.0
+	tree_def["accident"]["death_share"] = 0.0
+	anna.job_kind = "use"
+	anna.job_stage = "using"
+	var hurt := Accidents.roll(sim, anna, tree_def, rng)
+	_check(anna.illness == "injury" and anna.job_kind == "" and "falling tree" in hurt and anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "hurt_at_work"), "a falling tree can hurt a woodcutter (%s)" % hurt)
+	tree_def["accident"]["death_share"] = 1.0
+	var killed := Accidents.roll(sim, ben, tree_def, rng)
+	_check(ben.is_dying() and ben.dying_cause == "was killed by a falling tree", "or kill one")
+	var jetty_def: Dictionary = DataRegistry.get_def("objects", "fishing_spot")
+	_check(float(jetty_def["accident"]["death_share"]) >= 0.5 and float(jetty_def["accident"]["chance_per_hour"]) < 0.01 and float(DataRegistry.get_def("objects", "quarry_face")["accident"]["chance_per_hour"]) < 0.05, "a fall from the jetty is mostly fatal and all of these are rare")
+	ben.dying_cause = ""
+	ben.dying_since = 0
+	ben.pose = ""
+	var incidents := 0
+	var normal_def: Dictionary = DataRegistry.get_def("objects", "chopping_block")
+	for i in 2000:
+		cara.illness = ""
+		cara.pose = ""
+		cara.dying_cause = ""
+		incidents += 1 if Accidents.roll(sim, cara, normal_def, rng) != "" or cara.illness != "" or cara.is_dying() else 0
+	_check(incidents < 8, "most days at the woodlot pass without incident (%d in 2000 minutes)" % incidents)
+	cara.illness = ""
+	cara.pose = ""
+	cara.dying_cause = ""
+
+	# Injuries mend.
+	GameClock.set_time(100, 0)
+	anna.illness = "injury"
+	anna.ill_since = GameClock.tick
+	anna.needs["rest"] = 90.0
+	var days := 0
+	while anna.illness != "" and days < 60 and not anna.is_dying():
+		GameClock.set_time(100 + days, 0)
+		sim._roll_illness([anna] as Array[Pawn])
+		days += 1
+	_check(anna.illness == "" and days < 40, "an injury heals in time (%d days)" % days)
+	_check("burns" in DataRegistry.get_def("objects", "sickbed")["cures"] and "injury" in DataRegistry.get_def("objects", "sickbed")["cures"], "and the clinic's sickbeds treat burns and injuries")
+
+	# Plague.
+	var plague := Illness.def("plague")
+	_check(bool(plague["contagious"]) and float(plague["chance_per_day"]) < 0.001 and int(plague["fatal_after_days"]) <= 6, "the plague is rare, contagious and deadly")
+	dan.tile = Vector2i(40, 30)
+	dan.step_to = dan.tile
+	cara.tile = Vector2i(41, 30)
+	cara.step_to = cara.tile
+	var far := Pawn.new()
+	far.display_name = "Far Away"
+	far.age = 30
+	far.tile = Vector2i(60, 30)
+	far.step_to = far.tile
+	far.home_lot = "lot_2"
+	town.add_pawn(far)
+	for pawn in [dan, cara, far]:
+		pawn.illness = ""
+		pawn.immune.clear()
+		pawn.needs["hygiene"] = 80.0
+	dan.illness = "plague"
+	dan.ill_since = GameClock.tick
+	var heard: Array[String] = []
+	sim.health_notice.connect(func(text: String) -> void: heard.append(text))
+	var catches := 0
+	var rounds := 0
+	for attempt in 80:
+		rounds += 1
+		for caught in Illness.spread(sim, rng, 10):
+			sim._announce_illness(caught)
+			catches += 1
+		if cara.illness == "plague":
+			break
+	_check(cara.illness == "plague" and far.illness == "", "the plague passes to those close by, and not to those far off (after %d rounds)" % rounds)
+	_check(heard.any(func(text: String) -> bool: return "plague" in text and "Testford" in text), "and word of it reaches you (%s)" % str(heard))
+	var filthy := Pawn.new()
+	filthy.display_name = "Dirty Dick"
+	filthy.age = 30
+	filthy.tile = Vector2i(40, 31)
+	filthy.step_to = filthy.tile
+	filthy.home_lot = "lot_2"
+	filthy.needs["hygiene"] = 5.0
+	town.add_pawn(filthy)
+	var clean := Pawn.new()
+	clean.display_name = "Clean Kate"
+	clean.age = 30
+	clean.tile = Vector2i(39, 30)
+	clean.step_to = clean.tile
+	clean.home_lot = "lot_2"
+	clean.needs["hygiene"] = 90.0
+	town.add_pawn(clean)
+	var dirty_first := 0
+	var clean_first := 0
+	for trial in 200:
+		filthy.illness = ""
+		clean.illness = ""
+		dan.illness = "plague"
+		Illness.spread(sim, rng, 10)
+		dirty_first += 1 if filthy.illness == "plague" else 0
+		clean_first += 1 if clean.illness == "plague" else 0
+	_check(dirty_first > clean_first * 2, "the dirty catch it far more readily (%d against %d)" % [dirty_first, clean_first])
+	cara.illness = "plague"
+	sim._recover(cara)
+	_check(cara.illness == "" and Illness.is_immune(cara, "plague"), "those who recover cannot catch it again for a while")
+	dan.illness = "plague"
+	cara.tile = dan.tile + Vector2i(1, 0)
+	var again := 0
+	for trial in 100:
+		again += Illness.spread(sim, rng, 10).filter(func(p: Pawn) -> bool: return p.id == cara.id).size()
+	_check(again == 0, "the immune are passed over")
+
+	# Herbs.
+	dan.illness = "plague"
+	anna.tile = dan.tile + Vector2i(1, 1)
+	anna.step_to = anna.tile
+	household.stock = {}
+	_check("no herbs" in sim.treat_blocker(anna, dan), "nursing needs herbs (%s)" % sim.treat_blocker(anna, dan))
+	household.stock = { "herbs": 2, "healers_satchel": 1 }
+	var nurse_entries := PawnActions.list_for(sim, anna, dan.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "treat:%d" % dan.id)
+	_check(nurse_entries.size() == 1 and nurse_entries[0]["enabled"] and "Nurse" in str(nurse_entries[0]["label"]), "an ill person's menu offers to nurse them with herbs")
+	var base_chance := Illness.recovery_chance(plague, dan)
+	var nursed := PawnActions.perform(sim, anna, "treat:%d" % dan.id, dan.tile)
+	_check(nursed["ok"] and household.stock_of("herbs") == 1 and Illness.recovery_chance(plague, dan) > base_chance + 0.2, "a herb helps them recover (%.2f to %.2f)" % [base_chance, Illness.recovery_chance(plague, dan)])
+	_check("already" in sim.treat_blocker(anna, dan) and dan.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "cared_for"), "once is enough, and they are grateful")
+	var healthy := Pawn.new()
+	healthy.tile = anna.tile
+	_check("not ill" in sim.treat_blocker(anna, healthy), "the well need no nursing")
+	anna.tile = Vector2i(5, 6)
+	_check(not sim.treat(anna, cara)["ok"], "and it is not done from afar")
+
+	# Saved.
+	dan.immune = { "plague": 99999 }
+	dan.treated_until = 4242
+	dan.fire_minutes = 2
+	var save_world := _romance_setup()
+	var saved_dan: Pawn = save_world["dan"]
+	saved_dan.immune = { "plague": 99999 }
+	saved_dan.treated_until = 4242
+	saved_dan.fire_minutes = 2
+	saved_dan.job_target = Vector2i(3, 4)
+	SaveGame.save(TEST_SAVE, save_world["world"], save_world["household"], {}, save_world["town"])
+	var reloaded := SaveGame.load_from(TEST_SAVE)
+	var back_dan: Pawn = reloaded["town"].get_pawn(saved_dan.id)
+	_check(reloaded["ok"] and back_dan != null and back_dan.immune == { "plague": 99999 } and back_dan.treated_until == 4242 and back_dan.fire_minutes == 2 and back_dan.job_target == Vector2i(3, 4), "immunity, nursing and what they were doing survive a save")
+	DirAccess.remove_absolute(TEST_SAVE)
+	GameClock.reset()
+
+
 func _test_death() -> void:
 	print("Death and the household")
 	var setup := _building_setup()
@@ -2415,11 +4084,25 @@ func _test_death() -> void:
 	first.needs["hunger"] = 0.0
 	first.deprivation["hunger"] = int(Needs.fatal_after_hours("hunger") * 60.0) - 2
 	household.select(first.id)
+	var notices: Array[String] = []
+	sim.health_notice.connect(func(text: String) -> void: notices.append(text))
 	var ticks := 0
-	while household.pawns.size() == 3 and ticks < 10:
+	while not first.is_dying() and ticks < 10:
 		sim.step()
 		ticks += 1
-	_check(household.pawns.size() == 2 and household.get_pawn(first.id) == null, "after three days empty, a person dies and leaves the household")
+	_check(first.is_dying() and first.dying_cause == "starved" and first.pose == "fallen" and household.pawns.size() == 3, "after three days empty, a person falls and lies dying, still one of the household")
+	_check(not notices.is_empty() and "dying" in notices[0] and "plead" in notices[0], "you are told, and that you can plead with Death")
+	_check(not sim.order_move(first, Vector2i(2, 2))["ok"] and first.needs["hunger"] == 0.0, "the dying cannot be sent anywhere")
+	var hunger_while_dying := float(first.needs["rest"])
+	for i in int(Mortality.config()["arrives_after_minutes"]):
+		GameClock.advance_one_tick()
+		sim.step()
+	_check(Mortality.death_has_come(first) and float(first.needs["rest"]) == hunger_while_dying and "Death has come" in notices.back(), "Death comes and waits beside them")
+	_check(sim.describe_activity(first).begins_with("Dying"), "the panel says so")
+	for i in int(Mortality.config()["takes_after_minutes"]) - int(Mortality.config()["arrives_after_minutes"]):
+		GameClock.advance_one_tick()
+		sim.step()
+	_check(household.pawns.size() == 2 and household.get_pawn(first.id) == null, "then he takes them, and they leave the household")
 	_check(announced.size() == 1 and announced[0][0] == "Builder One" and announced[0][1] == "starved" and announced[0][2] == "Builder Two", "the death is announced with the cause and who you control now")
 	_check(household.selected_id == second.id, "control passes to the next person")
 	_check(household.dead.size() == 1 and household.dead[0]["name"] == "Builder One", "the dead are remembered")
@@ -2428,6 +4111,7 @@ func _test_death() -> void:
 		graves += 1 if placed.def_id == "grave" else 0
 	_check(graves == 1, "a grave is left behind")
 	_check(not sim.is_game_over(), "the others carry on")
+	_check(sim.departures.size() == 1 and sim.departures[0]["death_at"] is Vector2, "and the view is told where Death led the soul away")
 
 	# Dying in the middle of something lets go of it.
 	var bed := world.add_object("bed", Vector2i(8, 8))
@@ -2474,11 +4158,164 @@ func _test_death() -> void:
 	one.needs["hunger"] = 10.0
 	hud.update_household_status(living)
 	_check(hud._chip_marks[one.id].color == Hud.BAND_COLORS["critical"] and "Hunger" in hud._chips[one.id].tooltip_text, "a person with a critical need gets a red chip that says which")
-	hud.show_game_over("The end")
-	_check(hud._game_over_panel.visible and hud._game_over_label.text == "The end", "the end screen shows its message")
-	hud.show_game_over("")
-	_check(not hud._game_over_panel.visible, "and hides again")
 	hud.queue_free()
+	var menus := Menus.new()
+	add_child(menus)
+	menus.show_game_over("The end")
+	_check(menus.current() == "game_over" and menus._game_over_text.text == "The end", "the end screen shows its message")
+	menus.close()
+	_check(not menus.is_open(), "and goes away")
+	menus.queue_free()
+
+
+## A small village for the tests of growing old and dying: a chapel lot to bury people in and
+## three people who know each other.
+func _mortality_setup() -> Dictionary:
+	GameClock.set_time(4, 12)
+	var world := WorldState.new(40, 20, 3, "grass")
+	world.lot = Rect2i(2, 2, 12, 8)
+	world.lots = [{ "id": "lot_1", "kind": "chapel", "name": "Chapel", "template": "chapel", "facing": "south", "rect": Rect2i(24, 2, 9, 9), "public": true }]
+	world.lifespan = "normal"
+	var household := Household.new()
+	var people: Array[Pawn] = []
+	for spec in [["Ada Marsh", 30], ["Ben Marsh", 59], ["Cole Marsh", 34]]:
+		var person := Pawn.new()
+		person.display_name = spec[0]
+		person.age = spec[1]
+		person.tile = Vector2i(5 + people.size(), 5)
+		person.step_to = person.tile
+		for need_id in Needs.active_ids():
+			person.needs[need_id] = 90.0
+		household.add_pawn(person)
+		people.append(person)
+	Relations.make_family(people)
+	return { "world": world, "household": household, "people": people, "sim": Simulation.new(world, household) }
+
+
+func _test_life_and_death() -> void:
+	print("Growing old, Death and the dead")
+	var setup := _mortality_setup()
+	var world: WorldState = setup["world"]
+	var household: Household = setup["household"]
+	var sim: Simulation = setup["sim"]
+	var ada: Pawn = setup["people"][0]
+	var ben: Pawn = setup["people"][1]
+	var cole: Pawn = setup["people"][2]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+
+	# Ages and stages.
+	_check(Life.days_per_year(world) == 2 and Life.days_per_year(WorldState.new(4, 4)) == 60, "a year of life is two days on Normal, and a whole calendar year in an older world")
+	_check(Life.stage_at(0)["id"] == "baby" and Life.stage_at(3)["id"] == "toddler" and Life.stage_at(10)["id"] == "child" and Life.stage_at(15)["id"] == "youth" and Life.stage_at(40)["id"] == "adult" and Life.stage_at(70)["id"] == "elder", "the stages run from baby to elder")
+	_check(Life.describe_age(ada) == "Adult, 30", "the panel shows the stage and the age")
+	var fated := Life.death_age(ben)
+	_check(fated >= 62 and fated <= 80 and fated == Life.death_age(ben), "everyone has a fixed age to die of old age, between 62 and 80 (Ben: %d)" % fated)
+	ben.birthday = GameClock.get_day_number() % Life.days_per_year(world)
+	GameClock.set_time(GameClock.get_day_number() + Life.days_per_year(world), 0)
+	var heard := Life.new_day(sim, rng)
+	_check(ben.age == 60 and Life.is_elder(ben) and "growing old" in " ".join(heard) and ben.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "grew_old"), "at sixty a person grows old, and feels it")
+	_check(Life.walk_multiplier(ben) > 1.0 and float(Life.drain_multipliers(ben, {})["rest"]) > 1.0 and not Life.may_do_heavy_work(ben) and Life.may_do_heavy_work(ada), "an elder walks slower, tires sooner and keeps clear of heavy work")
+
+	# Old age.
+	ben.age = fated
+	GameClock.set_time(GameClock.get_day_number() + 1, 0)
+	Life.new_day(sim, rng)
+	_check(ben.is_dying() and ben.dying_cause == "died of old age", "when their time comes, an elder lies down for the last time")
+	_check("time" in Mortality.plead_blocker(sim, ada, ben), "and Death will not hear a plea for the old")
+	var pleads := PawnActions.list_for(sim, ada, ben.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with(PawnActions.PLEAD_PREFIX))
+	_check(pleads.size() == 1 and not pleads[0]["enabled"], "the right-click menu offers the plea, switched off with the reason")
+	var departures_before := sim.departures.size()
+	sim.die(ben, ben.dying_cause)
+	var ben_grave := Vector2i(-1, -1)
+	for spirit in world.spirits:
+		if spirit["name"] == "Ben Marsh":
+			ben_grave = Vector2i(int(spirit["grave"][0]), int(spirit["grave"][1]))
+	_check(Rect2i(24, 2, 9, 9).has_point(ben_grave) and world.object_at(ben_grave) != null and world.object_at(ben_grave).def_id == "grave", "the dead are buried in the chapel yard")
+	_check(sim.departures.size() == departures_before + 1, "and the view is told of their going")
+	_check(ada.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "lost_loved_one" and t["about"] == "Ben Marsh"), "family mourn the loss by name")
+
+	# Pleading with Death.
+	ada.set_opinion(cole.id, 100.0)
+	Mortality.fall(sim, cole, "starved")
+	_check(cole.is_dying() and Mortality.plead_blocker(sim, ada, cole) == "" and is_equal_approx(Mortality.plead_chance(ada, cole), 0.6), "a loved one can plead, and love makes Death likelier to listen (%.2f)" % Mortality.plead_chance(ada, cole))
+	var asked := sim.order_plead(ada, cole)
+	_check(asked["ok"] and ada.job_kind == "plead", "the one who pleads goes to kneel beside them")
+	var steps := 0
+	while not cole.pleaded and steps < 200:
+		GameClock.advance_one_tick()
+		sim.step()
+		steps += 1
+	_check(cole.pleaded and (not cole.is_dying()) == ada.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "pleaded_won"), "after a while Death gives his answer (%s)" % ("spared" if not cole.is_dying() else "refused"))
+	if not cole.is_dying():
+		_check(float(cole.needs["hunger"]) >= 35.0 and cole.deprivation.is_empty() and cole.pose == "" and cole.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "spared"), "the spared get up, weak but alive")
+	else:
+		_check("already" in Mortality.plead_blocker(sim, ada, cole), "and he hears only one plea")
+	var lucky := Pawn.new()
+	lucky.display_name = "Lucky Marsh"
+	for need_id in Needs.active_ids():
+		lucky.needs[need_id] = 0.0
+	lucky.dying_cause = "starved"
+	lucky.deprivation = { "hunger": 4000 }
+	var always := RandomNumberGenerator.new()
+	always.seed = 1
+	var roll := always.randf()
+	always.seed = 1
+	var odds := Mortality.plead_chance(ada, lucky)
+	var said := Mortality.resolve_plea(sim, ada, lucky, always)
+	_check(is_equal_approx(odds, 0.2) and (roll < odds) == ("spared" in said) and (roll < odds) == (not lucky.is_dying()), "a plea for a stranger is a long shot, won or lost on the chance (%.2f against %.2f: %s)" % [roll, odds, said])
+
+	# Rivals.
+	var rival := Pawn.new()
+	rival.display_name = "Old Foe"
+	household.add_pawn(rival)
+	ada.set_opinion(rival.id, -80.0)
+	Mortality.mourn(sim, rival, true)
+	_check(ada.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "rival_died" and t["about"] == "Old Foe"), "a rival's death is no loss")
+
+	# Ghosts.
+	var spirit := Mortality.spirit_at(world, ben_grave)
+	_check(not spirit.is_empty() and spirit["name"] == "Ben Marsh", "the grave remembers whose it is")
+	var prayer := PawnActions.list_for(sim, ada, ben_grave).filter(func(e: Dictionary) -> bool: return "Ben Marsh's soul" in str(e["label"]))
+	_check(prayer.size() == 1, "and offers a prayer for that soul")
+	spirit["restless"] = true
+	var night := (GameClock.get_day_number() + 1) * GameClock.MINUTES_PER_DAY + 23 * 60
+	GameClock.set_time(GameClock.get_day_number() + 1, 23)
+	spirit["haunt_until"] = night + 300
+	_check(Mortality.haunting(world, night).size() == 1, "a restless spirit walks at night")
+	var where := Mortality.ghost_position(spirit, float(night + 10))
+	_check(where.distance_to(Vector2(ben_grave) + Vector2(0.5, 0.5)) < 2.5, "never far from its grave")
+	ada.path.clear()
+	ada.job_kind = ""
+	ada.pose = ""
+	ada.tile = Vector2i(roundi(where.x), roundi(where.y))
+	ada.step_to = ada.tile
+	Mortality._haunt(sim, night + 10)
+	_check(ada.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "saw_ghost" and t["about"] == "Ben Marsh"), "anyone awake nearby sees the ghost, and is frightened")
+	var grave_object := world.object_at(ben_grave)
+	_check(not bool(grave_object.def().get("autonomous", true)), "nobody prays at a grave unless told to")
+	var notices: Array[String] = []
+	sim.health_notice.connect(func(text: String) -> void: notices.append(text))
+	_check(sim.order_use(ada, grave_object)["ok"], "one of your folk can be sent to pray at the grave")
+	steps = 0
+	while ada.job_kind == "use" and steps < 300:
+		GameClock.advance_one_tick()
+		sim.step()
+		steps += 1
+	_check(not bool(spirit["restless"]) and int(spirit["haunt_until"]) == -1 and ada.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "laid_to_rest"), "praying there lays the soul to rest")
+	_check(notices.any(func(text: String) -> bool: return "rest" in text), "and you are told")
+
+	# Saving it all.
+	Mortality.fall(sim, ada, "froze to death")
+	var pawn_copy := Pawn.from_dict(JSON.parse_string(JSON.stringify(ada.to_dict())))
+	_check(pawn_copy.dying_cause == "froze to death" and pawn_copy.dying_since == ada.dying_since and pawn_copy.death_from == ada.death_from and pawn_copy.pose == "fallen", "someone dying is still dying after a save")
+	var world_copy := WorldState.from_dict(JSON.parse_string(JSON.stringify(world.to_dict())))
+	_check(world_copy.lifespan == "normal" and world_copy.spirits.size() == world.spirits.size() and Mortality.spirit_at(world_copy, ben_grave)["name"] == "Ben Marsh", "the lifespan and the dead in their graves survive a save")
+	var old_world := world.to_dict()
+	old_world.erase("lifespan")
+	old_world.erase("spirits")
+	var from_old := WorldState.from_dict(JSON.parse_string(JSON.stringify(old_world)))
+	_check(from_old.lifespan == "calendar" and from_old.spirits.is_empty(), "a world from an older save ages by the calendar")
+	GameClock.reset()
 
 
 func _mood_person(traits: Array[String] = []) -> Pawn:
@@ -2606,8 +4443,10 @@ func _test_mood() -> void:
 	sim.die(other, "of a fever")
 	var grieving := false
 	for thought in pawn.thoughts:
-		grieving = grieving or thought["id"] == "grief"
-	_check(grieving, "a death in the household is a bad thought for the people who are left")
+		grieving = grieving or (thought["id"] in ["lost_loved_one", "mourning"] and thought.get("about") == "Mood Two")
+	_check(grieving, "the people who are left mourn the dead by name")
+	var mourned: Array = Mood.evaluate(pawn, household, GameClock.tick)["parts"].filter(func(part: Dictionary) -> bool: return "Mood Two" in str(part["text"]))
+	_check(mourned.size() == 1 and float(mourned[0]["mood"]) < 0.0, "and it weighs on their mood (%s)" % str(mourned))
 	var copy := Pawn.from_dict(JSON.parse_string(JSON.stringify(pawn.to_dict())))
 	_check(copy.thoughts == pawn.thoughts, "thoughts survive a save")
 

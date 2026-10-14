@@ -1,23 +1,33 @@
 extends Node
-## The game clock. It turns real time into fixed simulation ticks.
+## The game clock. It turns real time into fixed simulation steps.
 ##
-## One tick is one game minute. Everything in the simulation should advance on
-## the "ticked" signal, never on frame time, so that pausing and speed changes
-## affect the whole world the same way (and save games are reproducible).
+## One tick is one game minute. Everything in the simulation should advance on the "ticked"
+## signal, never on frame time, so that pausing and speed changes affect the whole world the
+## same way (and save games are reproducible). A day takes DAY_SECONDS of real time at normal
+## speed: an hour, so a game minute is two and a half seconds.
 ##
-## Speed levels: 0 = paused, 1 = 1x, 2 = 2x, 3 = 3x (see SPEED_MULTIPLIERS).
+## A minute is too coarse for walking: between two ticks the clock also emits "motion_ticked",
+## SUBSTEPS_PER_MINUTE times, and people take their steps on those. (A tile takes a few of them,
+## so a walk across town is a matter of seconds, not hours of game time.)
+##
+## Speed levels: 0 = paused, then 1x, 3x, 10x and 30x (see SPEED_MULTIPLIERS).
 
 signal ticked(tick: int)
+## A fraction of a game minute has passed: time for people to take their steps.
+signal motion_ticked
 signal day_changed(day_number: int)
 signal speed_changed(level: int)
 ## Emitted when the time is set from outside (new game, loaded save).
 signal time_set
 
-const TICK_SECONDS := 0.1            # real seconds per tick at 1x
+const DAY_SECONDS := 3600.0          # real seconds per game day at 1x
 const MINUTES_PER_DAY := 1440
+const SUBSTEPS_PER_MINUTE := 25
+const MINUTE_SECONDS := DAY_SECONDS / MINUTES_PER_DAY
+const SUBSTEP_SECONDS := MINUTE_SECONDS / SUBSTEPS_PER_MINUTE
 const START_TICK := 6 * 60           # a new game starts at 06:00 on day 1
-const SPEED_MULTIPLIERS: Array[float] = [0.0, 1.0, 2.0, 3.0]
-const MAX_TICKS_PER_FRAME := 30      # protects against a spiral after a long frame
+const SPEED_MULTIPLIERS: Array[float] = [0.0, 1.0, 3.0, 10.0, 30.0]
+const MAX_SUBSTEPS_PER_FRAME := 40   # protects against a spiral after a long frame
 
 ## Used only if no seasons.json is loaded.
 const FALLBACK_SEASONS: Array = [{ "id": "season", "name": "Season", "days": 60 }]
@@ -27,6 +37,7 @@ var speed_level: int = 1
 
 var _last_running_speed: int = 1
 var _accumulator: float = 0.0
+var _substep := 0  # how far into the minute the motion has got
 
 
 func _process(delta: float) -> void:
@@ -34,15 +45,27 @@ func _process(delta: float) -> void:
 		return
 	_accumulator += delta * SPEED_MULTIPLIERS[speed_level]
 	var steps := 0
-	while _accumulator >= TICK_SECONDS and steps < MAX_TICKS_PER_FRAME:
-		_accumulator -= TICK_SECONDS
-		advance_one_tick()
+	while _accumulator >= SUBSTEP_SECONDS and steps < MAX_SUBSTEPS_PER_FRAME:
+		_accumulator -= SUBSTEP_SECONDS
+		motion_ticked.emit()
+		_substep += 1
+		if _substep >= SUBSTEPS_PER_MINUTE:
+			_substep = 0
+			_end_minute()
 		steps += 1
-	if steps == MAX_TICKS_PER_FRAME:
+	if steps == MAX_SUBSTEPS_PER_FRAME:
 		_accumulator = 0.0  # drop the backlog instead of running ever further behind
 
 
+## A whole game minute at once, motion included (used by tests and tools).
 func advance_one_tick() -> void:
+	for i in SUBSTEPS_PER_MINUTE - _substep:
+		motion_ticked.emit()
+	_substep = 0
+	_end_minute()
+
+
+func _end_minute() -> void:
 	var day_before := get_day_number()
 	tick += 1
 	ticked.emit(tick)
@@ -78,6 +101,7 @@ func toggle_pause() -> void:
 func reset() -> void:
 	tick = START_TICK
 	_accumulator = 0.0
+	_substep = 0
 	time_set.emit()
 
 
@@ -116,6 +140,7 @@ func get_season_position() -> Dictionary:
 func set_time(day_number: int, hour: int = 6) -> void:
 	tick = day_number * MINUTES_PER_DAY + hour * 60
 	_accumulator = 0.0
+	_substep = 0
 	time_set.emit()
 
 

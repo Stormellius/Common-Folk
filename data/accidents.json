@@ -1,0 +1,14 @@
+[
+  { "id": "fire",
+    "spark_chance_per_day": 0.006,
+    "burn_minutes": 12,
+    "burn_minutes_per_flammability": 26,
+    "spread_every_minutes": 2,
+    "spread_chance": 0.32,
+    "flee_radius": 3,
+    "fight_radius": 12,
+    "extinguish_per_minute": 6,
+    "minutes_to_burn": 1,
+    "minutes_to_death": 6,
+    "max_fightable": 10 }
+]

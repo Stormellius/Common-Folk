@@ -9,7 +9,9 @@ extends RefCounted
 ##   event thoughts ("on": ..., "hours": ...)  are given when something happens ("used:bed",
 ##       "interaction:intimacy", "death") and fade after their hours.
 ## Either kind can be limited with "only_for" / "never_for" (lists of trait ids), and traits
-## scale a thought with "thought_multipliers" in data/traits.json.
+## scale a thought with "thought_multipliers" in data/traits.json. An event thought can be about
+## someone ("Mourning {name}"): the name is kept with it, and the same thought about two people
+## counts twice.
 
 const BASE := 50.0
 const LOW_BELOW := 20.0    # miserable: the person drags their feet
@@ -38,7 +40,7 @@ static func evaluate(pawn: Pawn, others: Variant, now: int) -> Dictionary:
 		if int(thought["until"]) > now:
 			var def := DataRegistry.get_def("thoughts", str(thought["id"]))
 			if not def.is_empty():
-				parts.append(_part(def, pawn))
+				parts.append(_part(def, pawn, str(thought.get("about", ""))))
 	parts.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return absf(a["mood"]) > absf(b["mood"]))
 	var total := BASE
 	for part in parts:
@@ -46,20 +48,24 @@ static func evaluate(pawn: Pawn, others: Variant, now: int) -> Dictionary:
 	return { "value": clampf(total, 0.0, 100.0), "parts": parts }
 
 
-## Gives `pawn` every event thought that goes with `key` ("used:bed", "death"...). A thought
-## they already have just has its time renewed.
-static func add_event(pawn: Pawn, key: String, now: int) -> void:
+## Gives `pawn` every event thought that goes with `key` ("used:bed", "mourning"...), about
+## `about` if it names someone. A thought they already have (about the same person) just has its
+## time renewed.
+static func add_event(pawn: Pawn, key: String, now: int, about: String = "") -> void:
 	for def in DataRegistry.get_list("thoughts"):
 		if str(def.get("on", "")) != key or not _applies(def, pawn):
 			continue
 		var until := now + int(float(def.get("hours", 1.0)) * 60.0)
 		var found := false
 		for thought in pawn.thoughts:
-			if thought["id"] == def["id"]:
+			if thought["id"] == def["id"] and str(thought.get("about", "")) == about:
 				thought["until"] = until
 				found = true
 		if not found:
-			pawn.thoughts.append({ "id": str(def["id"]), "until": until })
+			var thought := { "id": str(def["id"]), "until": until }
+			if about != "":
+				thought["about"] = about
+			pawn.thoughts.append(thought)
 
 
 ## Throws away thoughts that have faded.
@@ -80,12 +86,13 @@ static func band_name(value: float) -> String:
 	return "content"
 
 
-static func _part(def: Dictionary, pawn: Pawn) -> Dictionary:
+static func _part(def: Dictionary, pawn: Pawn, about: String = "") -> Dictionary:
 	var factor := 1.0
 	for trait_id in pawn.traits:
 		var multipliers: Dictionary = DataRegistry.get_def("traits", trait_id).get("thought_multipliers", {})
 		factor *= float(multipliers.get(str(def["id"]), 1.0))
-	return { "id": str(def["id"]), "text": str(def.get("text", def["id"])), "mood": float(def.get("mood", 0.0)) * factor }
+	var text := str(def.get("text", def["id"])).replace("{name}", about if about != "" else "someone")
+	return { "id": str(def["id"]), "text": text, "mood": float(def.get("mood", 0.0)) * factor }
 
 
 static func _applies(def: Dictionary, pawn: Pawn) -> bool:
@@ -114,7 +121,13 @@ static func _holds(condition: Dictionary, pawn: Pawn, people: Array) -> bool:
 			return false
 	if condition.has("pregnant") and bool(condition["pregnant"]) != Pregnancy.is_known(pawn):
 		return false
-	if condition.has("pregnant_above") and not (Pregnancy.is_known(pawn) and Pregnancy.days_pregnant(pawn) >= int(condition["pregnant_above"])):
+	if condition.has("partner") and bool(condition["partner"]) != (pawn.partner_id != 0):
+		return false
+	if condition.has("bond") and str(condition["bond"]) != pawn.bond:
+		return false
+	if condition.has("heavy") and bool(condition["heavy"]) != Pregnancy.is_heavy(pawn):
+		return false
+	if condition.has("in_labour") and bool(condition["in_labour"]) != Pregnancy.in_labour(pawn):
 		return false
 	if condition.has("ill") and bool(condition["ill"]) != (pawn.illness != ""):
 		return false

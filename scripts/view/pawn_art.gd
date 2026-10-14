@@ -23,11 +23,30 @@ const CAP_COLORS := [Color("#7a2a2a"), Color("#2f3f6a"), Color("#2f4a32"), Color
 const HAT_COLORS := [Color("#1f1c1c"), Color("#4a1f2a"), Color("#1f2a44")]
 const FEATHER_COLORS := [Color("#f0ede4"), Color("#b33a32"), Color("#d8b24a")]
 const ILL_TINT := Color(0.74, 0.80, 0.60)
+const GREY_HAIR := Color("#d2d0cb")
+const WOOD := Color(0.42, 0.29, 0.17)
+const CHEEK := Color(0.93, 0.45, 0.42, 0.38)
+
+## How each stage of life is built (see data/life_stages.json): the head's radius, how wide the
+## body is, and how big the whole figure is drawn. Children have big heads on small bodies.
+const BUILDS := {
+	"baby":    { "head": 8.6, "torso": 0.70, "scale": 0.74 },
+	"toddler": { "head": 10.0, "torso": 0.78, "scale": 0.66 },
+	"child":   { "head": 9.4, "torso": 0.88, "scale": 0.80 },
+	"youth":   { "head": 8.8, "torso": 0.95, "scale": 0.93 },
+	"adult":   { "head": 8.6, "torso": 1.00, "scale": 1.00 },
+	"elder":   { "head": 8.4, "torso": 0.97, "scale": 0.97 },
+}
 
 const SOUTH := 0
 const EAST := 1
 const NORTH := 2
 const WEST := 3
+
+
+## How big a person of this stage is drawn, 1 for a grown man or woman.
+static func stage_scale(stage: String) -> float:
+	return float(BUILDS.get(stage, BUILDS["adult"])["scale"])
 
 
 ## Which of the four views to draw for a walking direction.
@@ -41,15 +60,21 @@ static func facing_kind(facing: Vector2i) -> int:
 ## hat for peasants, a felt cap for burghers, a feathered hat or a circlet for the gentry, a
 ## linen coif for many women), counter work brings an apron, and some men are bearded.
 static func outfit_for(pawn: Pawn) -> Dictionary:
-	var seed := hash(pawn.display_name)
+	var seed := hash(pawn.seed_name())
 	var roll := func(salt: int) -> float: return ObjectArt.hash01(seed, salt, 211)
-	var outfit := { "headwear": "", "apron": false, "belt": pawn.adult, "beard": 0, "trim": false, "pouch": false, "ill": pawn.illness != "" }
+	var stage := Life.stage_id(pawn)
+	if stage == "":
+		stage = "adult" if pawn.adult else "child"
+	var outfit := { "wedding": pawn.wed_until > GameClock.tick or pawn.job_kind == "wed", "headwear": "", "apron": false, "belt": stage in ["youth", "adult", "elder"], "beard": 0, "trim": false, "pouch": false,
+		"ill": pawn.illness != "", "stage": stage, "grey": 0.0, "balding": false, "stick": false, "crying": false }
 	if pawn.is_infant():
-		outfit["belt"] = false
+		outfit["crying"] = Babies.is_crying(pawn)
 		return outfit
 	var r: float = roll.call(1)
 	var female := pawn.gender == "female"
-	if not pawn.adult:
+	if stage == "toddler":
+		outfit["headwear"] = "coif" if r < 0.45 else ""  # a little linen bonnet
+	elif not pawn.adult:
 		outfit["headwear"] = "hood" if r < 0.15 else ""
 	elif pawn.class_id == "gentry":
 		outfit["trim"] = true
@@ -60,13 +85,23 @@ static func outfit_for(pawn: Pawn) -> Dictionary:
 	else:
 		outfit["headwear"] = ("coif" if r < 0.45 else ("hood" if r < 0.65 else ("straw_hat" if r < 0.75 else ""))) if female \
 			else ("hood" if r < 0.3 else ("straw_hat" if r < 0.55 else ""))
-	outfit["apron"] = pawn.work_job in ["tavern_hand", "shop_clerk", "clinic_orderly"] or (female and pawn.class_id == "peasant" and pawn.adult and roll.call(2) < 0.3)
-	if pawn.adult and not female and roll.call(3) < 0.45:
-		outfit["beard"] = 1 if roll.call(4) < 0.6 else 2  # 1 short, 2 full
+	outfit["apron"] = pawn.work_job in ["tavern_hand", "shop_clerk", "clinic_orderly", "smith", "carpenter"] or (female and pawn.class_id == "peasant" and pawn.adult and roll.call(2) < 0.3)
+	if pawn.adult and not female and roll.call(3) < (0.45 if stage != "elder" else 0.7):
+		outfit["beard"] = 1 if roll.call(4) < (0.6 if stage != "elder" else 0.3) else 2  # 1 short, 2 full
+	outfit["grey"] = clampf((pawn.age - 38) / 30.0, 0.0, 0.92)  # hair goes grey, then white, with the years
+	if stage == "elder":
+		outfit["stick"] = roll.call(9) < 0.65
+		outfit["balding"] = not female and roll.call(10) < 0.5
+		var h: float = roll.call(11)
+		outfit["headwear"] = ("coif" if h < 0.6 else ("hood" if h < 0.8 else "")) if female \
+			else ("cap" if h < 0.35 else ("straw_hat" if h < 0.55 and pawn.class_id == "peasant" else ""))
 	outfit["hood_color"] = HOOD_COLORS[int(roll.call(5) * HOOD_COLORS.size()) % HOOD_COLORS.size()]
 	outfit["cap_color"] = CAP_COLORS[int(roll.call(6) * CAP_COLORS.size()) % CAP_COLORS.size()]
 	outfit["hat_color"] = HAT_COLORS[int(roll.call(7) * HAT_COLORS.size()) % HAT_COLORS.size()]
 	outfit["feather"] = FEATHER_COLORS[int(roll.call(8) * FEATHER_COLORS.size()) % FEATHER_COLORS.size()]
+	outfit["bump"] = Pregnancy.bump(pawn)
+	if float(outfit["bump"]) > 0.3:
+		outfit["belt"] = false  # the belt comes off as the belly grows
 	return outfit
 
 
@@ -79,6 +114,16 @@ static func draw(ci: CanvasItem, look: Dictionary, facing: Vector2i, u: float, p
 	var top := Color(str(look.get("top", "#6a7a4a")))
 	var bottom := Color(str(look.get("bottom", "#4a3d32")))
 	var style := int(look.get("hair_style", 0)) % HAIR_STYLES
+	var stage := str(outfit.get("stage", "adult"))
+	var wedding := bool(outfit.get("wedding", false))
+	if wedding:  # wedding clothes: pale linen
+		top = top.lerp(Color(0.96, 0.94, 0.88), 0.78)
+		bottom = bottom.lerp(Color(0.90, 0.88, 0.82), 0.5)
+	var build: Dictionary = BUILDS.get(stage, BUILDS["adult"])
+	var body := float(build["torso"])
+	var elder := stage == "elder"
+	var balding := bool(outfit.get("balding", false))
+	hair = hair.lerp(GREY_HAIR, float(outfit.get("grey", 0.0)))
 	if outfit.get("ill", false):
 		skin = skin.lerp(ILL_TINT, 0.30)
 	var headwear := str(outfit.get("headwear", ""))
@@ -86,11 +131,14 @@ static func draw(ci: CanvasItem, look: Dictionary, facing: Vector2i, u: float, p
 	var side := kind == EAST or kind == WEST
 	var sx := 1.0 if kind == EAST else (-1.0 if kind == WEST else 0.0)
 	var walking := not lying and phase != 0.0
-	var swing := sin(phase) if walking else 0.0
+	var swing := (sin(phase) if walking else 0.0) * (0.75 if elder else 1.0)  # the old shuffle
 	var rise := 0.0 if walking or lying else sin(breath)
 	var bob := -absf(swing) * 1.3 - rise * 0.35
 	var sway := 0.0 if side else swing * 0.7  # shoulders roll a little from side to side
 
+	if stage == "baby":
+		_swaddled(ci, u, kind, sx, lying, outfit, skin, hair, top)
+		return
 	_ellipse(ci, Vector2(3.0, 7.0) * u, Vector2(12.0, 6.5) * u, Color(0, 0, 0, 0.22))
 
 	# Feet swing back and forth while walking (a blanket hides them in bed).
@@ -99,13 +147,17 @@ static func draw(ci: CanvasItem, look: Dictionary, facing: Vector2i, u: float, p
 		_ellipse_outlined(ci, foot * u, Vector2(3.2, 2.8) * u, bottom.darkened(0.25), u)
 
 	# Shoulders, with what is worn over them.
-	var torso_center := Vector2(sway, 3.0)
-	var torso_radius := (Vector2(7.6, 7.2) if side else Vector2(11.0, 7.4)) * (1.0 + 0.025 * rise)
+	var torso_center := Vector2(sway, 3.0 + (0.8 if elder and not lying else 0.0))
+	var torso_radius := (Vector2(7.6, 7.2) if side else Vector2(11.0, 7.4)) * body * (1.0 + 0.025 * rise)
 	_ellipse_outlined(ci, torso_center * u, torso_radius * u, top, 1.1 * u)
 	_ellipse(ci, (torso_center + Vector2(-1.5, -1.8)) * u, torso_radius * 0.55 * u, Color(1, 1, 1, 0.12))
 	_ellipse(ci, (torso_center + Vector2(1.5, 2.6)) * u, torso_radius * Vector2(0.8, 0.45) * u, Color(0, 0, 0, 0.10))  # shade under the arms
 	if outfit.get("apron", false):
 		_apron(ci, u, kind, sx, torso_center, torso_radius)
+	if stage == "toddler" and kind == SOUTH:  # a bib
+		_ellipse_outlined(ci, (torso_center + Vector2(0.0, 2.2)) * u, Vector2(3.4, 3.8) * u, LINEN, 0.8 * u)
+	if float(outfit.get("bump", 0.0)) > 0.02 and kind != NORTH:
+		_bump(ci, u, kind, sx, torso_center, float(outfit["bump"]), top)
 	if outfit.get("trim", false):
 		var arc_from := 0.15 * PI if kind != NORTH else 0.2 * PI
 		ci.draw_arc(torso_center * u, (torso_radius.x - 1.0) * u, arc_from, PI - arc_from, 12, GOLD, maxf(1.0, 1.4 * u))
@@ -116,20 +168,27 @@ static func draw(ci: CanvasItem, look: Dictionary, facing: Vector2i, u: float, p
 
 	# Hands, coming out of the sleeves.
 	for s in [] if lying else [-1.0, 1.0]:
-		var hand := Vector2(swing * s * 4.5, 4.5) if side else Vector2(s * 11.5 + sway, 4.0 + swing * s * 2.0)
+		var hand := Vector2(swing * s * 4.5, 4.5) if side else Vector2(s * 11.5 * body + sway, 4.0 + swing * s * 2.0)
 		var cuff := hand + (Vector2(0.0, -1.6) if side else Vector2(-s * 1.4, -1.4))
 		_ellipse_outlined(ci, cuff * u, Vector2(2.4, 2.2) * u, top.darkened(0.18), 0.8 * u)
 		_ellipse_outlined(ci, hand * u, Vector2(2.6, 2.6) * u, skin, 0.9 * u)
+		if bool(outfit.get("stick", false)) and s == 1.0 and not lying:  # a walking stick in the near hand
+			var grip := hand + Vector2(0.4, -0.6)
+			var foot := Vector2(grip.x + 0.8, 14.0)
+			ci.draw_line(grip * u, foot * u, OUTLINE, maxf(1.5, 3.4 * u))
+			ci.draw_line(grip * u, foot * u, WOOD, maxf(1.0, 2.0 * u))
+			ci.draw_arc((grip + Vector2(-1.4, -0.6)) * u, 1.8 * u, PI * 0.9, PI * 2.05, 8, WOOD, maxf(1.0, 1.8 * u))
 
-	var head := Vector2(sx * 1.8 + sway * 0.6, -5.5 + bob)
-	var head_radius := 8.6
+	var stoop := elder and not lying
+	var head := Vector2(sx * 1.8 + sway * 0.6 + (sx * 1.2 if stoop else 0.0), -5.5 + bob + (1.8 if stoop else (1.0 if stage == "toddler" else (0.6 if stage == "child" else 0.0))))
+	var head_radius := float(build["head"])
 	var hair_radius := head_radius + 0.9
 	var covered := headwear == "hood" or headwear == "coif"
 
 	# Long hair hangs behind the head, over the shoulders.
-	if style == 1 and not covered and kind == NORTH:
+	if style == 1 and not covered and not balding and kind == NORTH:
 		_ellipse_outlined(ci, (head + Vector2(0, 5.0)) * u, Vector2(hair_radius, 10.5) * u, hair, 0.9 * u)
-	elif style == 1 and not covered and side:
+	elif style == 1 and not covered and not balding and side:
 		_ellipse_outlined(ci, (head + Vector2(-sx * 3.5, 4.5)) * u, Vector2(5.0, 8.5) * u, hair, 0.9 * u)
 
 	_ellipse_outlined(ci, head * u, Vector2(head_radius, head_radius) * u, skin, 1.1 * u)
@@ -139,8 +198,12 @@ static func draw(ci: CanvasItem, look: Dictionary, facing: Vector2i, u: float, p
 	if style == 2:  # shaved: just a shadow of stubble
 		hair_color = skin.darkened(0.12).lerp(hair, 0.35)
 		hair_radius = head_radius + 0.2
-	if not covered:
+	if not covered and balding:
+		_balding(ci, hair_color, kind, sx, head, hair_radius, u)
+	elif not covered:
 		_hair_cap(ci, hair_color, kind, sx, head, hair_radius, u)
+		if stage == "toddler" and style != 2:  # a curl on top
+			ci.draw_arc((head + Vector2(sx * 1.0, -hair_radius - 0.2)) * u, 2.2 * u, PI * 0.15, PI * 1.55, 8, hair_color, maxf(1.0, 1.8 * u))
 		if style == 1 and kind == SOUTH:  # side locks falling in front of the shoulders
 			for s in [-1.0, 1.0]:
 				_ellipse_outlined(ci, (head + Vector2(s * (hair_radius - 1.4), 4.5)) * u, Vector2(2.8, 7.0) * u, hair, 0.8 * u)
@@ -159,6 +222,8 @@ static func draw(ci: CanvasItem, look: Dictionary, facing: Vector2i, u: float, p
 			ci.draw_line((head + Vector2(-1.4, 4.6)) * u, (head + Vector2(1.4, 4.6)) * u, beard_color.darkened(0.3), maxf(1.0, 0.9 * u))  # moustache
 		else:
 			_ellipse_outlined(ci, (head + Vector2(sx * 4.4, 5.4 + beard * 0.3)) * u, Vector2(2.2 + beard * 0.6, 1.8 + beard * 0.6) * u, beard_color, 0.7 * u)
+
+	_face_marks(ci, u, kind, sx, head, stage, skin)
 
 	match headwear:
 		"hood":
@@ -179,6 +244,14 @@ static func draw(ci: CanvasItem, look: Dictionary, facing: Vector2i, u: float, p
 				ci.draw_arc((head + Vector2(sx * 0.8, 1.5)) * u, (hair_radius - 0.5) * u, PI * 1.08, PI * 1.92, 12, GOLD, maxf(1.0, 1.6 * u))
 				ci.draw_circle((head + Vector2(sx * 3.0, -6.6)) * u, 1.4 * u, Color(0.75, 0.18, 0.22))
 
+	if wedding and kind != NORTH:  # a garland of little flowers over the brow
+		for i in 7:
+			var angle := PI * (1.12 + 0.76 * i / 6.0)
+			var spot := head + Vector2(cos(angle) * (hair_radius - 0.4), sin(angle) * (hair_radius - 0.6) + 1.0)
+			if side:
+				spot = head + Vector2(sx * (cos(angle) * 2.0 + 1.0), sin(angle) * (hair_radius - 0.6) + 1.0)
+			ci.draw_circle(spot * u, 1.5 * u, [Color(0.98, 0.98, 0.95), Color(0.95, 0.62, 0.72), Color(0.99, 0.86, 0.40)][i % 3])
+
 	# Eyes: two from the front, one in profile, none from behind.
 	if kind == SOUTH and lying:  # eyes shut
 		for s in [-1.0, 1.0]:
@@ -188,6 +261,128 @@ static func draw(ci: CanvasItem, look: Dictionary, facing: Vector2i, u: float, p
 			_ellipse(ci, (head + Vector2(s * 3.3, 1.0)) * u, Vector2(1.3, 1.5) * u, EYE)
 	elif side:
 		_ellipse(ci, (head + Vector2(sx * 4.6, 0.8)) * u, Vector2(1.3, 1.5) * u, EYE)
+
+
+## The tool in a person's hand (data/tools.json): drawn at the right hand, tilted, and swung while
+## `working`. A satchel hangs at the hip instead.
+static func draw_tool(ci: CanvasItem, tool_id: String, facing: Vector2i, u: float, clock: float, working: bool) -> void:
+	var kind := facing_kind(facing)
+	var flip := -1.0 if kind == WEST else 1.0
+	var steel := Color(0.66, 0.68, 0.72)
+	var wood := Color(0.40, 0.28, 0.16)
+	if tool_id == "healers_satchel":
+		var hip := Vector2(-10.0 * flip, 6.0)
+		ci.draw_set_transform(hip * u, 0.0, Vector2.ONE)
+		ci.draw_rect(Rect2(Vector2(-5, -4) * u, Vector2(10, 9) * u), OUTLINE)
+		ci.draw_rect(Rect2(Vector2(-4, -3) * u, Vector2(8, 7) * u), Color(0.60, 0.42, 0.26))
+		ci.draw_rect(Rect2(Vector2(-4, -3) * u, Vector2(8, 3) * u), Color(0.48, 0.32, 0.19))
+		ci.draw_line(Vector2(-1.5, 2) * u, Vector2(1.5, 2) * u, Color(0.86, 0.80, 0.55), maxf(1.0, u))
+		ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		return
+	var hand := Vector2(10.5 * flip, 3.0)
+	if kind == EAST:
+		hand = Vector2(7.0, 3.0)
+	elif kind == NORTH:
+		hand = Vector2(10.0, 0.0)
+	var angle := (-0.5 + (sin(clock * 7.0) * 0.55 if working else 0.0)) * flip
+	ci.draw_set_transform(hand * u, angle, Vector2(flip, 1.0))
+	var haft_top := -18.0
+	match tool_id:
+		"fishing_rod":
+			haft_top = -30.0
+		"sickle", "herb_knife":
+			haft_top = -9.0
+		"hammer", "smiths_hammer":
+			haft_top = -14.0
+	ci.draw_line(Vector2(0, 3) * u, Vector2(0, haft_top) * u, OUTLINE, maxf(1.5, 3.0 * u))
+	ci.draw_line(Vector2(0, 3) * u, Vector2(0, haft_top) * u, wood, maxf(1.0, 1.8 * u))
+	match tool_id:
+		"axe":
+			ci.draw_colored_polygon(_scaled(PackedVector2Array([Vector2(0.5, -18), Vector2(8, -21), Vector2(9, -11), Vector2(0.5, -12)]), u), steel)
+		"pickaxe":
+			ci.draw_line(Vector2(-9, -16) * u, Vector2(9, -18) * u, OUTLINE, maxf(1.5, 3.4 * u))
+			ci.draw_line(Vector2(-9, -16) * u, Vector2(9, -18) * u, steel, maxf(1.0, 2.2 * u))
+		"sickle":
+			ci.draw_arc(Vector2(4, -9) * u, 5.0 * u, PI * 0.5, PI * 1.5, 8, steel, maxf(1.5, 2.0 * u))
+		"herb_knife":
+			ci.draw_colored_polygon(_scaled(PackedVector2Array([Vector2(-1.2, -9), Vector2(1.2, -9), Vector2(0, -16)]), u), steel)
+		"fishing_rod":
+			ci.draw_line(Vector2(0, -30) * u, Vector2(5, -20) * u, Color(0.85, 0.85, 0.80), maxf(1.0, 0.7 * u))
+		"hammer":
+			ci.draw_rect(Rect2(Vector2(-4, -17) * u, Vector2(8, 5) * u), steel)
+		"smiths_hammer":
+			ci.draw_rect(Rect2(Vector2(-5.5, -19) * u, Vector2(11, 7) * u), Color(0.50, 0.52, 0.58))
+			ci.draw_rect(Rect2(Vector2(-5.5, -19) * u, Vector2(11, 2.5) * u), steel)
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## Rosy cheeks on the young, lines on the old.
+static func _face_marks(ci: CanvasItem, u: float, kind: int, sx: float, head: Vector2, stage: String, skin: Color) -> void:
+	if kind == NORTH:
+		return
+	if stage == "toddler" or stage == "child":
+		if kind == SOUTH:
+			for s in [-1.0, 1.0]:
+				ci.draw_circle((head + Vector2(s * 5.2, 3.8)) * u, 1.8 * u, CHEEK)
+		else:
+			ci.draw_circle((head + Vector2(sx * 3.4, 4.0)) * u, 1.8 * u, CHEEK)
+	elif stage == "elder":
+		var line := skin.darkened(0.24)
+		var width := maxf(1.0, 0.8 * u)
+		if kind == SOUTH:
+			ci.draw_line((head + Vector2(-3.4, -3.6)) * u, (head + Vector2(3.4, -3.6)) * u, line, width)
+			ci.draw_line((head + Vector2(-2.4, -2.2)) * u, (head + Vector2(2.4, -2.2)) * u, line, width)
+			for s in [-1.0, 1.0]:  # crow's feet
+				ci.draw_line((head + Vector2(s * 5.4, 0.4)) * u, (head + Vector2(s * 6.8, -0.5)) * u, line, width)
+				ci.draw_line((head + Vector2(s * 5.4, 1.4)) * u, (head + Vector2(s * 6.8, 2.0)) * u, line, width)
+		else:
+			ci.draw_line((head + Vector2(sx * 1.0, -3.4)) * u, (head + Vector2(sx * 5.6, -3.2)) * u, line, width)
+			ci.draw_line((head + Vector2(sx * 3.4, 0.9)) * u, (head + Vector2(sx * 2.0, 0.2)) * u, line, width)
+
+
+## Thin hair left round the sides and back of a bald head.
+static func _balding(ci: CanvasItem, color: Color, kind: int, sx: float, head: Vector2, radius: float, u: float) -> void:
+	if kind == NORTH:
+		ci.draw_arc(head * u, (radius - 1.4) * u, PI * 0.08, PI * 0.92, 10, color, maxf(2.0, 3.6 * u))
+		return
+	for s in ([-1.0, 1.0] if kind == SOUTH else [-sx]):
+		_ellipse_outlined(ci, (head + Vector2(s * (radius - 1.5), 0.8)) * u, Vector2(2.3, 3.8) * u, color, 0.7 * u)
+
+
+## A baby is a swaddled bundle with a little round head, asleep (eyes shut) or awake, and crying
+## when `outfit.crying` is set.
+static func _swaddled(ci: CanvasItem, u: float, kind: int, sx: float, asleep: bool, outfit: Dictionary, skin: Color, hair: Color, top: Color) -> void:
+	var wrap := Color(0.92, 0.90, 0.82)
+	_ellipse(ci, Vector2(2.0, 10.0) * u, Vector2(10.0, 5.0) * u, Color(0, 0, 0, 0.22))
+	_ellipse_outlined(ci, Vector2(0.0, 3.5) * u, Vector2(8.6, 10.8) * u, wrap, 1.1 * u)
+	_ellipse(ci, Vector2(-2.2, 0.5) * u, Vector2(4.2, 6.0) * u, Color(1, 1, 1, 0.28))
+	var band := top.lightened(0.2)
+	ci.draw_line(Vector2(-7.6, 5.0) * u, Vector2(7.6, 5.0) * u, band, maxf(1.5, 2.6 * u))
+	for fold in [[-6.0, -1.0, 5.0, 10.0], [6.0, -1.0, -5.0, 10.0]]:
+		ci.draw_line(Vector2(fold[0], fold[1]) * u, Vector2(fold[2], fold[3]) * u, wrap.darkened(0.15), maxf(1.0, u))
+	var head := Vector2(sx * 1.2, -7.2)
+	var head_radius := 8.4
+	_ellipse_outlined(ci, head * u, Vector2(head_radius, head_radius - 0.4) * u, skin, 1.1 * u)
+	_ellipse(ci, (head + Vector2(-2.5, -3.0)) * u, Vector2(3.0, 2.6) * u, Color(1, 1, 1, 0.10))
+	if kind == NORTH:  # the back of its head: soft fuzz
+		_ellipse_outlined(ci, (head + Vector2(0.0, -0.4)) * u, Vector2(head_radius, head_radius - 0.8) * u, hair, 0.9 * u)
+		return
+	_ellipse_outlined(ci, (head + Vector2(sx * 0.8, -head_radius + 1.2)) * u, Vector2(3.6, 2.2) * u, hair, 0.7 * u)  # a tuft
+	var crying := bool(outfit.get("crying", false))
+	var shut := asleep or crying
+	var spots: Array = [-1.0, 1.0] if kind == SOUTH else [sx]
+	for s in spots:
+		var at := head + (Vector2(s * 3.4, 0.8) if kind == SOUTH else Vector2(s * 4.4, 0.6))
+		if shut:
+			ci.draw_line((at + Vector2(-1.5, 0.0)) * u, (at + Vector2(1.5, 0.0)) * u, EYE, maxf(1.0, 1.3 * u))
+		else:
+			_ellipse(ci, at * u, Vector2(1.5, 1.7) * u, EYE)
+		ci.draw_circle((at + Vector2(s * 1.8, 3.0)) * u, 1.7 * u, CHEEK)
+	var mouth := head + (Vector2(0.0, 4.4) if kind == SOUTH else Vector2(sx * 3.6, 4.4))
+	if crying:
+		_ellipse(ci, mouth * u, Vector2(2.4, 2.0) * u, Color(0.45, 0.10, 0.10))
+	else:
+		ci.draw_line((mouth + Vector2(-1.1, 0.0)) * u, (mouth + Vector2(1.1, 0.0)) * u, skin.darkened(0.35), maxf(1.0, 0.9 * u))
 
 
 ## Hair covering the top of the head (and all of it from behind).
@@ -226,6 +421,18 @@ static func _belt(ci: CanvasItem, u: float, kind: int, sx: float, center: Vector
 	if outfit.get("pouch", false) and kind != NORTH:
 		var at := center + Vector2((half - 2.5) * (sx if sx != 0.0 else 1.0), y + 2.2)
 		_ellipse_outlined(ci, at * u, Vector2(2.2, 2.6) * u, LEATHER.lightened(0.15), 0.7 * u)
+
+
+## An expecting mother's belly, rounding out the front of her clothes: `size` 0 (just showing) to
+## 1 (due). From behind it does not show.
+static func _bump(ci: CanvasItem, u: float, kind: int, sx: float, center: Vector2, size: float, top: Color) -> void:
+	var at := center + (Vector2(sx * (4.5 + 2.5 * size), 3.4) if kind != SOUTH else Vector2(0.0, 5.0 + 2.0 * size))
+	var radius := Vector2(3.0 + 2.8 * size, 3.6 + 2.4 * size) if kind != SOUTH else Vector2(5.0 + 3.6 * size, 3.6 + 3.2 * size)
+	_ellipse(ci, (at + Vector2(0.8, 1.4)) * u, radius * u, Color(0, 0, 0, 0.18))  # it throws a little shade
+	_ellipse_outlined(ci, at * u, radius * u, top.lightened(0.10), 0.9 * u)
+	_ellipse(ci, (at + Vector2(-radius.x * 0.28, -radius.y * 0.30)) * u, radius * Vector2(0.46, 0.40) * u, Color(1, 1, 1, 0.20))
+	if kind == SOUTH and size > 0.35:  # the gown pulled tight across it
+		ci.draw_arc(at * u, radius.x * 0.82 * u, PI * 0.15, PI * 0.85, 8, top.darkened(0.22), maxf(1.0, 0.9 * u))
 
 
 ## A linen apron over the front of the clothes, tied behind.

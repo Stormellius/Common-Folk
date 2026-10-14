@@ -1,9 +1,6 @@
 [
-  { "id": "fever", "name": "Fever", "caught": "has come down with a fever",
-    "chance_per_day": 0.015,
-    "season_multipliers": { "autumn": 1.5, "winter": 2.5 },
-    "dirty_below": 20, "dirty_multiplier": 2.0,
-    "recovery_per_day": 0.30, "rested_bonus": 0.20,
-    "fatal_after_days": 9, "death_cause": "died of a fever",
-    "need_drain_multipliers": { "rest": 1.5 } }
+  {"id": "fever", "name": "Fever", "caught": "has come down with a fever", "chance_per_day": 0.015, "season_multipliers": {"autumn": 1.5, "winter": 2.5}, "dirty_below": 20, "dirty_multiplier": 2.0, "recovery_per_day": 0.3, "rested_bonus": 0.2, "fatal_after_days": 9, "death_cause": "died of a fever", "need_drain_multipliers": {"rest": 1.5}},
+  {"id": "burns", "name": "Burns", "caught": "is badly burned", "chance_per_day": 0.0, "recovery_per_day": 0.2, "rested_bonus": 0.15, "fatal_after_days": 6, "death_cause": "died of their burns", "need_drain_multipliers": {"rest": 1.6}},
+  {"id": "injury", "name": "Injury", "caught": "is hurt", "chance_per_day": 0.0, "recovery_per_day": 0.18, "rested_bonus": 0.2, "fatal_after_days": 12, "death_cause": "died of their injuries", "need_drain_multipliers": {"rest": 1.4}},
+  {"id": "plague", "name": "Plague", "caught": "has the plague", "chance_per_day": 0.00012, "contagious": true, "season_multipliers": {"summer": 1.6, "autumn": 1.3}, "dirty_below": 30, "dirty_multiplier": 3.0, "spread_per_hour": 0.16, "spread_radius": 3, "immunity_days": 40, "recovery_per_day": 0.16, "rested_bonus": 0.1, "herb_bonus": 0.22, "fatal_after_days": 5, "death_cause": "died of the plague", "need_drain_multipliers": {"rest": 1.8, "hunger": 1.2}}
 ]

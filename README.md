@@ -1,240 +1,115 @@
 # Common Folk
 
-**Common Folk** is a medieval life sim sandbox with RimWorld-style looks: you live one person's life at a time in a randomly generated town that keeps running without you. The full plan is in the design document; this project is at **milestone 11 (Medieval layer)**.
+A medieval life sim sandbox with a RimWorld look, made in Godot 4.4. You play one of your **folk** at a time in a generated region of towns that carries on without you. They work, court, raise children, grow old and die, and the family goes on.
 
-## What works now
-
-- Seeded random terrain (grass, forest, water, stone, dirt), and on top of it a generated town: a rounded clearing, two dirt roads crossing in the middle, your own lot (16 by 13, south-west of the crossing), and along the roads a tavern, shop, clinic, village green, five houses and two empty lots, all from templates in `data/buildings.json` with the door turned to face the road. The same seed always gives the same town
-- Twelve townspeople live in the houses in families (shared surname, two adults and the children the beds allow). They have needs, traits and moods like your household, sleep, eat and wash at home, use the tavern's lute and the clinic's basin, and wander the roads, the green and their own yard by day. Children are drawn smaller and have only two traits. Things on a private lot can only be used by the people who live there; the tavern, shop, clinic and green are open to all. Deaths in town leave a grave and a message
-- Terrain drawn by a GPU shader in a gritty RimWorld-like style: muted earthy colors, grain, grass tufts, pebbly dirt, shallow-to-deep animated water, plated rock with a lit bevel and a cast shadow, and oak and pine trees with shadows. No art files needed yet
-- Day and night light (blue nights, warm dawn and dusk) and seasons (green spring, golden summer, brown autumn, snowy winter) that follow the game clock
-- Buildings with depth: a wall fills its tile and joins its neighbors, with a lit top, a shaded face where it ends to the south and stonework or planking that runs on from tile to tile, and walls throw soft shadows on the ground and floors east and south of them (light comes from the top-left everywhere). Floors are seamless boards, flagstones and strewn straw
-- Firelight: after dark, hearths, cooking fires, the watch post's lantern and the altar's candles light up what is around them and flicker. Walls stop the light (a doorway lets the glow out), so a lit room stays inside its walls. Smoke rises from hearths and drifts off on the wind
-- Weather, as a look only (needs and work do not notice it yet): each day is clear, cloudy or wet, rolled from the world seed with chances per season. Rain streaks down (snow in winter), heavy cloud dims and cools the day, cloud shadows drift across the town, and fireflies come out on summer nights
-- People dress for who they are: hoods and straw hats for peasants, felt caps for burghers, feathered hats, circlets and a gold trim for the gentry, linen coifs for many women, an apron for anyone who works a counter, belts, and beards for some men. The ill look pale, everyone breathes while standing, and names that would overlap stack under each other
-- Camera: pan, zoom toward the cursor, middle-mouse drag
-- Game clock with pause and 1x / 2x / 3x speed, a calendar with seasons, and a clock panel
-- A household of three people (names and looks from the world seed) drawn in RimWorld-style top-down art made by code. Control one at a time: click a person (or their portrait at the bottom, or press Tab) to select them, then right-click anywhere for a menu of what they can do there (walk, stop, sleep, eat, wash, and with another adult, spend time together). The others keep walking if they have orders
-- Pathfinding around water and rock with A* (forest is slower to cross, diagonals never cut corners), walking at one step per clock tick so pause and speed control apply
-- Needs: hunger, rest, warmth, hygiene, toilet and fun fall over time (faster or slower with traits, and warmth faster in winter). A starter camp on your lot has a bed for everyone plus a cooking pot, hearth, wash basin, chamber pot and lute. When nobody is giving orders, a person with a low need walks to the nearest free thing that fixes it and uses it until the need is full; people head to bed earlier after dark. Your orders always win, and an empty need slows a person down
-- A panel on the left shows the selected person's needs and what they are doing; right-click an object for its action (Sleep, Eat a meal, Wash...)
-- Build mode (B): on your home lot, place furniture, timber and stone walls (drag to run a wall; they join up at corners), doors and three kinds of floor; move things; take them down. Routes update as you build, anyone heading for something you move or remove stops, and a walk that gets cut off finds another way. A shaded edge and a gold outline show where the lot ends
-- People can die: a need with `fatal_after_hours` in `needs.json` (hunger 72 hours, warmth 48) kills after being empty that long, and any meal or fire starts the clock over. A grave is left where they fell, control passes to the next person, and when the last one dies the playthrough ends with a message (N for a new world, F9 to load). The household bar shows a green, amber or red strip for each person's worst need, so you can see who is in trouble while you control someone else
-- Thoughts and mood: each person has timed thoughts ("Slept in a bed +5", "Hungry -6", "Someone in the household died -15") and a mood from 0 to 100 that the panel shows with the reasons. Traits change how strongly things land (a lazy person enjoys a bed more, a neat one hates being dirty, a greedy one cares less for comfort) and a few thoughts belong to one trait only. A miserable person (mood under 20) drags their feet
-- Coin and work: your household shares a purse (shown under the clock, 120d to start). Right-click the notice board on the village green, or a counter in the shop, tavern or clinic, to take a job from the open vacancies; right-click again to quit. Each job has a shift and a wage: an idle worker walks to a free spot beside the business's counter when the shift starts, is paid by the hour on leaving, and goes home early if a need gets critical. Giving a worker any other order takes them off their shift for the day. The tavern sells meals and ale, the shop sells bread (the price shows in the menu); building now costs coin and taking something down gives half back. Some of the townspeople work too (each business keeps a vacancy for you), and they earn and spend by the same rules
-- Talking and opinions: everyone has an opinion (-100 to 100) of the people they know, shown with a label (Friend, Rival...) in the panel. Family starts fond of each other, strangers at zero, and opinions drift back toward neutral over the days. Right-click another person to chat, joke or argue (adults can also be intimate once they like each other enough). Chatting fills Social and warms the opinion, a joke can fall flat, an argument sours it. People also chat on their own when lonely: villagers talk to villagers, your household talks to anyone nearby. Speech bubbles show who is talking
-- Town events: a seeded roll each morning can bring a festival (people gather on the green and feel less lonely), a market day (food is half price) or a cold snap (winter only; warmth drains faster for three days). A message appears when one starts and ends
-- Three ways to begin (a start screen on a new world; `--start=bought|inherited|arrived` skips it): **bought land** (freehold, a camp, 90d, burghers), an **inherited cottage** (freehold, a standing house, 100d, gentry who will not do menial work and pay more tax) or **arrived with nothing** (the Crown lets you camp on the plot as a leaseholder for rent, 12d, peasants)
-- Land and the Crown: every lot you hold has a title, freehold or leasehold. Every fifteen days is a quarter day: the tax collector takes land tax (rent for a leasehold), guild dues and a share of your business's takings from the purse, scaled by your class. A short purse means he takes your dearest furnishing instead, and your standing falls; debts he cannot cover carry over, with a warning. Miss a second quarter day in a row and you are **evicted**: every lot you hold goes, your furnishings are taken (the house's walls stay), a business lot is empty again, the debt is wiped, your standing falls by 20 and everyone is miserable about it. You can lease your old plot again from the right-click menu (the entry fee) and start over. Decrees proclaimed on quarter days change the next quarter (a jubilee halves the tax, a war levy raises it and bread costs more, fair prices cut food costs). A leasehold can be bought out. The panel under the purse shows your class, title, the next tax day and what it will ask
-- A business lot: join the Merchants' Guild at the notice board (25d; the household becomes burghers, pays less trade tax and may hold a business lot), then right-click an empty lot to lease or buy it. Build tavern tables, ale barrels and bread shelves there (the Business tab in build mode) and townspeople who are hungry or bored will pay to use them; the coin goes to your purse
-- Faith and the chapel: the town has a chapel with an altar and pews, and Faith is now a need (it never slows anyone, and the Pious trait makes it drain faster). People pray when it runs low, a service is held about every week (the chapel fills and Faith and Social are restored), and you can build pews and an altar of your own
-- Illness: each midnight someone may catch a fever (likelier in autumn and winter, when filthy and in a cold snap). The ill feel low, tire faster and stay off work; most recover in a few days, resting helps, and a fever that drags past nine days kills. The clinic's sickbeds (10d) cure it, and ill people with the coin go there on their own
-- Raids and war, off-screen: from day 10, word now and then arrives of bandits or a warband with a strength and a number of days. You never fight. The outcome is the town's defense (food in the town, able adults, your standing, the defense fund and any watch posts you build) against that strength plus a little luck. Give coin to the fund at the notice board and build watch posts to tip it. A victory raises your standing; a defeat costs a share of your purse, some townspeople's lives and perhaps a member of your household
-- When the head of the household dies the eldest adult takes over and the Crown takes a tenth of the purse as death duty
-- Children: being intimate with a man gives a woman of the household a chance of conceiving. After 12 days everyone knows she is expecting (she eats and tires more and her mood lifts), in the last weeks she is heavy and stays off work, and after 45 days a baby is born into the household (a message names it; everyone is glad). She needs 15 days to recover before she can conceive again. A baby is carried by the household, cannot be selected or talked to and needs nothing, until it turns two. A year is 60 days, and everyone has a birthday: at 18 a child becomes an adult and finds their orientation. If only babies are left, the playthrough ends. Townswomen never conceive
-- Hover a tile to see what it is and whether it is walkable
-- Save and load (F5 / F9) with an autosave every midnight (`user://autosave.json`). Saves are written to a temporary file first and moved into place, a damaged or cut-off file is refused without changing anything, older saves (formats 1 to 8) still load, and the camera position and zoom come back. New world (N)
-- All content (tiles, seasons, needs, traits, buildings, the town's makeup) comes from JSON files in `data/`, and mods can add or replace it
+Milestones 1 to 19 are done; the plan from here is in [ROADMAP.md](ROADMAP.md). The data files and how to mod them are in [docs/DATA.md](docs/DATA.md).
 
 ## Run it
 
-1. Install Godot 4.4 or newer. On Nobara: `flatpak install flathub org.godotengine.Godot`, or install the `godot` package with dnf.
-2. Open Godot, click **Import**, choose this folder's `project.godot`, then press **F5** (or the play button).
-3. The first time, Godot builds its class cache. If you see "identifier not found" errors for `WorldState`, `MapView` and similar, close and reopen the project once.
+1. Install Godot 4.4 or newer (on Nobara: `flatpak install flathub org.godotengine.Godot`, or the `godot` package from dnf).
+2. Open Godot, click **Import**, pick `project.godot`, press **F5**.
+3. The first time, Godot builds its class cache. If you see "identifier not found" errors, close and reopen the project once.
 
-Options go after `--` on the command line, which is handy for testing and screenshots:
+## Playing
 
-```
-godot --path . -- --seed=1234 --day=50 --hour=12 --zoom=0.5 --look=70,30 --speed=0
-```
-
-`seed` is the world, `day` and `hour` set the date (day 0 is the first day, 15 days per season), `zoom` the camera zoom, `look` the tile to center on, and `speed` 0 to 3, `walk` a tile (such as `--walk=70,50`) to send the selected person to, and `menu` a tile to open the right-click menu on, `load=1` to load the newest save at start, `shot=path.png` to save a screenshot a moment after starting and quit, `weather` (`clear`, `cloudy`, `rain` or `snow`) to override the day's weather, `dying=1` to put the selected person minutes from starving, `needs` values for the selected person (such as `--needs=rest:10,hunger:30`), `build` to start in build mode with a tool (`--build=place:wall`, `floor:planks`, `remove`, `move`), `demohouse=1` to build a small room with the real build commands, and `together=1` to start the two-person interaction.
-
-## Controls
+You control one of your folk. Left-click a person (or their portrait, or press Tab) to switch to them; right-click anywhere for what they can do there. The others carry on with whatever they were doing. A game day lasts **one real hour** at normal speed (speeds are 1x, 3x, 10x and 30x), so there is time to watch a life and a fast-forward when you want to see a childhood go by.
 
 | Key | Action |
 | --- | --- |
-| WASD / arrow keys | Move the camera (hold Shift for faster) |
-| Left-click a person | Select that person |
-| Right-click | Menu of actions for the selected person at that spot (Walk here, Stop, object actions, and interactions when you click another person). Left-click a person to switch to them |
-| B | Build mode: pick a tool in the palette, left-click or drag to build, right-click or Esc to put it away |
-| Escape | Close the menu; in build mode, put the tool away, then leave build mode |
-| Tab / Shift+Tab | Next / previous person (camera jumps to them) |
-| C | Center the camera on the selected person |
-| Mouse wheel | Zoom |
-| Middle mouse drag | Pan |
-| Space | Pause / resume |
-| 1, 2, 3 | Set speed |
-| G | Toggle grid |
-| Home | Recenter camera |
-| F5 / F9 | Quick save (`user://savegame.json`) / load the newest of the quick save and the autosave |
-| N | New random world |
+| Left-click | Select a person |
+| Right-click | Menu of what the selected person can do there: walk, use things, work, talk, flirt, date, tend a baby |
+| WASD / arrows, Shift | Move the camera, faster |
+| Wheel, middle drag | Zoom, pan |
+| Tab / Shift+Tab | Next / previous of your folk |
+| C, Home | Centre on the selected person, on your home town |
+| T, M | Visit the next town, show the whole map |
+| Space, 1 to 4 | Pause, speed |
+| B | Build mode (right-click or Esc puts the tool away) |
+| G, H | Grid, list of keys |
+| F5 / F9 | Quick save / load the newest save |
+| F11 | Window or borderless full screen |
+| N, Esc | New game, menu |
 
-## How it is organized
+## What is in the game
 
-The simulation never touches the screen, and the screen only reads the simulation. Keep it that way and pause, speed control, saving and off-screen simulation all stay easy.
+**The world.** A 480 by 320 tile map of forest, lakes and rock with five settlements: your own town in the middle (cobbled streets crossing at a market square with a well and stalls, side streets of houses, inns, shops, a clinic, chapels, a green, lanterns and gardens) and a market town, two villages (one by a lake with a pier) and a hamlet a long walk away. The larger ones have a smithy, and the towns a carpenter too. Earth roads join them, going round water or crossing it on plank bridges. Every settlement has a name and its own people, who live and work there. The same seed always gives the same world.
+
+**Your folk.** Names, looks and traits come from the seed. Needs (hunger, rest, warmth, hygiene, toilet, social, fun, faith, libido) drain over time and feed a mood built from timed thoughts; an empty need slows a person down and some kill. Three ways to begin: bought land, an inherited cottage, or arriving with nothing.
+
+**Life and death.** Everyone is a baby, toddler, child, youth, adult or elder, drawn differently at each age. A lifespan setting (short to epic, or the calendar) decides how many days make a year. Elders slow down and die of old age between 62 and 80. Dying is not instant: **Death**, a hooded figure with a scythe, walks up and waits; family can plead with him, and he relents more readily the more they were loved. The dead are buried, mourned by name, and some walk as ghosts until someone prays at the grave.
+
+**Pregnancy and babies.** Pregnancy runs in three trimesters on the lifespan clock: morning sickness, cravings, a belly that shows, a heavy last stretch. Labour begins on its own and she goes to bed or the clinic's sickbed; someone staying with her is a midwife, and a hard birth can leave her weak or, rarely, kill her. There can be twins or triplets, and you name each baby. Babies sleep in a cradle and need feeding, soothing and washing; neglect one too long and the parish takes it. The town's couples have children too.
+
+**Love.** Flirt, kiss and ask out someone you are drawn to (orientation is a trait; family and people already taken are out of reach). Dating couples go on dates to the green, the tavern or the chapel. A partner can move in with you, or you can move in with them, and a break-up sends whoever moved in back home. When you are ready, buy or forge a **ring** and propose; once engaged, hold the **wedding** at the chapel, with your household and friends as guests. The couple then share a home and a name, and stay married until death. The town's own people pair up, move in, marry and have children without you.
+
+**Work, resources and money.** A shared purse, jobs at the shop, tavern, clinic and green with shifts and wages, and **work sites** at the edge of every town: fields (grain ripens in summer and autumn), a woodlot, a quarry, an herb garden and, by the lake, a jetty. Take a job there, or right-click a chopping block, a field or a quarry face to gather for your own stockpile. What you gather can be sold at a shop counter (more on market day) or used in building: a bed takes wood, a stone wall stone, and what you lack is bought at the shop's price. Besides that, quarter-day tax on land, titles (freehold or leasehold), the Merchants' Guild and business lots of your own, decrees, and eviction if you cannot pay.
+
+**Skills and tools.** Eleven skills (woodcutting, mining, farming, fishing, herbalism, cooking, healing, carpentry, smithing, music, trading) grow with practice, to ten levels, and make a person better at the work: bigger hauls, fewer accidents, faster crafting. The young learn quickly, folk with a talent quicker, and an apprentice beside a master twice as fast. Trades pass down families (children inherit talents and the family's trade) and anyone can ask a better hand for a lesson. Work needs the right tool in hand: an axe, a pickaxe, a sickle, a fishing rod and so on, taken from the household's stockpile, worn by use and put back after. Buy them at a shop's tool rack, or forge and carve them at a smithy or workshop's forge and bench.
+
+**Town life.** Festivals, market days, cold snaps and services; the chapel and faith; raids worked out off-screen against the town's defence. People chat and quarrel and remember it.
+
+**Danger.** A hearth can throw a spark, and fire spreads through timber, beds, straw and planks (stone does not burn). Folk run from flames and grown-ups nearby beat them out; anyone caught in them is burned, and burns kill. Work at the woodlot, quarry and jetty has its accidents: a falling tree, a rockfall, a fall into the water. Fevers come with the cold and the plague, rare and deadly, passes between people who stand close, worse among the filthy; the recovered are immune for a while. The clinic's sickbeds heal injuries and fevers, and herbs from the garden nurse the sick through. A fallen person can still be pleaded for.
+
+**Building.** On your own lot: furniture, timber and stone walls, doors, floors, business fittings and garden decor, with coin costs, refunds and live route updates.
+
+**Look and feel.** Terrain drawn by a GPU shader, walls with depth and shadows, firelight and lantern light at night, seasons, weather, cloud shadows, and everything else drawn by code. Menus are dark carved wood and parchment in IM Fell English and Alegreya. A title screen, named save slots, quick save, an autosave each midnight, and settings (window mode, size, interface scale, vsync).
+
+## Command line
+
+An ordinary launch opens the title screen. Options go after `--`, and any of them skips straight into a game:
 
 ```
-data/                  Base content as JSON (one file per kind of thing)
-mods/                  Mods, one folder each (example_mod is disabled by default)
-scenes/main.tscn       The only scene
-shaders/
-  terrain.gdshader     Paints the whole map on the GPU
-  clouds.gdshader      Drifting cloud shadows
+godot --path . -- --seed=1234 --day=50 --hour=12 --zoom=0.5 --look=240,160 --speed=0
+```
+
+| Option | Does |
+| --- | --- |
+| `seed`, `start`, `lifespan` | The world (a number), how to begin (`bought`, `inherited`, `arrived`), how fast people age |
+| `day`, `hour`, `speed` | The date (day 0 is the first), the hour, the speed 0 to 4 |
+| `zoom`, `look` | Camera zoom and the tile to centre on |
+| `walk`, `menu`, `needs` | Send the selected person to a tile, open the right-click menu on a tile, set needs (`--needs=rest:10`) |
+| `weather` | `clear`, `cloudy`, `rain` or `snow` |
+| `load=1`, `title=1`, `screen` | Load the newest save, show the title anyway, open a menu (`pause`, `save`, `load`, `settings`, `new`, `name`, `game_over`) |
+| `build`, `demohouse`, `together` | Start in build mode (`place:wall`, `floor:planks`, `remove`, `move`), build a small room, start a two-person interaction |
+| `fall`, `ghost`, `dying`, `fire` | See Death come, a ghost walk, someone starving, something alight |
+| `shot=path.png` | Save a screenshot a moment after starting and quit |
+
+## How it is organised
+
+The simulation never touches the screen and the screen only reads the simulation, so pause, speed, saving and off-screen simulation stay easy.
+
+```
+data/            All content as JSON, one file per kind of thing (see docs/DATA.md)
+mods/            Mods, one folder each
+fonts/           IM Fell English and Alegreya (SIL Open Font License)
+shaders/         Terrain and cloud shadows
+scenes/main.tscn The only scene
 scripts/
-  autoload/            Global singletons
-    data_registry.gd     Loads data/ and mods, answers "what is tile X?"
-    game_clock.gd        Fixed ticks, speed, calendar
-  sim/                 Game state and rules (no drawing here)
-    world_state.gd       The map as plain data, turns into a Dictionary
-    map_generator.gd     Seed -> terrain
-    town_generator.gd    Terrain -> roads, your lot and the buildings (from templates), with a reachability check
-    npc_generator.gd     The town's families, living in the houses
-    person_factory.gd    One random person: name, looks, traits, needs (household and town share it)
-    pawn.gd              One person: position, walking path, one step per tick
-    pawn_actions.gd      What a person can do at a spot (the right-click menu's entries)
-    needs.gd             Which needs are in play, drain rates, when to look for a fix
-    mood.gd              Thoughts and mood from data/thoughts.json
-    placed_object.gd     One bed, pot, wall... standing on the map
-    camp_generator.gd    Sets out the starting camp
-    household.gd         A group of people: yours (selected, died) or the town's
-    economy.gd           Currency, prices and building costs from data/economy.json
-    relations.gd         Opinion labels, family starting opinions, daily drift
-    realm.gd             The Crown: land titles, lots for sale, guild, quarter-day tax, decrees, succession
-    starts.gd            The three ways of beginning (data/starts.json)
-    illness.gd           Catching and recovering from sickness (data/illness.json)
-    pregnancy.gd         Conception, pregnancy, birth, carried babies and growing up (data/pregnancy.json)
-    conflict.gd          Raids and war, worked out off-screen from the town's defense (data/conflicts.json)
-    event_director.gd    Rolls and runs town events from data/events.json
-    household_generator.gd  Seed -> starting family (names, looks, where they stand)
-    path_finder.gd       A* over the tile map
-    simulation.gd        Ticks the world; the commands views may give (order_move, order_use, build_place...)
-    save_game.gd         Writes and reads the save file
-  view/                Drawing and input for the map
-    map_view.gd          Feeds the world and season look to the terrain shader (drawn in chunks)
-    day_night.gd         Tints the map by time of day and cloud; says how dark it is
-    tile_cursor.gd       Hover highlight and grid
-    pawn_art.gd          Draws a person with code, and works out what they wear (swap for sprites later)
-    object_art.gd        Draws beds, pots, walls, doors... with code
-    floor_art.gd         Draws planks, flagstone and straw
-    floor_layer.gd       The floors, between the ground and the objects
-    shadow_layer.gd      Soft shadows walls throw on the ground and floors
-    build_controller.gd  Build mode: lot shading, preview and mouse tools
-    build_ghost.gd       The green/red preview under the mouse
-    object_view.gd       One object on screen, with its firelight and, for a wall, what blocks the light
-    object_layer.gd      All objects, drawn under the people
-    pawn_view.gd         One pawn on screen, gliding between tiles
-    pawn_layer.gd        All pawns, route overlay, name stacking and mouse orders
-    smoke_layer.gd       Smoke rising from hearths
-    cloud_shadows.gd     Cloud shadows over the whole map
-    weather.gd           The day's weather; rain, snow and fireflies drawn over the screen
-    camera_controller.gd Pan and zoom
-  ui/hud.gd            Flat dark panels: clock and speed buttons, household bar, tile info, help, messages
-  ui/pawn_portrait.gd  Small person picture for the household bar
-  ui/build_icon.gd     Palette pictures for the build mode buttons
-  ui/action_menu.gd    The right-click pop-up list
-  main.gd              Wires it together and handles shortcuts
-tests/                 Headless checks
+  autoload/      DataRegistry (loads data and mods), GameClock (ticks, speed, calendar), Settings
+  sim/           Game state and rules; no drawing
+  view/          Drawing and input for the map: terrain, objects, people, lights, weather, camera
+  ui/            Theme, HUD, menus
+  main.gd        Wires it together
+tests/           Headless checks and tools
 ```
 
-One tick is one game minute. At 1x a tick takes 0.1 real seconds, so a game day lasts 144 seconds (48 at 3x). Change `TICK_SECONDS` in `game_clock.gd` to tune that.
+Most of the rules live in `sim/`: `simulation.gd` ticks the world and takes the commands the views may give; `pawn.gd` is one person; `needs`, `mood`, `relations`, `romance`, `pregnancy`, `babies`, `life`, `mortality`, `illness`, `economy`, `realm`, `conflict` and `event_director` are the systems; `region_generator.gd`, `town_generator.gd` and `npc_generator.gd` build the world; `save_game.gd` and `save_slots.gd` write it down.
 
-## Data and mods
+Time: one tick is one game minute, 2.5 real seconds at 1x. People take their steps on finer motion ticks between the minutes (`GameClock.SUBSTEPS_PER_MINUTE`), so a walk across town takes seconds. Change `DAY_SECONDS` in `game_clock.gd` to tune the pace.
 
-Each file in `data/` is a JSON array, and the file name is the kind of content. Every entry needs a unique `id`:
-
-```json
-[
-  { "id": "grass", "name": "Grass", "color": "#6b9a45", "style": "grass", "priority": 2, "walkable": true, "move_cost": 1.0 }
-]
-```
-
-A tile's look comes from three fields: `color` (its base color), `style` (`flat`, `grass`, `dirt`, `water`, `stone` or `forest`, which picks the texture in the shader) and `priority` (higher-priority tiles bleed over the edges of lower ones, so grass overlaps dirt and stone overlaps grass). Seasons in `seasons.json` add `foliage_tint` (multiplied into grass and leaves) and `snow` (0 to 1). A season looks exactly like itself for its first two thirds, then eases toward the next one.
-
-A mod is a folder in `mods/` (or `user://mods/` in a built game) with the same kinds of files:
-
-- A new `id` adds content.
-- An existing `id` replaces the whole base entry, so include all of its fields.
-- `{ "id": "water", "_remove": true }` deletes an entry.
-- A file with a new name (say `recipes.json`) adds a whole new kind of content.
-- An optional `mod.json` holds `name`, `enabled` and `load_order`.
-
-To try it, set `"enabled": true` in `mods/example_mod/mod.json` and restart. Grass turns bright green. Problems in data files (bad JSON, missing ids) are shown on screen and printed as warnings.
-
-`names.json` (given names and family names) and `appearance.json` (skin, hair and clothing colors) feed the household generator, so a mod can change who your people are. `needs.json` lists the needs (`drain_per_hour`, `optional: true` for ones nobody has yet, `slows_when_empty: false` for ones that can sit at zero harmlessly, like Libido, and `fatal_after_hours` with a `death_cause` for ones that can kill); `traits.json` changes drain rates and, with `thought_multipliers`, how strongly thoughts land (a trait with `"group": "orientation"` is an orientation: every new person gets exactly one of those plus two other, different traits); both are used now, and traits will matter more in milestone 7. Seasons in `seasons.json` can carry `need_drain_multipliers` (winter makes warmth drain 2.5 times faster), and the weather: `rain_chance` and `cloud_chance` per day (a wet day snows when the season's `snow` is 0.5 or more) and `fireflies: true`.
-
-`objects.json` describes the things people use:
-
-```json
-{ "id": "bed", "name": "Straw bed", "action": "Sleep", "doing": "Sleeping",
-  "blocks_walking": false, "use_position": "on", "pose": "lie",
-  "satisfies": { "rest": 14.0 }, "max_use_minutes": 600 }
-```
-
-`light` makes a thing glow after dark: `{ "color": "#ff9040", "radius": 4.5, "energy": 1.0 }` (radius in tiles; walls block it). `smoke: true` sends smoke up from it. `category` (default `furniture`) picks the build palette tab, `buildable: false` keeps something out of it, `connects` makes walls and doors join their neighbors, and `drag: true` lets the tool run a row. `satisfies` is points restored per hour of use; a person stops when every need it fills is full or after `max_use_minutes`. `use_position` is `on` (stand on the tile) or `beside`. `action` is the right-click menu entry and `doing` the activity shown in the panel. A need is only in play while some object satisfies it, so adding an object with `"satisfies": { "faith": 20 }` switches Faith on (it also needs `optional` to be false). Objects with no drawing in `object_art.gd` appear as a crate.
-
-`thoughts.json` lists the thoughts. A state thought has a `when` (`need` with `below` or `above`, `idle`, or `alone`) and holds while that is true; thoughts sharing a `group` do not stack, the strongest wins. An event thought has `on` (`used:<object id>`, `interaction:<id>`, `death`) and `hours` it lasts. `only_for` and `never_for` take trait ids.
-
-`economy.json` has one entry: the currency's `symbol`, the `start_coins` of a household, a `npc_start_coins` range for townspeople and the `refund_percent` when something is taken down. An object's `cost` is what building it costs, its `price` is what each use costs (the tavern table is 4d), and `offers_work` (`"town"` for the notice board, `"lot"` for a counter) makes it list vacancies. A floor's `cost` is per tile.
-
-`jobs.json` lists jobs: `workplace` (the kind of building: `tavern`, `shop`, `clinic`, `park`), `positions`, `wage` per hour, the shift's `from` and `to` hours, the `station` object a worker stands beside and `min_age`. The town fills all but one position of each business with townspeople at the start. Wages are the only money coming in and prices and building the only money going out for now; taxes and rent come with the medieval layer.
-
-`worldgen.json` has one entry, `town`: `npc_count`, how many `buildings` of each kind (`tavern`, `shop`, `clinic`, `park`, `house`, `vacant`; a mod can add kinds), the clearing's `half_width`, `half_height_up` and `half_height_down`, the `home_lot_size` and the `vacant_lot_size`.
-
-`buildings.json` holds the templates, each a picture in characters, one per tile: `#` timber wall, `S` stone wall, `+` door, `.` floor, a space for nothing, and a letter for an object (b bed, p cooking pot, h hearth, w wash basin, c chamber pot, l lute, t table, k counter, s shelf, r barrel, n bench, W well, m tavern table, a ale barrel, f bread shelf, B notice board, A altar, P pew, H sickbed). Draw the door in the bottom wall; the generator mirrors the template at random and turns it to face the road. `kind` says what it is (a `house` is filled with a family, one person per bed), `floor` is a floor id from `floors.json` laid inside, and `"public": true` lets anyone use what is in it.
-
-`floors.json` lists the floors the player can lay (`color`, `line`, and a `pattern` of `planks`, `flags` or `straw`).
-
-`illness.json` lists illnesses: `chance_per_day`, `season_multipliers`, `dirty_below` and `dirty_multiplier`, `recovery_per_day` (plus `rested_bonus` when well rested), `fatal_after_days` with a `death_cause`, and `need_drain_multipliers` while ill. An object that lists the illness in `cures` (with `cure_minutes`) heals whoever uses it; an event can set `illness_multiplier`. `conflicts.json` lists threats: `chance_per_day`, `cooldown_days`, `warning_days`, a `strength` range, the `announce`, `victory` and `defeat` texts with `{days}`, `{strength}` and `{defense}`, `plunder_percent`, `casualties` (a range), `household_death_chance` and the standing changes. How defense is counted is in `realm.json` under `defense`, and an object's own `defense` value is what a watch post adds. `distraint_exempt` in `realm.json` lists what the tax collector will not take.
-
-`starts.json` lists the ways of beginning: `title` (an id from `titles.json`), `class`, `coins`, `house` (a template from `buildings.json` already standing on the lot, or empty) and `camp` (the shared things set out, left out for all of them). `titles.json` has `tax_per_tile` per quarter, `price_per_tile` for buying and `entry_per_tile` for taking a lease. `classes.json` has a `rank` and a `tax_multiplier`; a job in `jobs.json` can list classes in `not_for`. `guilds.json` has the `join_fee`, `dues`, the class it `makes` its members, what it `grants` (`business_lot`) and its `business_tax_percent`. `realm.json` has `tax_every_days`, `business_tax_percent`, `death_duty_percent`, `max_business_lots`, `eviction_after_quarters` (consecutive unpaid quarter days before eviction) and `eviction_standing`, `decree_chance` and the standing changes. `pregnancy.json` has `duration_days`, `announce_after_days`, `heavy_after_days`, `recovery_days`, `max_mother_age`, `infant_until_age`, `year_days`, `need_drain_multipliers` for an expecting mother and `heavy_work_break`; the chance of conceiving is `conception_chance` on the intimacy interaction in `interactions.json`.
-
-A decree is an event with `"decree": true` and a `tax_multiplier`; it is never rolled with the others, only proclaimed on quarter day.
-
-`events.json` lists town events: `chance` per day (rolled from the world seed and the day number, so a seed always has the same events), `seasons` it can happen in, `cooldown_days`, `start_hour`, `duration_hours`, and effects: `need_drain_multipliers`, `price_multipliers` (by object id), `gather` (a kind of building where people gather) with `restore` (need points given while there) and a `thought` id.
-
-`interactions.json` describes things two people do together. Each can set `satisfies`, `max_use_minutes`, `pose` (`talk` or `close`), `opinion` (`gain`, plus `backfire` chance and `loss` for jokes that flop), `min_opinion` (needed to offer it) and `autonomous` (people do it on their own when a need is low). Chat, joke and argue are in the file as examples. Libido is filled this way too: right-click another adult and pick the entry.
-
-```json
-{ "id": "intimacy", "action": "Be intimate with {name}", "doing": "Spending private time together",
-  "satisfies": { "libido": 200 }, "max_use_minutes": 30, "adults_only": true,
-  "requires_attraction": true, "willing_below": { "libido": 85 }, "unwilling": "isn't in the mood" }
-```
-
-Both people must be adults, attracted to each other (`requires_attraction` reads the orientation traits in `traits.json`: `attracted_to` is `opposite`, `same`, `both` or `none`; someone with none of them is open to anyone) and willing (`willing_below`: each need listed must be under that number, otherwise the entry is greyed out with the `unwilling` reason), and the other person must not be busy. The asker walks over, both stand still side by side with hearts over their heads, both needs fill, and the panel says only what `doing` says. Nothing explicit is shown, and the people never do this on their own: only the player starts it (it needs a liking of at least 25). Ordering either person elsewhere ends it for both.
-
-If you export the game, add `*.json` under **Resources > Filters to export non-resource files** so the data files are included.
-
-## Tests
+## Tests and tools
 
 ```
-godot --headless --path . res://tests/smoke_test.tscn
+godot --headless --path . res://tests/smoke_test.tscn     # the whole rule set, about a minute
+godot --headless --path . res://tests/main_flow.tscn      # the real game from the title screen: start, pause, save, load
+godot --headless --path . res://tests/balance_check.tscn  # plays days with nobody giving orders; prints deaths, mood, needs
+godot --headless --path . res://tests/perf_check.tscn     # times a day of the whole region
+godot --headless --path . res://tests/town_dump.tscn -- --seed=7 --town=1   # the map and one town in characters
+godot --path . res://tests/pawn_gallery.tscn -- --stages=1 --shot=stages.png # people of every age, with a window
 ```
 
-This checks data loading, mods, the clock and calendar, world generation (same seed, same world), the town (lots keep apart, everything is reachable, houses are equipped, people live in families, private things stay private, a day in town, a death in town, saving it), pathfinding, pawn movement, the household, the right-click actions, needs and objects, coin and work (prices, build costs, shifts, wages, hiring, quitting), chatting and opinions, town events, starts, land, the guild, tax and succession, the chapel and Faith, illness and cures, raids, building, death, thoughts and mood, and the save round trip. Run it as a scene as shown; it needs the autoloads, which `--script` mode does not provide.
+Run the tests as scenes; they need the autoloads, which `--script` mode does not provide.
 
-```
-godot --headless --path . res://tests/balance_check.tscn
-```
+## Credits
 
-This is not a pass/fail test. It plays 15 days in spring and in winter on three seeds with nobody giving orders and prints deaths (yours and the town's), mood and the lowest each need got, so you can see whether a change to needs, thoughts or the camp broke the balance.
-
-Two more helpers: `res://tests/town_dump.tscn -- --seed=7` prints a picture of a generated town in characters, and `res://tests/perf_check.tscn` times one game day with the whole town (about 1.5 ms per tick). For the art, `godot --path . res://tests/pawn_gallery.tscn` shows one person of each class, sex and outfit from all four sides (add `-- --shot=gallery.png` to save it and quit; it needs a window, not `--headless`).
-
-## Graphics notes
-
-The terrain is procedural, so changing how it looks means editing `shaders/terrain.gdshader`. The `terrain()` function holds one block per style, `tree_shape()` and `tree_outline()` define the oak and pine silhouettes, and light always comes from the top-left (`LIGHT_DIR`). Tiles are 48 pixels at zoom 1 (`TILE_SIZE` in `map_view.gd`; change it there and everything else follows). Colors come from `data/tiles.json`, so a mod can re-tint the whole world. The shader uses only features of Godot's Compatibility renderer, so it runs on modest GPUs.
-
-Everything else is drawn by code too, in one style: dark outlines, a soft drop shadow, light from the top-left. Walls fill their tile; `WALL_FACE`, `TIMBER` and `STONE` at the top of `object_art.gd` set how tall their south face looks and their colors, and `shadow_layer.gd` sets how dark and wide their shadows are. Floors keep their colors in `data/floors.json`. People's outfits are chosen in `PawnArt.outfit_for()` from their class, sex, age, job and a hash of their name, so nothing extra is saved and the same person always looks the same; the hats, hoods and coifs are drawn by the functions under it.
-
-Firelight is a `PointLight2D` on each object with a `light` in `objects.json`, brighter the darker it is (`DayNight.darkness`), and every wall but a door carries a thin `LightOccluder2D` along its middle, so the inner face of a wall is lit and the light stops there. The terrain is drawn in 16 by 16 tile chunks (`CHUNK_TILES` in `map_view.gd`) so each light only has to be worked out where it reaches. Weather, smoke and fireflies run on a clock that stops while the game is paused; cloud cover and wind come from `Weather`'s static values, and `DayNight` dims the day by `Weather.gloom`.
-
-This is a procedural approximation of the RimWorld look. The real thing relies on hand-painted textures and sprites, so characters, furniture and buildings can later become sprites drawn on top (made in Krita or Aseprite, or from a free pack): replace `PawnArt.draw()`, `ObjectArt.draw()` or `FloorArt.draw()` and leave the rest alone. The day and night tint (a `CanvasModulate` node) and the firelight will apply to sprites automatically. To stop the dark nights, set the night colors in `day_night.gd` closer to white. The HUD colors are constants at the top of `scripts/ui/hud.gd`.
-
-## Known limits
-
-Weather is only a look: rain does not make anyone wet or cold, and the weather does not change what people do. Only walls stop firelight, not furniture or people, and there are no roofs, so a house is always open to the sky. The lot may include water or rocks you cannot build on. Pawns can walk through each other and are drawn over tree canopies. Townspeople's wages come from nowhere and pile up, and the only trade is what customers spend at the tables, barrels and shelves on your business lot (nobody staffs it, and there is no stock). Townspeople are not clickable, and only chat, work, live, wander and die. Nobody lives in the tavern, shop or clinic, and the shop sells only bread. Illness does not spread from person to person. Births have no complications, a pregnancy cannot be ended or prevented, there are no twins, and nobody ages out or dies of old age. Only the player's household has children: townspeople never conceive (they do have birthdays, and their children come of age).
-
-## Next
-
-The planned roadmap (milestones 1 to 11) is complete. What it leaves out, roughly in the order it would matter: building is instant, with no builders, materials, rooms or roofs (a house is walls, a door and a floor, paid for in coin); you can hold one business lot and nobody works it; there is no marriage, and a baby cannot be played until it is two; townspeople cannot be clicked or controlled; and art is still drawn by code, to be swapped for sprites.
+Type: IM Fell English by Igino Marini and Alegreya by Huerta Tipografica, under the SIL Open Font License (licenses in `fonts/`). Everything else is drawn by code.

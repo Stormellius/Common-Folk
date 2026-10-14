@@ -8,8 +8,14 @@ extends Camera2D
 const PAN_SPEED := 900.0  # screen pixels per second
 const FAST_MULTIPLIER := 2.5
 const ZOOM_STEP := 1.15
-const ZOOM_MIN := 0.25
+const ZOOM_MIN := 0.09
 const ZOOM_MAX := 4.0
+
+## False while a menu is open: the keys and the mouse wheel leave the camera alone.
+var input_enabled := true
+## Pixels per second to glide on its own (the title screen's slow look over the town). It turns
+## back at the edges of the map.
+var drift := Vector2.ZERO
 
 var _world_size := Vector2.ZERO
 var _dragging := false
@@ -40,6 +46,17 @@ func center_on_world() -> void:
 
 
 func _process(delta: float) -> void:
+	if drift != Vector2.ZERO:
+		position += drift * delta
+		var margin := get_viewport_rect().size / (2.0 * zoom.x)
+		if position.x < margin.x or position.x > _world_size.x - margin.x:
+			drift.x = -drift.x
+		if position.y < margin.y or position.y > _world_size.y - margin.y:
+			drift.y = -drift.y
+		_keep_on_map()
+	if not input_enabled:
+		_dragging = false
+		return
 	var direction := Vector2.ZERO
 	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
 		direction.y -= 1.0
@@ -56,6 +73,8 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if not input_enabled:
+		return
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
 			_zoom_toward_mouse(ZOOM_STEP)

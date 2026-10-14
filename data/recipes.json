@@ -1,0 +1,11 @@
+[
+  { "id": "forge_axe",       "station": "forge",     "skill": "smithing",  "name": "Forge an axe",             "inputs": { "wood": 1, "stone": 2 }, "outputs": { "axe": 1 },             "minutes": 90 },
+  { "id": "forge_pickaxe",   "station": "forge",     "skill": "smithing",  "name": "Forge a pickaxe",          "inputs": { "wood": 1, "stone": 3 }, "outputs": { "pickaxe": 1 },         "minutes": 100 },
+  { "id": "forge_sickle",    "station": "forge",     "skill": "smithing",  "name": "Forge a sickle",           "inputs": { "wood": 1, "stone": 1 }, "outputs": { "sickle": 1 },          "minutes": 60 },
+  { "id": "forge_knife",     "station": "forge",     "skill": "smithing",  "name": "Forge an herb knife",      "inputs": { "wood": 1, "stone": 1 }, "outputs": { "herb_knife": 1 },      "minutes": 45 },
+  { "id": "forge_hammer",    "station": "forge",     "skill": "smithing",  "name": "Forge a hammer",           "inputs": { "wood": 1, "stone": 2 }, "outputs": { "hammer": 1 },          "minutes": 70 },
+  { "id": "forge_smith",     "station": "forge",     "skill": "smithing",  "name": "Forge a smith's hammer",   "inputs": { "wood": 1, "stone": 3 }, "outputs": { "smiths_hammer": 1 },   "minutes": 100, "min_level": 1 },
+  { "id": "carve_rod",       "station": "workbench", "skill": "carpentry", "name": "Carve a fishing rod",      "inputs": { "wood": 2 },             "outputs": { "fishing_rod": 1 },     "minutes": 50 },
+  { "id": "carve_satchel",   "station": "workbench", "skill": "carpentry", "name": "Make a healer's satchel",  "inputs": { "wood": 2, "herbs": 2 }, "outputs": { "healers_satchel": 1 }, "minutes": 80, "min_level": 1 },
+  { "id": "forge_ring", "station": "forge", "skill": "smithing", "name": "Forge a ring", "inputs": { "wood": 1, "stone": 2 }, "outputs": { "ring": 1 }, "minutes": 120, "min_level": 2 }
+]

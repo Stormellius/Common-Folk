@@ -1,0 +1,23 @@
+[
+  { "id": "learning",
+    "xp_to_level": [0, 20, 60, 120, 200, 300, 420, 560, 720, 900, 1100],
+    "ranks": [
+      { "from": 0, "name": "Untrained" },
+      { "from": 1, "name": "Novice" },
+      { "from": 3, "name": "Apprentice" },
+      { "from": 5, "name": "Journeyman" },
+      { "from": 7, "name": "Expert" },
+      { "from": 9, "name": "Master" }
+    ],
+    "talent_bonus": 0.5,
+    "talent_from_parent": 0.4,
+    "talent_at_random": 0.3,
+    "master_gap": 3,
+    "master_radius": 7,
+    "master_bonus": 1.0,
+    "family_share": 0.3,
+    "family_default_xp": 70,
+    "lesson_xp": 40,
+    "lesson_min_level": 2,
+    "tool_buy_markup": 1.0 }
+]

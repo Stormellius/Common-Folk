@@ -5,6 +5,7 @@ extends Control
 
 var look: Dictionary = {}
 var outfit: Dictionary = {}
+var scale_factor := 1.0  # babies are drawn smaller
 
 
 func _init() -> void:
@@ -14,5 +15,7 @@ func _init() -> void:
 
 
 func _draw() -> void:
-	draw_set_transform(Vector2(22, 22), 0.0, Vector2.ONE)
-	PawnArt.draw(self, look, Vector2i(0, 1), 1.15, 0.0, false, outfit)
+	var grown := PawnArt.stage_scale(str(outfit.get("stage", "adult")))
+	var fit := pow(grown, 0.6)  # the young are smaller here too, but not by as much as in the world
+	draw_set_transform(Vector2(22, 22 + (1.0 - fit) * 9.0), 0.0, Vector2.ONE)
+	PawnArt.draw(self, look, Vector2i(0, 1), 1.15 * scale_factor * fit, 0.0, false, outfit)

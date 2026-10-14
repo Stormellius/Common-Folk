@@ -17,7 +17,7 @@ const SEARCH_RADIUS := 8
 
 ## `items` limits the shared things to those ids (null puts out all of them); `beds` puts out a bed for each person.
 static func place(world: WorldState, household: Household, items: Variant = null, beds: bool = true) -> void:
-	var center := Vector2i(world.width / 2, world.height / 2)
+	var center := world.home_center()
 	var inside := Rect2i()
 	if world.lot.size != Vector2i.ZERO:
 		center = world.lot.get_center()  # set out on the home lot, when there is one

@@ -32,24 +32,46 @@ static func active_ids() -> Array[String]:
 	return ids
 
 
+## What is worked out from the data once and kept, until the data is loaded again.
+static var _need_info := {}   # need id -> { "per_hour", "slows", "fatal" }
+static var _trait_drain := {} # trait id -> its need_drain_multipliers
+static var _info_revision := -1
+
+
+static func _info(need_id: String) -> Dictionary:
+	if _info_revision != DataRegistry.revision:
+		_need_info.clear()
+		_trait_drain.clear()
+		_info_revision = DataRegistry.revision
+	var info: Variant = _need_info.get(need_id)
+	if info == null:
+		var def := DataRegistry.get_def("needs", need_id)
+		info = { "per_hour": float(def.get("drain_per_hour", 0.0)), "slows": bool(def.get("slows_when_empty", true)), "fatal": float(def.get("fatal_after_hours", 0.0)) }
+		_need_info[need_id] = info
+	return info
+
+
 ## Points lost per game minute (one tick) by one person, given the season's multipliers.
 static func drain_per_tick(need_id: String, traits: Array[String], season_multipliers: Dictionary) -> float:
-	var per_hour := float(DataRegistry.get_def("needs", need_id).get("drain_per_hour", 0.0))
-	var factor := float(season_multipliers.get(need_id, 1.0))
+	var factor := float(season_multipliers.get(need_id, 1.0)) if not season_multipliers.is_empty() else 1.0
 	for trait_id in traits:
-		var multipliers: Dictionary = DataRegistry.get_def("traits", trait_id).get("need_drain_multipliers", {})
-		factor *= float(multipliers.get(need_id, 1.0))
-	return per_hour / 60.0 * factor
+		var multipliers: Variant = _trait_drain.get(trait_id)
+		if multipliers == null:
+			multipliers = DataRegistry.get_def("traits", trait_id).get("need_drain_multipliers", {})
+			_trait_drain[trait_id] = multipliers
+		if not multipliers.is_empty():
+			factor *= float(multipliers.get(need_id, 1.0))
+	return float(_info(need_id)["per_hour"]) / 60.0 * factor
 
 
 ## False for needs that may sit at zero without slowing the person down.
 static func slows_when_empty(need_id: String) -> bool:
-	return bool(DataRegistry.get_def("needs", need_id).get("slows_when_empty", true))
+	return bool(_info(need_id)["slows"])
 
 
 ## How many hours a need may stay empty before it kills, or 0 if it never does.
 static func fatal_after_hours(need_id: String) -> float:
-	return float(DataRegistry.get_def("needs", need_id).get("fatal_after_hours", 0.0))
+	return float(_info(need_id)["fatal"])
 
 
 ## Below this value an idle person starts looking for a fix.

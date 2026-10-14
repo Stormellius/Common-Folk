@@ -1,0 +1,21 @@
+[
+  { "id": "death",
+    "appears_after_minutes": 20,
+    "arrives_after_minutes": 60,
+    "takes_after_minutes": 240,
+    "plead_minutes": 30,
+    "plead_chance": 0.2,
+    "plead_chance_per_opinion": 0.004,
+    "plead_bonus": { "pious": 0.1 },
+    "spared_needs": 35,
+    "never_spares": ["died of old age"],
+    "restless_chance": 0.3,
+    "restless_chance_old_age": 0.1,
+    "haunt_chance": 0.35,
+    "haunt_from_hour": 23,
+    "haunt_until_hour": 4,
+    "ghost_scare_radius": 6,
+    "mourn_close_from": 50,
+    "mourn_from": 15,
+    "glad_below": -40 }
+]
