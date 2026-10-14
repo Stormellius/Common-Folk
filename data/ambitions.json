@@ -1,0 +1,170 @@
+[
+  { "id": "master_craftsman", "name": "Master Craftsman",
+    "text": "To be known across the land for fine work.",
+    "weights": { "talent:any": 3, "trade:any": 2 },
+    "steps": [
+      { "text": "Become an Apprentice at a skill", "goal": { "skill": "any", "level": 3 } },
+      { "text": "Become a Journeyman at a skill", "goal": { "skill": "any", "level": 5 } },
+      { "text": "Become a Master at a skill", "goal": { "skill": "any", "level": 9 } }
+    ] },
+
+  { "id": "jack_of_all_trades", "name": "Jack of All Trades",
+    "text": "To turn a hand to anything.",
+    "weights": { "trait:lazy": 0.3 },
+    "steps": [
+      { "text": "Learn three skills", "goal": { "skills_known": 3, "level": 2 } },
+      { "text": "Learn five skills", "goal": { "skills_known": 5, "level": 3 } },
+      { "text": "Learn seven skills well", "goal": { "skills_known": 7, "level": 4 } }
+    ] },
+
+  { "id": "friend_to_all", "name": "Friend to All",
+    "text": "To be loved by the whole town.",
+    "weights": { "trait:loner": 0.2 },
+    "steps": [
+      { "text": "Make two friends", "goal": { "friends": 2 } },
+      { "text": "Make five friends", "goal": { "friends": 5 } },
+      { "text": "Win a close friend", "goal": { "close_friends": 1 } },
+      { "text": "Make nine friends", "goal": { "friends": 9 } }
+    ] },
+
+  { "id": "true_love", "name": "True Love",
+    "text": "To find the one, and keep them.",
+    "never_for": ["asexual"],
+    "stages": ["youth", "adult"],
+    "weights": { "single": 1.5, "partner": 2 },
+    "steps": [
+      { "text": "Start courting someone", "goal": { "partner": true } },
+      { "text": "Go on three dates", "goal": { "deed": "had_date", "count": 3 } },
+      { "text": "Get engaged", "goal": { "engaged": true } },
+      { "text": "Marry", "goal": { "married": true } }
+    ] },
+
+  { "id": "hearth_and_home", "name": "Hearth and Home",
+    "text": "To raise a family under one good roof.",
+    "never_for": ["asexual"],
+    "stages": ["youth", "adult"],
+    "weights": { "partner": 2.5 },
+    "steps": [
+      { "text": "Marry", "goal": { "married": true } },
+      { "text": "Have a child", "goal": { "deed": "child", "count": 1 } },
+      { "text": "Have three children", "goal": { "deed": "child", "count": 3 } }
+    ] },
+
+  { "id": "fortune_seeker", "name": "Fortune Seeker",
+    "text": "To grow rich, and be seen to be.",
+    "weights": { "trait:greedy": 6, "talent:trading": 3, "trade:trading": 2 },
+    "steps": [
+      { "text": "Hold 60 coin", "goal": { "coins": 60 } },
+      { "text": "Hold 250 coin", "goal": { "coins": 250 } },
+      { "text": "Hold 800 coin", "goal": { "coins": 800 } }
+    ] },
+
+  { "id": "saintly_life", "name": "A Saintly Life",
+    "text": "To live in grace and be remembered for it.",
+    "weights": { "trait:pious": 6 },
+    "steps": [
+      { "text": "Pray five times", "goal": { "deed": ["used:pew", "used:altar"], "count": 5 } },
+      { "text": "Pray twenty times", "goal": { "deed": ["used:pew", "used:altar"], "count": 20 } },
+      { "text": "Pray fifty times", "goal": { "deed": ["used:pew", "used:altar"], "count": 50 } }
+    ] },
+
+  { "id": "wanderer", "name": "The Wanderer",
+    "text": "To see every town in the land.",
+    "weights": { "talent:trading": 3, "trade:trading": 2, "trait:loner": 1.5 },
+    "steps": [
+      { "text": "Visit another town", "goal": { "towns": 2 } },
+      { "text": "Visit three towns", "goal": { "towns": 3 } },
+      { "text": "Visit every town", "goal": { "towns": 5 } }
+    ] },
+
+  { "id": "mighty_hunter", "name": "Mighty Hunter",
+    "text": "To bring down the finest game in the forest.",
+    "weights": { "talent:hunting": 5, "skill:hunting": 4, "trade:hunting": 3 },
+    "steps": [
+      { "text": "Bring down three animals", "goal": { "deed": "hunted", "count": 3 } },
+      { "text": "Bring down twelve animals", "goal": { "deed": "hunted", "count": 12 } },
+      { "text": "Become an Expert hunter", "goal": { "skill": "hunting", "level": 7 } }
+    ] },
+
+  { "id": "healer_of_the_folk", "name": "Healer of the Folk",
+    "text": "To be the one they send for when all is lost.",
+    "weights": { "talent:healing": 5, "skill:healing": 4, "trade:healing": 3, "trait:pious": 1.5 },
+    "steps": [
+      { "text": "Tend two patients", "goal": { "deed": "healed", "count": 2 } },
+      { "text": "Tend eight patients", "goal": { "deed": "healed", "count": 8 } },
+      { "text": "Become an Expert healer", "goal": { "skill": "healing", "level": 7 } }
+    ] },
+
+  { "id": "troubadour", "name": "Troubadour",
+    "text": "To make the whole tavern sing.",
+    "weights": { "talent:music": 5, "skill:music": 4, "trade:music": 3 },
+    "steps": [
+      { "text": "Play the lute five times", "goal": { "deed": "used:lute", "count": 5 } },
+      { "text": "Become an Apprentice musician", "goal": { "skill": "music", "level": 3 } },
+      { "text": "Become an Expert musician", "goal": { "skill": "music", "level": 7 } }
+    ] },
+
+  { "id": "master_builder", "name": "Master Builder",
+    "text": "To leave a town better built than they found it.",
+    "weights": { "talent:carpentry": 4, "talent:masonry": 4, "skill:carpentry": 3, "skill:masonry": 3, "trade:carpentry": 2, "trade:masonry": 2 },
+    "steps": [
+      { "text": "Raise three buildings, walls or roofs", "goal": { "deed": "built", "count": 3 } },
+      { "text": "Raise twelve", "goal": { "deed": "built", "count": 12 } },
+      { "text": "Raise thirty", "goal": { "deed": "built", "count": 30 } }
+    ] },
+
+  { "id": "teacher", "name": "Teacher of the Young",
+    "text": "To pass on everything they know.",
+    "stages": ["adult", "elder"],
+    "weights": { "stage:elder": 3, "talent:any": 1.5 },
+    "steps": [
+      { "text": "Give two lessons", "goal": { "deed": "taught", "count": 2 } },
+      { "text": "Give eight lessons", "goal": { "deed": "taught", "count": 8 } },
+      { "text": "Give twenty lessons", "goal": { "deed": "taught", "count": 20 } }
+    ] },
+
+  { "id": "friend_of_animals", "name": "Friend of Animals",
+    "text": "To be followed home by every stray in the county.",
+    "weights": { "talent:husbandry": 5, "skill:husbandry": 4, "trade:husbandry": 3 },
+    "steps": [
+      { "text": "Pet an animal five times", "goal": { "deed": "petted", "count": 5 } },
+      { "text": "Pet an animal twenty times", "goal": { "deed": "petted", "count": 20 } },
+      { "text": "Become an Expert at husbandry", "goal": { "skill": "husbandry", "level": 7 } }
+    ] },
+
+  { "id": "master_of_the_kitchen", "name": "Master of the Kitchen",
+    "text": "To cook the meal that people talk about for years.",
+    "weights": { "talent:cooking": 5, "skill:cooking": 4, "trade:cooking": 3, "trait:glutton": 2 },
+    "steps": [
+      { "text": "Cook ten meals", "goal": { "deed": "used:cooking_pot", "count": 10 } },
+      { "text": "Become an Apprentice cook", "goal": { "skill": "cooking", "level": 3 } },
+      { "text": "Become an Expert cook", "goal": { "skill": "cooking", "level": 7 } }
+    ] },
+
+  { "id": "provider", "name": "Provider",
+    "text": "To see that nobody in the town goes hungry.",
+    "weights": { "talent:farming": 3, "talent:fishing": 3, "talent:woodcutting": 3, "talent:mining": 3, "talent:herbalism": 3 },
+    "steps": [
+      { "text": "Bring in fifteen loads", "goal": { "deed": "gathered", "count": 15 } },
+      { "text": "Bring in sixty loads", "goal": { "deed": "gathered", "count": 60 } },
+      { "text": "Bring in a hundred and fifty", "goal": { "deed": "gathered", "count": 150 } }
+    ] },
+
+  { "id": "contented_life", "name": "A Contented Life",
+    "text": "To be happy, and to know it.",
+    "weights": { "trait:lazy": 4, "trait:loner": 3, "trait:neat": 2 },
+    "steps": [
+      { "text": "Have three happy days", "goal": { "deed": "happy_day", "count": 3 } },
+      { "text": "Have ten happy days", "goal": { "deed": "happy_day", "count": 10 } },
+      { "text": "Have thirty happy days", "goal": { "deed": "happy_day", "count": 30 } }
+    ] },
+
+  { "id": "dreamer", "name": "Dreamer",
+    "text": "To live a life of small pleasures, one wish at a time.",
+    "weights": { },
+    "steps": [
+      { "text": "See five wishes come true", "goal": { "deed": ["wish_granted", "wish_granted_big"], "count": 5 } },
+      { "text": "See twenty wishes come true", "goal": { "deed": ["wish_granted", "wish_granted_big"], "count": 20 } },
+      { "text": "See fifty wishes come true", "goal": { "deed": ["wish_granted", "wish_granted_big"], "count": 50 } }
+    ] }
+]

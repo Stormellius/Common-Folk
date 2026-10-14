@@ -76,6 +76,11 @@ var _building_label: Label
 var _mood_bar: ProgressBar
 var _mood_fill: StyleBoxFlat
 var _mood_label: Label
+var _dream_title: Label
+var _dream_step: Label
+var _dream_bar: ProgressBar
+var _wish_text: RichTextLabel
+var _dream_done: Label
 var _thoughts_text: RichTextLabel
 var _relations_text: RichTextLabel
 var _skill_rows: Array[Dictionary] = []  # { "row": HBoxContainer, "name": Label, "bar": ProgressBar }
@@ -273,7 +278,7 @@ func _update_baby_chip(baby: Pawn) -> void:
 
 
 ## Shows the selected person's name, what they are doing and their need bars (hidden if null).
-func show_pawn(pawn: Pawn, activity: String, job: String = "", relations: Array[Dictionary] = []) -> void:
+func show_pawn(pawn: Pawn, activity: String, job: String = "", relations: Array[Dictionary] = [], dreams: Dictionary = {}) -> void:
 	_needs_panel.visible = pawn != null
 	if pawn == null:
 		return
@@ -288,8 +293,9 @@ func show_pawn(pawn: Pawn, activity: String, job: String = "", relations: Array[
 	_mood_bar.value = pawn.mood
 	_mood_fill.bg_color = BAND_COLORS[Needs.band(pawn.mood)]
 	_mood_label.text = Mood.band_name(pawn.mood).capitalize()
+	_show_dreams(dreams)
 	var lines: Array[String] = []
-	for part in pawn.mood_parts.slice(0, 8):
+	for part in pawn.mood_parts.slice(0, 6):
 		var value := float(part["mood"])
 		var color := "#a9c784" if value > 0.0 else "#e08a72"
 		lines.append("[color=%s][b]%s%d[/b][/color]  %s" % [color, "+" if value > 0.0 else "-", roundi(absf(value)), str(part["text"])])
@@ -328,6 +334,16 @@ func show_pawn(pawn: Pawn, activity: String, job: String = "", relations: Array[
 		var row: Dictionary = _need_rows[need_id]
 		row["bar"].value = value
 		row["fill"].bg_color = BAND_COLORS[Needs.band(value)]
+	_fit_needs_panel()
+
+
+## The panel is made smaller if all it has to say does not fit on the screen.
+func _fit_needs_panel() -> void:
+	var wanted := _needs_panel.get_combined_minimum_size().y
+	var factor := clampf((_root.size.y - 20.0) / maxf(wanted, 1.0), 0.6, 1.0)
+	if absf(factor - _needs_panel.scale.x) > 0.005:
+		_needs_panel.scale = Vector2(factor, factor)
+	_needs_panel.pivot_offset = Vector2(0.0, _needs_panel.size.y * 0.5)
 
 
 ## Pops up the right-click menu at a screen position.
@@ -552,6 +568,34 @@ func _section(box: VBoxContainer, title: String) -> void:
 	box.add_child(_make_label(title, "CapsLabel"))
 
 
+## The ambition and its step, and the small wishes (from Ambitions.summary).
+func _show_dreams(dreams: Dictionary) -> void:
+	var ambition := str(dreams.get("ambition", ""))
+	var wishes: Array = dreams.get("wishes", [])
+	var done: Array = dreams.get("done", [])
+	_dream_title.visible = ambition != "" or not done.is_empty()
+	_dream_done.visible = ambition != "" and not done.is_empty()
+	if _dream_done.visible:
+		_dream_done.text = "Fulfilled: " + ", ".join(done)
+	_dream_step.visible = ambition != ""
+	_dream_bar.visible = ambition != ""
+	if ambition != "":
+		_dream_title.text = "%s  (%d/%d)" % [ambition, int(dreams["step"]), int(dreams["steps"])]
+		_dream_title.tooltip_text = str(dreams.get("text", ""))
+		var have := float(dreams["have"])
+		var need := float(dreams["need"])
+		_dream_step.text = "%s (%s/%s)" % [str(dreams["step_text"]), str(roundi(have)), str(roundi(need))]
+		_dream_bar.max_value = maxf(1.0, need)
+		_dream_bar.value = have
+	elif _dream_title.visible:
+		_dream_title.text = "Fulfilled: " + ", ".join(done)
+		_dream_title.tooltip_text = ""
+	var lines: Array[String] = []
+	for wish in wishes:
+		lines.append("[color=%s]%s[/color]  [color=#a89c86]%dh[/color]" % ["#e7c46a" if bool(wish["big"]) else "#d8cdb4", str(wish["text"]), int(wish["hours"])])
+	_wish_text.text = "\n".join(lines) if not lines.is_empty() else "[color=#a89c86]Nothing in particular[/color]"
+
+
 func _build_needs_panel() -> void:
 	_needs_panel = PanelContainer.new()
 	_root.add_child(_needs_panel)
@@ -592,6 +636,28 @@ func _build_needs_panel() -> void:
 	mood_row.add_child(_mood_bar)
 	_mood_label = _make_label("", "DimLabel")
 	mood_row.add_child(_mood_label)
+
+	_section(box, "Dreams")
+	_dream_title = _make_label("", "")
+	_dream_title.add_theme_font_size_override("font_size", 15)
+	_dream_title.add_theme_color_override("font_color", Color(0.92, 0.82, 0.58))
+	_dream_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_dream_title.custom_minimum_size = Vector2(214, 0)
+	_dream_title.mouse_filter = Control.MOUSE_FILTER_STOP
+	box.add_child(_dream_title)
+	_dream_step = _make_label("", "DimLabel")
+	_dream_step.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_dream_step.custom_minimum_size = Vector2(214, 0)
+	box.add_child(_dream_step)
+	_dream_bar = _make_bar(1.0)
+	_dream_bar.custom_minimum_size = Vector2(214, 8)
+	box.add_child(_dream_bar)
+	_wish_text = _make_rich_text()
+	box.add_child(_wish_text)
+	_dream_done = _make_label("", "DimLabel")
+	_dream_done.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_dream_done.custom_minimum_size = Vector2(214, 0)
+	box.add_child(_dream_done)
 
 	_section(box, "Needs")
 	for need_id in Needs.active_ids():

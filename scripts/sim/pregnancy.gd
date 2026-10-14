@@ -286,6 +286,11 @@ static func _give_birth(sim: Simulation, mother: Pawn, rng: RandomNumberGenerato
 	var babies: Array[Pawn] = []
 	for i in maxi(1, mother.babies_due):
 		babies.append(_make_baby(sim, mother, rng))
+	var father := sim.person(mother.pregnancy_father)
+	for baby in babies:
+		Ambitions.note(mother, "child")
+		if father != null:
+			Ambitions.note(father, "child")
 	sim.end_labour(mother)
 	mother.pregnant_since = -1
 	mother.labour_since = -1

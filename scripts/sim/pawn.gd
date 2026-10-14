@@ -149,6 +149,19 @@ var carrying: Dictionary = {}
 var contract_until := 0
 ## The caravan a person is riding with (0 for none): see Caravans.
 var caravan := 0
+## Ambitions and wishes (see Ambitions): what they have done in their life, counted by event key; the
+## ambition they are after, which step they are on, the tick from which they may take up a new one, and
+## the ambitions they have fulfilled; the small wishes they have now ({ "id", "until", maybe "retry" }), when each was
+## last granted, the towns they have been to, and, not saved, news for the player.
+var deeds: Dictionary = {}
+var ambition := ""
+var ambition_step := 0
+var ambition_next := 0
+var ambitions_done: Array[String] = []
+var wishes: Array[Dictionary] = []
+var wish_done: Dictionary = {}
+var visited: Array[String] = []
+var news: Array[String] = []
 ## Ticks to wait before looking for something to do about a need again.
 var think_cooldown := 0
 
@@ -325,6 +338,14 @@ func to_dict() -> Dictionary:
 		"tool": tool,
 		"tool_lent": tool_lent,
 		"job_recipe": job_recipe,
+		"deeds": deeds.duplicate(),
+		"ambition": ambition,
+		"ambition_step": ambition_step,
+		"ambition_next": ambition_next,
+		"ambitions_done": Array(ambitions_done),
+		"wishes": wishes.duplicate(true),
+		"wish_done": wish_done.duplicate(),
+		"visited": Array(visited),
 		"look": look.duplicate(),
 		"tile": _vec_to_array(tile),
 		"facing": _vec_to_array(facing),
@@ -429,6 +450,27 @@ static func from_dict(data: Dictionary) -> Pawn:
 	pawn.tool = str(data.get("tool", ""))
 	pawn.tool_lent = bool(data.get("tool_lent", false))
 	pawn.job_recipe = str(data.get("job_recipe", ""))
+	var saved_deeds: Variant = data.get("deeds", {})
+	if saved_deeds is Dictionary:
+		for key in saved_deeds:
+			pawn.deeds[str(key)] = int(saved_deeds[key])
+	pawn.ambition = str(data.get("ambition", ""))
+	pawn.ambition_step = int(data.get("ambition_step", 0))
+	pawn.ambition_next = int(data.get("ambition_next", 0))
+	for done_id in data.get("ambitions_done", []):
+		pawn.ambitions_done.append(str(done_id))
+	for saved_wish in data.get("wishes", []):
+		if saved_wish is Dictionary and saved_wish.has("id"):
+			var wish := { "id": str(saved_wish["id"]), "until": int(saved_wish.get("until", 0)) }
+			if saved_wish.has("retry"):
+				wish["retry"] = int(saved_wish["retry"])
+			pawn.wishes.append(wish)
+	var saved_wish_done: Variant = data.get("wish_done", {})
+	if saved_wish_done is Dictionary:
+		for wish_id in saved_wish_done:
+			pawn.wish_done[str(wish_id)] = int(saved_wish_done[wish_id])
+	for town_id in data.get("visited", []):
+		pawn.visited.append(str(town_id))
 	var saved_look: Variant = data.get("look", {})
 	pawn.look = saved_look.duplicate() if saved_look is Dictionary else {}
 	if pawn.look.has("hair_style"):

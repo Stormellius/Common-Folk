@@ -1,6 +1,6 @@
 # Common Folk: roadmap
 
-Milestones 1 to 22 are done. This file keeps the plan for 12 to 22 as it was built, and what comes next (23 to 25). Each milestone ended with the game playable, the smoke test passing and older saves still loading.
+Milestones 1 to 23 are done. This file keeps the plan for 12 to 23 as it was built, and what comes next (24 and 25). Each milestone ended with the game playable, the smoke test passing and older saves still loading.
 
 ## What the people are called
 
@@ -109,12 +109,20 @@ Folk are born, grow up, grow old and die, as in the Sims, with a medieval face o
 - **Trading with a caravan**: it sells cloth, salt, wine, spice and a little iron and leather; it buys what the region makes, paying far better than the shop for the three goods it is looking for (up to what it needs)
 - **Riding along**: pay a fare and climb on; the caravan leaves within the hour and you step down at its next stop
 
+## Milestone 23: Ambitions and wishes (done)
+
+- **Ambitions** (`data/ambitions.json`): from youth on everyone has a lifetime goal in three or four steps, such as Master Craftsman, Friend to All, True Love, Hearth and Home, Fortune Seeker, A Saintly Life, The Wanderer, Mighty Hunter, Healer of the Folk, Troubadour, Master Builder, Teacher of the Young, Friend of Animals, Master of the Kitchen, Provider, A Contented Life, Jack of All Trades and Dreamer. Each step is a measurable goal (a skill level, friends, coin, towns visited, a deed done so many times, an engagement or marriage); a step reached lifts the mood for a day, a fulfilled ambition for five and leaves a lasting lift; a few days later they take up another
+- **Who picks what**: each ambition has `weights` for traits, talents, skills, family trade, stage of life and whether they have a partner, so the pious lean saintly, the greedy rich and the gifted toward their gift; some are never picked by those they do not suit
+- **Deeds**: every event that gives a thought now also counts as a deed on the person (`used:lute`, `hunted`, `interaction:chat`, `built`, `child`, `healed`...), which is what ambitions and wishes are measured from, so new content can be wished for without new code
+- **Wishes** (`data/wishes.json`): two small wishes at a time (one for a child), rolled hourly from what suits them and what the world has (no wish for a lute where there is none), each lapsing after a day or two. Granting one, by doing the thing however it came about, lifts the mood (more for harder wishes). Idle folk, the town's included, act on their wishes now and then in waking hours: they go to the lute, the hearth, the pew, someone to talk to, an animal, or another town (the town's people only)
+- **The panel** shows the ambition, its step and how far along, the wishes with their hours left, and what they have fulfilled; the player is told when a step is reached, an ambition fulfilled or a wish comes true. The panel shrinks to fit a short window
+- The rules (how many wishes, how often they come, how long before a new dream, how far folk will go) are in `data/dreams.json`. Saves are format 13; older ones load and everyone is given an ambition
+
 ## The plan from here
 
-Three milestones, in the order that lets each one build on the last. Each ends with the game playable, the smoke test passing and older saves still loading.
+Two milestones, in the order that lets each one build on the last. Each ends with the game playable, the smoke test passing and older saves still loading.
 
 - **21 Builders and rooms**: building as a job, with materials hauled to the site; rooms, roofs and the indoor/outdoor difference
-- **23 Ambitions**: a lifetime aspiration for each of your folk and small wishes that come and go
 - **24 Other families**: play any family in the town, inheritance of land and goods, the town's families carrying on without you, moving between towns
 - **25 Sound and music**: ambient sound, music, instruments to play
 

@@ -1,0 +1,19 @@
+[
+  { "id": "dreams",
+    "ambition_stages": ["youth", "adult", "elder"],
+    "pick_wait_days": 3,
+    "wish_stages": ["child", "youth", "adult", "elder"],
+    "max_wishes": 2,
+    "max_wishes_child": 1,
+    "wish_chance": 0.5,
+    "wish_cooldown_hours": 20,
+    "pursue_every": 40,
+    "pursue_reach": 36,
+    "pursue_retry": 90,
+    "pursue_from_minute": 420,
+    "pursue_until_minute": 1260,
+    "friend_opinion": 30.0,
+    "close_friend_opinion": 60.0,
+    "happy_mood": 70.0,
+    "news_limit": 6 }
+]

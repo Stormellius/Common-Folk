@@ -151,7 +151,8 @@ func _unhandled_input(event: InputEvent) -> void:
 ## fall = minutes: the selected person fell that long ago and lies dying (to see Death come),
 ## ghost = 1: a townsperson has died, and their ghost walks tonight,
 ## screen = a menu to open at the start: pause, save, load, settings, new, name or game_over,
-## fire = 1: the nearest thing that can burn to the selected person catches alight.
+## fire = 1: the nearest thing that can burn to the selected person catches alight,
+## dreams = 1: the selected person is partway up an ambition and has two wishes.
 ## Handy for screenshots and testing.
 func _launch_option(name: String) -> String:
 	var prefix := "--%s=" % name
@@ -233,6 +234,8 @@ func _apply_launch_options() -> void:
 		_start_demo_caravan()
 	if _launch_option("plans") != "" and sim != null:
 		_start_demo_plans(int(_launch_option("plans")))
+	if _launch_option("dreams") != "" and sim != null and sim.household.selected() != null:
+		_start_demo_dreams(sim.household.selected())
 	if _launch_option("wedding") != "" and sim != null and sim.household.selected() != null:
 		_start_demo_wedding()
 	if _launch_option("speed") != "":
@@ -329,6 +332,15 @@ func _build_demo_house() -> void:
 	sim.build_place("wall", origin + Vector2i(5, 3))
 	sim.build_place("bed", origin + Vector2i(2, 2))
 	sim.build_place("hearth", origin + Vector2i(7, 2))
+
+
+## For screenshots: the selected person is on the way to mastering a craft, and has two wishes.
+func _start_demo_dreams(pawn: Pawn) -> void:
+	pawn.ambition = "master_craftsman"
+	pawn.ambition_step = 1
+	pawn.skills["carpentry"] = Skills.xp_for_level(4) + 40.0
+	pawn.wishes = [{ "id": "play_lute", "until": GameClock.tick + 20 * 60 }, { "id": "kiss_partner", "until": GameClock.tick + 30 * 60 }]
+	pawn.ambitions_done = ["friend_to_all"] as Array[String]
 
 
 ## For looking at building work: the demo house gets a roof planned, a bed and a table, and two of
@@ -561,7 +573,7 @@ func _process(_delta: float) -> void:
 	if sim != null and _in_game:
 		hud.update_household_status(sim.household)
 		var chosen := sim.household.selected()
-		hud.show_pawn(chosen, sim.describe_activity(chosen) if chosen != null else "", sim.job_text(chosen) if chosen != null else "", sim.relationship_lines(chosen) if chosen != null else [])
+		hud.show_pawn(chosen, sim.describe_activity(chosen) if chosen != null else "", sim.job_text(chosen) if chosen != null else "", sim.relationship_lines(chosen) if chosen != null else [], Ambitions.summary(sim, chosen) if chosen != null else {})
 		hud.set_events(sim.events.names())
 		hud.set_purse(sim.household.coins, sim.household.stock)
 		hud.set_animals(Fauna.kept_text(sim))

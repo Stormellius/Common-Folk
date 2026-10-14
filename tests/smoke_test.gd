@@ -39,6 +39,7 @@ func _ready() -> void:
 	_section("animals", _test_animals)
 	_section("construction", _test_construction)
 	_section("trade", _test_trade)
+	_section("dreams", _test_dreams)
 	_section("events", _test_events)
 	_section("realm", _test_realm)
 	_section("faith_and_illness", _test_faith_and_illness)
@@ -894,7 +895,7 @@ func _test_town() -> void:
 		surnames[pawn.display_name.get_slice(" ", 1)] = surnames.get(pawn.display_name.get_slice(" ", 1), 0) + 1
 	_check(surnames.size() < town.pawns.size() and surnames.size() >= 4, "they live in families (%d surnames)" % surnames.size())
 	var again_town := NpcGenerator.create(world)
-	_check(again_town.to_dict() == town.to_dict(), "the same seed gives the same people")
+	_check(_sans_dreams(again_town.to_dict()) == _sans_dreams(town.to_dict()), "the same seed gives the same people")
 
 	# Whose things are whose.
 	var home_bed: PlacedObject = null
@@ -3193,6 +3194,309 @@ func _test_trade() -> void:
 		Caravans.new_day(sim, rng)
 		many = maxi(many, world.caravans.size())
 	_check(many >= 2 and many <= int(rules["max_active"]), "new caravans set out from time to time, never more than %d (%d)" % [int(rules["max_active"]), many])
+
+
+## A household's save data without the ambitions and wishes the simulation hands out once it starts.
+func _sans_dreams(data: Dictionary) -> Dictionary:
+	var copy := data.duplicate(true)
+	for person in copy.get("pawns", []):
+		for key in ["ambition", "ambition_step", "ambition_next", "ambitions_done", "deeds", "wishes", "wish_done", "visited"]:
+			person.erase(key)
+	return copy
+
+
+func _weight_key_ok(key: String) -> bool:
+	var kind := key.get_slice(":", 0)
+	var arg := key.get_slice(":", 1)
+	match kind:
+		"trait":
+			return DataRegistry.has_def("traits", arg)
+		"talent", "skill":
+			return arg == "any" and kind == "talent" or Skills.skill_ids().has(arg)
+		"trade":
+			return arg == "any" or Skills.skill_ids().has(arg)
+		"stage":
+			return DataRegistry.has_def("life_stages", arg)
+		"partner", "single":
+			return true
+	return false
+
+
+func _dream_pawn(full_name: String, age: int, id: int, traits: Array[String] = [], talents: Array[String] = []) -> Pawn:
+	var person := _townsperson(full_name, "female", age, id)
+	person.traits = traits
+	person.talents = talents
+	return person
+
+
+func _test_dreams() -> void:
+	print("Ambitions and wishes")
+	var goal_keys := ["deed", "skill", "skills_known", "friends", "close_friends", "coins", "towns", "partner", "engaged", "married"]
+	var ambitions_ok := true
+	var ambition_count := 0
+	for def in DataRegistry.get_list("ambitions"):
+		ambition_count += 1
+		var steps: Array = def.get("steps", [])
+		ambitions_ok = ambitions_ok and steps.size() >= 3 and str(def.get("text", "")) != ""
+		for key in def.get("weights", {}):
+			ambitions_ok = ambitions_ok and _weight_key_ok(str(key))
+		for trait_id in def.get("never_for", []):
+			ambitions_ok = ambitions_ok and DataRegistry.has_def("traits", str(trait_id))
+		for step in steps:
+			var goal: Dictionary = step["goal"]
+			var named := 0
+			for key in goal_keys:
+				named += 1 if goal.has(key) else 0
+			ambitions_ok = ambitions_ok and named == 1 and str(step.get("text", "")) != "" and Ambitions.measure(Pawn.new(), goal).y > 0.0
+			if goal.has("skill") and str(goal["skill"]) != "any":
+				ambitions_ok = ambitions_ok and Skills.skill_ids().has(str(goal["skill"]))
+	_check(ambitions_ok and ambition_count >= 14, "every ambition has steps with goals that can be measured (%d ambitions)" % ambition_count)
+	var wishes_ok := true
+	var wish_count := 0
+	for def in DataRegistry.get_list("wishes"):
+		wish_count += 1
+		var deeds: Variant = def.get("deed", "")
+		wishes_ok = wishes_ok and str(def.get("text", "")) != "" and float(def.get("hours", 0)) > 0.0 and (deeds is Array and not deeds.is_empty() or deeds is String and deeds != "")
+		for key in def.get("weights", {}):
+			wishes_ok = wishes_ok and _weight_key_ok(str(key))
+		for stage in def.get("stages", []):
+			wishes_ok = wishes_ok and DataRegistry.has_def("life_stages", str(stage))
+		if def.has("object"):
+			wishes_ok = wishes_ok and DataRegistry.has_def("objects", str(def["object"]))
+		var action: Dictionary = def.get("do", {})
+		if action.has("use"):
+			wishes_ok = wishes_ok and DataRegistry.has_def("objects", str(action["use"])) and str(action["use"]) == str(def.get("object", ""))
+		if action.has("interact"):
+			wishes_ok = wishes_ok and DataRegistry.has_def("interactions", str(action["interact"]))
+		if def.has("skill"):
+			wishes_ok = wishes_ok and Skills.skill_ids().has(str(def["skill"]))
+	_check(wishes_ok and wish_count >= 18, "every wish asks for a deed, and what it uses and does exist (%d wishes)" % wish_count)
+
+	# Who picks what.
+	var neutral := _dream_pawn("Mary Cooper", 25, 900)
+	var devout := _dream_pawn("Edith Cooper", 25, 901, ["pious"] as Array[String])
+	var singer := _dream_pawn("Joan Cooper", 25, 902, [] as Array[String], ["music"] as Array[String])
+	var tally := { "neutral": {}, "devout": {}, "singer": {} }
+	for seed_value in 150:
+		for entry in [["neutral", neutral], ["devout", devout], ["singer", singer]]:
+			var chosen := Ambitions.pick(entry[1], seed_value)
+			tally[entry[0]][chosen] = int(tally[entry[0]].get(chosen, 0)) + 1
+	_check(int(tally["devout"].get("saintly_life", 0)) > 3 * int(tally["neutral"].get("saintly_life", 0)) and int(tally["devout"].get("saintly_life", 0)) > 30, "the pious lean toward a saintly life (%d of 150, against %d)" % [int(tally["devout"].get("saintly_life", 0)), int(tally["neutral"].get("saintly_life", 0))])
+	_check(int(tally["singer"].get("troubadour", 0)) > 2 * int(tally["neutral"].get("troubadour", 0)) and int(tally["singer"].get("troubadour", 0)) > 20, "a gift for music leans toward being a troubadour (%d of 150)" % int(tally["singer"].get("troubadour", 0)))
+	_check(tally["neutral"].size() >= 10 and Ambitions.pick(neutral, 7) == Ambitions.pick(neutral, 7), "and otherwise it is a spread, the same each time for the same day (%d kinds)" % tally["neutral"].size())
+	var cold := _dream_pawn("Ada Cooper", 25, 903, ["asexual"] as Array[String])
+	var elder := _dream_pawn("Olga Cooper", 70, 904)
+	var youth := _dream_pawn("Kit Cooper", 15, 905)
+	var picks := { "cold": {}, "elder": {}, "youth": {} }
+	for seed_value in 150:
+		for entry in [["cold", cold], ["elder", elder], ["youth", youth]]:
+			picks[entry[0]][Ambitions.pick(entry[1], seed_value)] = true
+	_check(not picks["cold"].has("true_love") and not picks["cold"].has("hearth_and_home") and not picks["elder"].has("true_love") and not picks["youth"].has("teacher"), "ambitions that do not suit someone are never picked (love for the asexual, courting for elders, teaching for youths)")
+	var child := _dream_pawn("Tom Cooper", 8, 906)
+	var baby := _dream_pawn("Bea Cooper", 0, 907)
+	_check(Ambitions.may_dream(neutral) and Ambitions.may_dream(youth) and Ambitions.may_dream(elder) and not Ambitions.may_dream(child) and not Ambitions.may_dream(baby), "from youth on, a person has an ambition; children and babies do not")
+
+	# Steps, one by one.
+	var game := _open_field()
+	var sim: Simulation = game["sim"]
+	var household: Household = game["household"]
+	var anna: Pawn = game["anna"]
+	var ben: Pawn = game["ben"]
+	var lines: Array[String] = []
+	sim.health_notice.connect(func(text: String) -> void: lines.append(text))
+	_check(anna.ambition != "" and ben.ambition != "" and DataRegistry.has_def("ambitions", anna.ambition), "a new household's folk each start with an ambition (%s, %s)" % [anna.ambition, ben.ambition])
+	anna.ambition = "saintly_life"
+	anna.ambition_step = 0
+	anna.deeds.clear()
+	anna.ambitions_done.clear()
+	for i in 5:
+		Mood.add_event(anna, "used:pew", GameClock.tick)
+	_check(anna.ambition_step == 1 and int(anna.deeds["used:pew"]) == 5, "five prayers reach the first step of a saintly life")
+	var mood := Mood.evaluate(anna, household, GameClock.tick)
+	var texts := ""
+	for part in mood["parts"]:
+		texts += str(part["text"]) + "|"
+	_check("Closer to a dream" in texts, "and lift their mood (%s)" % texts)
+	sim.step()
+	_check(lines.any(func(t: String) -> bool: return "closer to a dream" in t), "the player is told of the step")
+	_check(anna.ambition_step == 1, "and one step is only one step")
+	var summary := Ambitions.summary(sim, anna)
+	_check(summary["ambition"] == "A Saintly Life" and summary["step"] == 2 and summary["steps"] == 3 and float(summary["have"]) == 5.0 and float(summary["need"]) == 20.0, "the panel shows the step and how far they are (%s)" % str(summary))
+	anna.deeds["used:altar"] = 100
+	Ambitions.advance(anna)
+	mood = Mood.evaluate(anna, household, GameClock.tick)
+	texts = ""
+	for part in mood["parts"]:
+		texts += str(part["text"]) + "|"
+	_check(anna.ambition == "" and "saintly_life" in anna.ambitions_done and "Fulfilled: A Saintly Life" in texts and "A life with purpose" in texts, "the last step fulfils the ambition and the mood stays lifted (%s)" % texts)
+	sim.step()
+	_check(lines.any(func(t: String) -> bool: return "ambition is fulfilled" in t), "and the player is told")
+	anna.ambition_next = GameClock.tick + 200
+	Ambitions.new_day(sim)
+	_check(anna.ambition == "", "they wait a while before dreaming of something new")
+	anna.ambition_next = GameClock.tick
+	Ambitions.new_day(sim)
+	_check(anna.ambition != "" and anna.ambition != "saintly_life", "then take up another, not the same again (%s)" % anna.ambition)
+
+	# Goals that look at who they are.
+	anna.ambition = "master_craftsman"
+	anna.ambition_step = 0
+	anna.skills["carpentry"] = Skills.xp_for_level(5)
+	Ambitions.advance(anna)
+	_check(anna.ambition_step == 2, "skills count: Journeyman skips past Apprentice and waits for Master")
+	anna.skills["carpentry"] = Skills.xp_for_level(9)
+	Ambitions.advance(anna)
+	_check(anna.ambition == "" and "master_craftsman" in anna.ambitions_done, "and a Master is fulfilled")
+	anna.ambition = "friend_to_all"
+	anna.ambition_step = 0
+	for friend_id in [10, 11, 12, 13, 14]:
+		anna.relations[friend_id] = 35.0
+	Ambitions.advance(anna)
+	_check(anna.ambition_step == 2, "friends count: five are friends (two steps)")
+	anna.relations[10] = 70.0
+	Ambitions.advance(anna)
+	_check(anna.ambition_step == 3, "and a close friend")
+	anna.ambition = "fortune_seeker"
+	anna.ambition_step = 0
+	household.coins = 300
+	Ambitions.advance(anna)
+	_check(anna.ambition_step == 0, "coin cannot be told without the world")
+	Ambitions.advance(anna, sim)
+	_check(anna.ambition_step == 2, "coin counts with it: 300 clears the first two steps")
+	anna.ambition = "true_love"
+	anna.ambition_step = 0
+	anna.partner_id = ben.id
+	anna.deeds["had_date"] = 3
+	Ambitions.advance(anna)
+	_check(anna.ambition_step == 2, "a partner and three dates")
+	anna.bond = "engaged"
+	Ambitions.advance(anna)
+	anna.bond = "married"
+	Ambitions.advance(anna)
+	_check(anna.ambition == "" and "true_love" in anna.ambitions_done, "engaged, then married, fulfils true love")
+	anna.partner_id = 0
+	anna.bond = ""
+	var counted := _dream_pawn("Eve Cooper", 30, 910)
+	Ambitions.note(counted, "child")
+	Ambitions.note(counted, "child")
+	_check(Ambitions.count(counted, "child") == 2 and Ambitions.count(counted, ["child", "birth"]) == 2, "deeds are counted by their event key")
+
+	# Wishes.
+	anna.ambition = ""
+	anna.wishes.clear()
+	var allowed_kiss := DataRegistry.get_def("wishes", "kiss_partner")
+	_check(not Ambitions.wish_allowed(sim, anna, allowed_kiss, "adult"), "nobody wishes to kiss a partner they do not have")
+	anna.partner_id = ben.id
+	_check(Ambitions.wish_allowed(sim, anna, allowed_kiss, "adult"), "and those who have one may")
+	anna.partner_id = 0
+	var lute_wish := DataRegistry.get_def("wishes", "play_lute")
+	_check(not Ambitions.wish_allowed(sim, anna, lute_wish, "adult"), "nobody wishes for a lute that is not in the world")
+	(game["world"] as WorldState).add_object("lute", Vector2i(24, 25))
+	_check(Ambitions.wish_allowed(sim, anna, lute_wish, "adult"), "once there is one, they do")
+	_check(not Ambitions.wish_allowed(sim, anna, DataRegistry.get_def("wishes", "flirt_with_someone"), "child") and not Ambitions.wish_allowed(sim, cold, DataRegistry.get_def("wishes", "flirt_with_someone"), "adult"), "children and the asexual do not wish to flirt")
+	var rolled := 0
+	for hour in 24:
+		GameClock.advance_one_tick()
+		for i in 59:
+			GameClock.advance_one_tick()
+		Ambitions._roll_wishes(sim, anna)
+	rolled = anna.wishes.size()
+	_check(rolled == 2, "an adult comes to have two wishes at a time (%d)" % rolled)
+	_check(anna.wishes.all(func(w: Dictionary) -> bool: return DataRegistry.has_def("wishes", str(w["id"])) and int(w["until"]) > GameClock.tick - 60 * 24 * 3), "each is a real wish with a time limit")
+	anna.wishes = [{ "id": "chat_with_friend", "until": GameClock.tick - 5 }, { "id": "play_lute", "until": GameClock.tick + 600 }]
+	Ambitions._expire(anna)
+	_check(anna.wishes.size() == 1 and anna.wishes[0]["id"] == "play_lute", "a wish lapses when its time is up")
+
+	# A wish is granted by doing the thing, which an idle person sets about on their own.
+	GameClock.set_time(3, 10)
+	anna.tile = Vector2i(20, 25)
+	anna.step_to = anna.tile
+	anna.path.clear()
+	anna.job_kind = ""
+	ben.wishes.clear()
+	for need_id in Needs.active_ids():
+		anna.needs[need_id] = 100.0
+		ben.needs[need_id] = 100.0
+	_minutes(sim, 180, func() -> bool: return anna.wish_done.has("play_lute"))
+	_check(anna.wish_done.has("play_lute") and anna.wishes.is_empty() and int(anna.deeds.get("used:lute", 0)) >= 1, "an idle person with a wish to play the lute goes and does")
+	mood = Mood.evaluate(anna, household, GameClock.tick)
+	texts = ""
+	for part in mood["parts"]:
+		texts += str(part["text"]) + "|"
+	_check("A wish came true: play the lute" in texts, "and is the happier for it (%s)" % texts)
+	_check(lines.any(func(t: String) -> bool: return "wish came true" in t), "the player is told")
+	anna.wishes = [{ "id": "chat_with_friend", "until": GameClock.tick + 600 }]
+	ben.job_kind = ""
+	ben.path.clear()
+	_minutes(sim, 240, func() -> bool: return anna.wish_done.has("chat_with_friend"))
+	_check(anna.wish_done.has("chat_with_friend"), "and a wish for a chat sends them to someone to talk to")
+	var grant := { "id": "go_hunting", "until": GameClock.tick + 600 }
+	anna.wishes = [grant]
+	Mood.add_event(anna, "hunted", GameClock.tick)
+	mood = Mood.evaluate(anna, household, GameClock.tick)
+	texts = ""
+	for part in mood["parts"]:
+		texts += str(part["text"]) + "|"
+	_check(anna.wishes.is_empty() and "A great wish came true: go hunting" in texts, "a bigger wish is a bigger lift, whoever did what and why (%s)" % texts)
+
+	# Towns visited.
+	var region := _region_game(42)
+	var rsim: Simulation = region["sim"]
+	var rworld: WorldState = region["world"]
+	var traveller: Pawn = (region["household"] as Household).selected()
+	traveller.visited.clear()
+	Ambitions._track_visits(rsim, traveller)
+	var start_count := traveller.visited.size()
+	var elsewhere: Dictionary = {}
+	for town in rworld.towns:
+		if town["id"] != rworld.home_town()["id"]:
+			elsewhere = town
+	traveller.tile = elsewhere["center"]
+	Ambitions._track_visits(rsim, traveller)
+	_check(start_count == 1 and traveller.visited.size() == 2 and int(traveller.deeds.get("visit", 0)) == 1, "the first town seen is home; arriving in another is a visit")
+	Ambitions._track_visits(rsim, traveller)
+	_check(int(traveller.deeds.get("visit", 0)) == 1, "and going back is not a new one")
+
+	# In a whole region.
+	var grown := 0
+	var kinds := {}
+	var with_ambition := 0
+	for person in rsim.people():
+		if Ambitions.may_dream(person):
+			grown += 1
+			with_ambition += 1 if person.ambition != "" else 0
+			kinds[person.ambition] = true
+		else:
+			if person.ambition != "":
+				with_ambition = -9999
+	_check(grown > 60 and with_ambition == grown and kinds.size() >= 8, "in a whole region everyone old enough has an ambition (%d people, %d kinds)" % [grown, kinds.size()])
+	_minutes(rsim, 12 * 60)
+	var wishing := 0
+	var wished_for := {}
+	for person in rsim.people():
+		wishing += 1 if not person.wishes.is_empty() else 0
+		for wish in person.wishes:
+			wished_for[wish["id"]] = true
+	_check(wishing > 40 and wished_for.size() >= 6, "and half a day on, most have wishes of their own (%d people, %d kinds)" % [wishing, wished_for.size()])
+	var granted := 0
+	for person in rsim.people():
+		granted += int(person.deeds.get("wish_granted", 0)) + int(person.deeds.get("wish_granted_big", 0))
+	_minutes(rsim, 24 * 60)
+	var granted_later := 0
+	for person in rsim.people():
+		granted_later += int(person.deeds.get("wish_granted", 0)) + int(person.deeds.get("wish_granted_big", 0))
+	_check(granted_later > granted + 10, "the folk of the town have wishes come true as the day goes (%d, then %d)" % [granted, granted_later])
+
+	# Saving.
+	var saved: Pawn = (region["household"] as Household).selected()
+	saved.deeds["used:lute"] = 4
+	saved.ambitions_done = ["troubadour"] as Array[String]
+	saved.wishes = [{ "id": "go_hunting", "until": 123456 }] as Array[Dictionary]
+	saved.wish_done = { "play_lute": 777 }
+	var back := Pawn.from_dict(JSON.parse_string(JSON.stringify(saved.to_dict())))
+	_check(back.ambition == saved.ambition and back.ambition_step == saved.ambition_step and back.deeds == saved.deeds and back.ambitions_done == saved.ambitions_done and back.wishes == saved.wishes and back.wish_done == saved.wish_done and back.visited == saved.visited, "ambitions, deeds and wishes survive a save")
+	var old := Pawn.from_dict({ "name": "Old Save", "age": 30 })
+	_check(old.ambition == "" and old.deeds.is_empty() and old.wishes.is_empty(), "a person from an older save has none, and is given them when the game loads")
 
 
 func _test_events() -> void:
