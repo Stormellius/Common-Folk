@@ -41,6 +41,10 @@ var _continue_note: Label
 ## One button per way of beginning, by start id; kept so tests can reach them.
 var _start_buttons: Dictionary = {}
 var _start_picked := ""
+## The family drawn up on the create screen, read by main.gd when the game begins.
+var family_design: Dictionary = {}
+var _creator: FamilyCreator
+var _create_begin: Button
 var _begin_button: Button
 var _seed_field: LineEdit
 var _lifespan_option: OptionButton
@@ -85,6 +89,7 @@ func _ready() -> void:
 	_screens["title"] = _build_title()
 	_screens["pause"] = _build_pause()
 	_screens["new"] = _build_new_game()
+	_screens["create"] = _build_create()
 	_screens["load"] = _build_load()
 	_screens["save"] = _build_save()
 	_screens["settings"] = _build_settings()
@@ -140,6 +145,11 @@ func open_new_game() -> void:
 	_seed_field.text = ""
 	_pick_lifespan("normal")
 	_show("new")
+
+
+## The family screen, straight from the new game screen (for a screenshot or test).
+func open_create() -> void:
+	_begin_button.pressed.emit()
 
 
 ## The save screen; `default_name` fills the name field.
@@ -245,6 +255,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			close()
 		"name":
 			_on_name_chosen()  # Esc keeps the name in the box
+		"create":
+			_show("new")
 		"confirm":
 			_show(_confirm_back)
 		"title", "game_over":
@@ -428,11 +440,33 @@ func _build_new_game() -> Control:
 	_lifespan_note.custom_minimum_size = Vector2(540, 0)
 	box.add_child(_lifespan_note)
 	_begin_button = Button.new()
-	_begin_button.text = "Begin"
+	_begin_button.text = "Next: Your Family"
+	_begin_button.custom_minimum_size = Vector2(190, 0)
 	_begin_button.pressed.connect(func() -> void:
 		if _start_picked != "":
-			new_game_requested.emit(seed_from_text(_seed_field.text), _start_picked, chosen_lifespan()))
+			_creator.reset()
+			_create_begin.disabled = _creator.problem() != ""
+			_show("create"))
 	box.add_child(_button_row([_back_button(), _begin_button]))
+	return parts[0]
+
+
+func _build_create() -> Control:
+	var parts := _card("Your Family", 820.0)
+	var box: VBoxContainer = parts[1]
+	_creator = FamilyCreator.new()
+	box.add_child(_creator)
+	_create_begin = Button.new()
+	_create_begin.text = "Begin"
+	_creator.changed.connect(func() -> void: _create_begin.disabled = _creator.problem() != "")
+	_create_begin.pressed.connect(func() -> void:
+		if _start_picked != "" and _creator.problem() == "":
+			family_design = _creator.design.duplicate(true)
+			new_game_requested.emit(seed_from_text(_seed_field.text), _start_picked, chosen_lifespan()))
+	var back := Button.new()
+	back.text = "Back"
+	back.pressed.connect(func() -> void: _show("new"))
+	box.add_child(_button_row([back, _create_begin]))
 	return parts[0]
 
 
@@ -662,7 +696,7 @@ func _build_settings() -> Control:
 
 	_people_box = CheckBox.new()
 	_people_box.toggled.connect(func(on: bool) -> void: Settings.set_value("painted_characters", on))
-	_setting_row(grid, "Painted people (preview)", _people_box)
+	_setting_row(grid, "Painted people", _people_box)
 
 	_vsync_box = CheckBox.new()
 	_vsync_box.toggled.connect(func(on: bool) -> void: Settings.set_value("vsync", on))

@@ -98,6 +98,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_open_pause()
 		KEY_H:
 			hud.toggle_help()
+		KEY_I:
+			hud.toggle_details()
 		KEY_SPACE:
 			GameClock.toggle_pause()
 		KEY_1, KEY_KP_1:
@@ -398,6 +400,7 @@ func _start_demo_caravan() -> void:
 ## evening while the camera drifts slowly over the rooftops.
 func _show_title() -> void:
 	_in_game = false
+	audio.listening = false
 	build.set_active(false)
 	hud.close_action_menu()
 	_start_new_world(randi(), "bought", "normal")
@@ -416,6 +419,7 @@ func _show_title() -> void:
 ## the player's again.
 func _begin_game() -> void:
 	_in_game = true
+	audio.listening = true
 	hud.visible = true
 	tile_cursor.visible = true
 	camera.drift = Vector2.ZERO
@@ -451,6 +455,9 @@ func _open_screen(screen: String) -> void:
 			menus.open_settings()
 		"new":
 			menus.open_new_game()
+		"create":
+			menus.open_new_game()
+			menus.open_create()
 		"name":
 			var rng := RandomNumberGenerator.new()
 			rng.seed = 11
@@ -505,7 +512,7 @@ func _on_menus_closed() -> void:
 
 func _on_new_game_requested(world_seed: int, start_id: String, lifespan: String) -> void:
 	_begin_game()
-	_start_new_world(world_seed, start_id, lifespan)
+	_start_new_world(world_seed, start_id, lifespan, menus.family_design)
 	menus.close()
 	GameClock.set_speed(1)
 	hud.show_message("A new life begins. The world's seed is %d." % world.world_seed, 4.0)
@@ -572,13 +579,13 @@ func _describe_newest_save() -> String:
 	return "Your last save"
 
 
-func _start_new_world(world_seed: int, start_id: String = "", lifespan: String = "normal") -> void:
+func _start_new_world(world_seed: int, start_id: String = "", lifespan: String = "normal", design: Dictionary = {}) -> void:
 	GameClock.reset()
 	var new_world := RegionGenerator.generate(world_seed)  # terrain, the towns, their roads, the player's lot
 	new_world.lifespan = lifespan if DataRegistry.has_def("lifespans", lifespan) else "normal"
 	if new_world.lot.size == Vector2i.ZERO:  # no town described in the data
 		new_world.lot = WorldState.centered_lot(new_world.width, new_world.height)
-	var begun := Starts.begin(new_world, start_id)  # the household, its land and its camp
+	var begun := Starts.begin(new_world, start_id, design)  # the household, its land and its camp
 	_show_world(new_world, begun["household"], NpcGenerator.create(new_world), begun["realm"])
 
 

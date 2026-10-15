@@ -45,6 +45,7 @@ func _ready() -> void:
 	_section("art", _test_art)
 	_section("clothing", _test_clothing)
 	_section("wardrobe", _test_wardrobe)
+	_section("family", _test_family_design)
 	_section("events", _test_events)
 	_section("realm", _test_realm)
 	_section("faith_and_illness", _test_faith_and_illness)
@@ -309,11 +310,14 @@ func _test_menus() -> void:
 	menus._start_buttons["arrived"].pressed.emit()
 	menus._seed_field.text = "1234"
 	menus._begin_button.pressed.emit()
+	menus._create_begin.pressed.emit()
 	_check(begun == [[1234, "arrived", "normal"]], "Begin reports the start, the seed and the lifespan (normal unless chosen)")
 	_check(Menus.seed_from_text("77") == 77 and Menus.seed_from_text("Thornbury") == Menus.seed_from_text("Thornbury") and Menus.seed_from_text("Thornbury") >= 0, "a typed seed is a number, or any word always makes the same one")
 	var back := InputEventKey.new()
 	back.keycode = KEY_ESCAPE
 	back.pressed = true
+	menus._unhandled_input(back)
+	_check(menus.current() == "new", "Esc leaves the family screen for the one before")
 	menus._unhandled_input(back)
 	_check(menus.current() == "title", "Esc goes back to where the screen was opened from")
 	var closes := [0]
@@ -6237,3 +6241,56 @@ func _test_wardrobe() -> void:
 	_minutes(sim, 90, func() -> bool: return anna.outfit_choice == "")
 	_check(anna.outfit_choice == "" and Clothing.worn(sim, anna) == "casual", "and do")
 	_check(not sim.order_dress(anna, wardrobe, "swim")["ok"] and not sim.order_dress(game["ben"], world.add_object("bed", Vector2i(40, 25)), "formal")["ok"], "only the outfits on offer, and only at a wardrobe")
+
+
+func _test_family_design() -> void:
+	print("Family design")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	var design := FamilyDesign.random_family(rng)
+	_check(design["members"].size() == 3 and FamilyDesign.problem(design) == "", "a random family of three is fine as it is")
+	design["members"][0]["given"] = "Mabel"
+	design["members"][0]["gender"] = "female"
+	design["members"][0]["age"] = 64
+	design["members"][0]["skin"] = "#6e4630"
+	design["members"][0]["hair"] = "#c9c2b4"
+	design["members"][0]["traits"] = ["lazy", "pious", "asexual"]
+	design["members"][1]["age"] = 8
+	design["members"][1]["traits"] = ["gay", "neat"]
+	design["family"] = "Thatcher"
+	var world := MapGenerator.generate(3, 64, 48)
+	var household := HouseholdGenerator.create(world, 3, design)
+	var elder: Pawn = household.pawns[0]
+	var child: Pawn = household.pawns[1]
+	_check(elder.display_name == "Mabel Thatcher" and elder.age == 64 and elder.adult and elder.look["skin"] == "#6e4630" and elder.look["hair"] == "#c9c2b4", "the household has the name, age and looks that were drawn")
+	_check("lazy" in elder.traits and "pious" in elder.traits and "asexual" in elder.traits, "and the chosen traits")
+	_check(child.age == 8 and not child.adult and not ("gay" in child.traits) and "neat" in child.traits, "a child has no orientation")
+	_check(household.pawns.size() == 3 and HouseholdGenerator.create(world, 3, design).pawns[0].needs == elder.needs, "the same design in the same world gives the same people")
+	design["members"][2]["age"] = 12
+	design["members"][0]["age"] = 12
+	design["members"][1]["age"] = 12
+	_check(FamilyDesign.problem(design) != "", "a family of children alone is refused")
+	design["members"][0]["age"] = 30
+	design["members"][1]["given"] = "mabel"
+	_check(FamilyDesign.problem(design).contains("both called"), "two people cannot share a name")
+	design["members"][1]["given"] = "Wat"
+	for i in 3:
+		design["members"].append(FamilyDesign.random_member(rng, "Thatcher", [], 25))
+	_check(FamilyDesign.problem(design).contains("at most"), "five is the most")
+	var creator := FamilyCreator.new()
+	add_child(creator)
+	creator.reset()
+	_check(creator.design["members"].size() == 3 and creator.problem() == "", "the creator starts with a family that will do")
+	creator._add_member()
+	creator._add_member()
+	creator._add_member()
+	_check(creator.design["members"].size() == FamilyDesign.MAX_MEMBERS and creator._add_button.disabled, "up to five can be added")
+	creator._remove_member()
+	creator._toggle_trait("lazy", true)
+	creator._toggle_trait("neat", true)
+	creator._toggle_trait("glutton", true)
+	var picked := 0
+	for trait_id in creator._member()["traits"]:
+		picked += 1 if str(DataRegistry.get_def("traits", trait_id).get("group", "")) != "orientation" else 0
+	_check(picked >= 2, "traits can be picked (%d)" % picked)
+	creator.queue_free()

@@ -94,3 +94,13 @@ would be the next step up.
 * **Trees**: `TreeLayer` draws painted pines, oaks and birches over forest tiles when the camera is zoomed in (zoom >= 0.75); the terrain
   shader's own trees take over when zoomed out. Oaks and birches turn autumn orange and bare in winter.
 * **Goods icons**: the stockpile in the HUD shows a painted icon and count for each good with `goods/<id>` art; tools stay as words.
+
+## HUD, sound and the family screen
+* **HUD** follows The Sims: a bottom panel with the selected person's picture and mood plumbob, name, doings and the needs in a grid; your folk
+  at the bottom left; build at the bottom right; the clock, purse and speed buttons top right; a top bar with the menu, Details (I: dreams,
+  skills, thoughts and friends down the left) and the tile under the cursor. Panels are `_sims_panel` in `hud.gd`.
+* **Sound**: the title screen plays only music; rain and snow fade in only once it is really falling; work and instrument sounds are heard only
+  for people on screen.
+* **Family screen**: after "How do you begin?" you draw up your family (`FamilyCreator`, `FamilyDesign`): up to five people with name, gender,
+  age, skin, hair, hair style and traits. Painted people pick the body look nearest to the chosen skin and hair.
+* The painted-people setting is saved as `painted_people` so an old saved "off" no longer hides the new art.

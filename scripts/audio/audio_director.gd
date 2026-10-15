@@ -33,6 +33,8 @@ var _camera: Camera2D
 var _layers: Dictionary = {}        # layer id -> AudioStreamPlayer
 var _levels: Dictionary = {}        # layer id -> where it is now, 0 to 1
 var _goals: Dictionary = {}         # layer id -> where it is heading
+## False on the title screen: the town behind it is a picture, so only the music plays.
+var listening := true
 var _music: Array[AudioStreamPlayer] = []
 var _music_gain: Array[float] = [0.0, 0.0]
 var _music_mood := ""
@@ -232,12 +234,18 @@ func _follow_music(delta: float) -> void:
 func _think(dt: float) -> void:
 	_context_now = context()
 	_goals = Soundscape.levels(_context_now)
+	if not listening:
+		for layer_id in _goals:
+			_goals[layer_id] = 0.0
+		_players.clear()
+		_work_wait.clear()
 	var mood := Soundscape.mood(_context_now)
 	if mood != _music_mood or (_music_mood != "" and not _music[_music_side].playing and _music_streams.has(_music_mood)):
 		_change_music(mood)
-	_work_sounds(dt)
-	_refresh_players()
-	_thunder(dt)
+	if listening:
+		_work_sounds(dt)
+		_refresh_players()
+		_thunder(dt)
 
 
 ## What there is to hear now (see Soundscape).
@@ -284,6 +292,16 @@ func context() -> Dictionary:
 		"sorrow": sorrow,
 		"festival": festival,
 	}
+
+
+## Whether a tile is on screen (a little beyond its edge): what is out of sight is not heard.
+func _in_view(tile: Vector2i, margin: float = 1.5) -> bool:
+	if _camera == null:  # no camera (a test, a tool): what is near the middle of the world
+		var here := _camera_tile()
+		return absi(tile.x - here.x) + absi(tile.y - here.y) <= int(HEAR_TILES)
+	var half := get_viewport().get_visible_rect().size / _camera.zoom / 2.0 / float(TILE)
+	var centre := _camera.global_position / float(TILE)
+	return absf(float(tile.x) + 0.5 - centre.x) <= half.x + margin and absf(float(tile.y) + 0.5 - centre.y) <= half.y + margin
 
 
 func _camera_tile() -> Vector2i:
@@ -408,7 +426,7 @@ func _work_sounds(dt: float) -> void:
 	for group in [_sim.household.pawns, _sim.town.pawns]:
 		for pawn: Pawn in group:
 			var sound := _work_sound_of(pawn)
-			if sound.is_empty() or absi(pawn.tile.x - tile.x) + absi(pawn.tile.y - tile.y) > int(HEAR_TILES):
+			if sound.is_empty() or not _in_view(pawn.tile):
 				continue
 			live[pawn.id] = true
 			var wait: float = float(_work_wait.get(pawn.id, randf() * float(sound["every"]))) - dt
@@ -439,7 +457,7 @@ func _refresh_players() -> void:
 	var live := {}
 	for group in [_sim.household.pawns, _sim.town.pawns]:
 		for pawn: Pawn in group:
-			if pawn.job_kind != "use" or pawn.job_stage != "using" or absi(pawn.tile.x - tile.x) + absi(pawn.tile.y - tile.y) > int(HEAR_TILES):
+			if pawn.job_kind != "use" or pawn.job_stage != "using" or not _in_view(pawn.tile):
 				continue
 			var placed := _world.get_object(pawn.job_object)
 			if placed == null or not placed.def().has("instrument"):

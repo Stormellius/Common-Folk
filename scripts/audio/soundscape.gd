@@ -26,8 +26,8 @@ static func levels(context: Dictionary) -> Dictionary:
 	var dusk := 1.0 - day
 	var found := {}
 	found["wind"] = clampf((0.22 + 0.3 * (float(context.get("wind", 0.8)) - 0.4) / 0.7 + 0.3 * wet) * (0.55 + 0.45 * close), 0.0, 1.0)
-	found["rain"] = wet if not bool(context.get("snowing", false)) else 0.0
-	found["snow"] = wet if bool(context.get("snowing", false)) else 0.0
+	found["rain"] = smoothstep(0.15, 0.55, wet) if not bool(context.get("snowing", false)) else 0.0
+	found["snow"] = smoothstep(0.15, 0.55, wet) if bool(context.get("snowing", false)) else 0.0
 	found["water"] = clampf(float(context.get("water", 0.0)), 0.0, 1.0) * close
 	found["birds"] = day * float(BIRDS.get(season, 0.5)) * (1.0 - wet) * (0.45 if in_town else 1.0) * close
 	found["crickets"] = dusk * float(CRICKETS.get(season, 0.0)) * (1.0 - wet) * close

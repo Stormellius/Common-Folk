@@ -15,7 +15,7 @@ static func ids() -> Array[String]:
 
 
 ## Sets up the household on the home lot as `start_id` says. Returns { "household", "realm" }.
-static func begin(world: WorldState, start_id: String) -> Dictionary:
+static func begin(world: WorldState, start_id: String, design: Dictionary = {}) -> Dictionary:
 	var def := DataRegistry.get_def("starts", start_id)
 	if def.is_empty():
 		def = DataRegistry.get_def("starts", DEFAULT)
@@ -28,7 +28,7 @@ static func begin(world: WorldState, start_id: String) -> Dictionary:
 			var width: int = grid[0].length() if not grid.is_empty() else 0
 			var origin := world.lot.position + Vector2i((world.lot.size.x - width) / 2, 1)
 			TownGenerator.stamp(world, template, grid, origin, world.lot, 2)
-	var household := HouseholdGenerator.create(world)
+	var household := HouseholdGenerator.create(world, HouseholdGenerator.SIZE, design)
 	household.coins = int(def.get("coins", Economy.start_coins()))
 	var skill_rng := RandomNumberGenerator.new()
 	skill_rng.seed = world.world_seed * 31 + 5
