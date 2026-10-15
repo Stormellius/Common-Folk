@@ -373,8 +373,10 @@ func _refresh_traits() -> void:
 		button.toggle_mode = true
 		button.tooltip_text = str(def.get("description", ""))
 		button.set_pressed_no_signal(on)
-		button.disabled = not on and taken >= FamilyDesign.TRAIT_PICKS
-		button.custom_minimum_size = Vector2(86, 30)
+		button.disabled = not on and (taken >= FamilyDesign.TRAIT_PICKS or FamilyDesign.clashes(id, traits))
+		if button.disabled and not on and taken < FamilyDesign.TRAIT_PICKS:
+			button.tooltip_text += "\n(Does not go with the traits already chosen.)"
+		button.custom_minimum_size = Vector2(96, 30)
 		button.toggled.connect(func(pressed: bool) -> void: _toggle_trait(id, pressed))
 		_trait_row.add_child(button)
 

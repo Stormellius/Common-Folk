@@ -8,7 +8,7 @@ extends RefCounted
 const MAX_MEMBERS := 5
 ## Ages a person can be made at, with what they are called in the editor.
 const AGES: Array = [["Child", 8], ["Youth", 15], ["Adult", 25], ["Middle-aged", 42], ["Elder", 64]]
-const TRAIT_PICKS := 2   # besides the orientation
+const TRAIT_PICKS := 3   # besides the orientation
 
 
 static func random_member(rng: RandomNumberGenerator, family: String, used: Array[String], age: int = 25) -> Dictionary:
@@ -78,7 +78,7 @@ static func apply(pawn: Pawn, member: Dictionary, family: String) -> void:
 	}
 	var chosen: Array[String] = []
 	for trait_id in member.get("traits", []):
-		if DataRegistry.has_def("traits", str(trait_id)) and str(trait_id) not in chosen:
+		if DataRegistry.has_def("traits", str(trait_id)) and str(trait_id) not in chosen and not clashes(str(trait_id), chosen):
 			var group := str(DataRegistry.get_def("traits", str(trait_id)).get("group", ""))
 			if group == "orientation" and not pawn.adult:
 				continue
@@ -86,6 +86,15 @@ static func apply(pawn: Pawn, member: Dictionary, family: String) -> void:
 	pawn.traits = chosen
 	if pawn.adult:
 		PersonFactory.give_orientation(pawn, RandomNumberGenerator.new())
+
+
+## Whether picking `trait_id` clashes with one already held (a trait lists what it "excludes").
+static func clashes(trait_id: String, held: Array) -> bool:
+	var excluded: Array = DataRegistry.get_def("traits", trait_id).get("excludes", [])
+	for other in held:
+		if str(other) in excluded or trait_id in DataRegistry.get_def("traits", str(other)).get("excludes", []):
+			return true
+	return false
 
 
 ## Traits that can be picked freely (everything but the orientation group).

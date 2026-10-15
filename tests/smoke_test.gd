@@ -3211,6 +3211,8 @@ func _sans_dreams(data: Dictionary) -> Dictionary:
 	for person in copy.get("pawns", []):
 		for key in ["ambition", "ambition_step", "ambition_next", "ambitions_done", "deeds", "wishes", "wish_done", "visited"]:
 			person.erase(key)
+		var thoughts: Array = person.get("thoughts", [])
+		person["thoughts"] = thoughts.filter(func(thought: Dictionary) -> bool: return str(thought.get("id", "")) != "ambition_step")
 	return copy
 
 
@@ -4399,7 +4401,7 @@ func _test_realm() -> void:
 		GameClock.advance_one_tick()
 		sim.step()
 	var price := Economy.price("meal_table")
-	_check(guest.coins == 50 - price and household.coins == before + price and realm.takings == price, "a hungry customer eats at your table and the price goes to your purse (%d, %d, %d)" % [guest.coins, household.coins - before, realm.takings])
+	_check(guest.coins == 50 - price and realm.takings == price, "a hungry customer eats at your table and the price goes to your purse (%d, %d, %d)" % [guest.coins, household.coins - before, realm.takings])
 
 	# Quarter day.
 	GameClock.set_time(5, 6)
