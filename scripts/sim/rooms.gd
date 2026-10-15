@@ -13,6 +13,8 @@ static func barrier(world: WorldState, tile: Vector2i) -> bool:
 	var placed := world.object_at(tile)
 	if placed != null and str(placed.def().get("connects", "")) == "wall":
 		return true
+	if Levels.of(tile) == 1:
+		return not world.terrain_walkable(tile.x, tile.y)  # upstairs, a missing floor is an open edge (below), not a wall
 	return not world.is_ground_walkable(tile.x, tile.y)
 
 
@@ -38,6 +40,9 @@ static func region(world: WorldState, start: Vector2i, limit: int = LIMIT) -> Di
 			seen[next] = true
 			if not world.in_bounds(next.x, next.y):
 				closed = false
+				continue
+			if Levels.of(next) == 1 and not world.floors.has(next) and not barrier(world, next):
+				closed = false  # the edge of the floor upstairs is open air
 				continue
 			if not barrier(world, next):
 				queue.append(next)

@@ -266,8 +266,11 @@ func tick(world: WorldState) -> void:
 			path.clear()  # the world changed under us
 			return
 		path.remove_at(0)
-		var diagonal := next.x != tile.x and next.y != tile.y
+		var climbing := Levels.of(next) != Levels.of(tile)  # up or down a flight of stairs
+		var diagonal := not climbing and next.x != tile.x and next.y != tile.y
 		var cost := BASE_MOVE_TICKS * maxf(world.get_move_cost(next.x, next.y), 1.0)
+		if climbing:
+			cost *= 2.0
 		if diagonal:
 			cost *= 1.41421
 		if slowed:
@@ -277,7 +280,8 @@ func tick(world: WorldState) -> void:
 		step_to = next
 		step_ticks_total = maxi(1, roundi(cost))
 		step_ticks_done = 0
-		facing = next - tile
+		if not climbing:
+			facing = next - tile
 	step_ticks_done += 1
 	if step_ticks_done >= step_ticks_total:
 		tile = step_to

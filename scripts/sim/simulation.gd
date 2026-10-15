@@ -941,9 +941,15 @@ func build_blocker(def_id: String, tile: Vector2i, ignoring: int = 0) -> String:
 	var there := world.object_at(tile)
 	if there != null and there.id != ignoring:
 		return "the %s is in the way" % there.display_name().to_lower()
+	if Levels.of(tile) == 1 and world.floors.has(tile) == false:
+		return "there is no floor there yet"
 	if not world.is_ground_walkable(tile.x, tile.y):
 		var tile_id := world.get_tile_id(tile.x, tile.y)
 		return "can't build on %s" % str(DataRegistry.get_def("tiles", tile_id).get("name", tile_id)).to_lower()
+	if bool(def.get("stairs", false)):
+		var stairs_issue := Levels.stairs_blocker(world, tile)
+		if stairs_issue != "":
+			return stairs_issue
 	if bool(def.get("blocks_walking", true)):
 		for pawn in people():
 			if tile == pawn.tile or tile == pawn.committed_tile():
@@ -973,6 +979,8 @@ func build_move(object_id: int, to_tile: Vector2i) -> Dictionary:
 	var placed := world.get_object(object_id)
 	if placed == null:
 		return { "ok": false, "message": "That is gone" }
+	if bool(placed.def().get("stairs", false)):
+		return { "ok": false, "message": "Stairs can't be moved, only taken down" }
 	var blocker := build_blocker(placed.def_id, to_tile, placed.id)
 	if blocker != "":
 		return { "ok": false, "message": "Can't move it here: %s" % blocker }
@@ -998,6 +1006,10 @@ func build_remove(tile: Vector2i) -> Dictionary:
 		_reroute_blocked_walks()
 		return { "ok": true, "message": "" }
 	var old_floor := world.floor_at(tile)
+	if Levels.of(tile) == 1 and old_floor != "":
+		for pawn in people():
+			if pawn.tile == tile or pawn.committed_tile() == tile:
+				return { "ok": false, "message": "%s is standing on it" % _first_name(pawn) }
 	if world.set_floor(tile, ""):
 		household.coins += Economy.refund(Economy.floor_cost(old_floor))
 		return { "ok": true, "message": "" }
@@ -1009,7 +1021,11 @@ func build_floor(floor_id: String, tile: Vector2i) -> Dictionary:
 		return { "ok": false, "message": "That floor doesn't exist" }
 	if not world.can_build_at(tile):
 		return { "ok": false, "message": "Can't build here: outside your land" }
-	if not world.is_ground_walkable(tile.x, tile.y):
+	if Levels.of(tile) == 1:
+		var upstairs := Levels.floor_blocker(world, tile)
+		if upstairs != "":
+			return { "ok": false, "message": "Can't build here: %s" % upstairs }
+	elif not world.is_ground_walkable(tile.x, tile.y):
 		return { "ok": false, "message": "Can't build here: not solid ground" }
 	var cost := Economy.floor_cost(floor_id)
 	if cost > household.coins:

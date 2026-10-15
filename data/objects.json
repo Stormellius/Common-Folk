@@ -10,6 +10,8 @@
   {"id": "wall", "cost": 2, "name": "Timber wall", "category": "structure", "blocks_walking": true, "connects": "wall", "drag": true, "materials": {"wood": 1}, "flammable": 0.5},
   {"id": "stone_wall", "cost": 4, "name": "Stone wall", "category": "structure", "blocks_walking": true, "connects": "wall", "drag": true, "materials": {"stone": 1}},
   {"id": "door", "cost": 6, "name": "Wooden door", "category": "structure", "blocks_walking": false, "connects": "wall", "materials": {"wood": 2}, "flammable": 0.6},
+  {"id": "stairs", "cost": 24, "name": "Stairs", "category": "structure", "blocks_walking": false, "materials": {"wood": 4}, "flammable": 0.7, "build_minutes": 50, "stairs": true},
+  {"id": "stairs_top", "name": "Stairs up", "buildable": false, "blocks_walking": false, "flammable": 0.7},
   {"id": "grave", "name": "Grave", "category": "structure", "blocks_walking": false, "buildable": false, "action": "Pray for {name}'s soul", "doing": "Praying at a grave", "use_position": "beside", "satisfies": {"faith": 20.0}, "max_use_minutes": 40, "autonomous": false},
   {"id": "table", "cost": 10, "name": "Table", "category": "furniture", "blocks_walking": true, "materials": {"wood": 2}, "flammable": 0.6},
   {"id": "counter", "cost": 8, "offers_work": "lot", "name": "Counter", "category": "furniture", "blocks_walking": true, "materials": {"wood": 2}, "flammable": 0.6},

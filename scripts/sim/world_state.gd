@@ -90,11 +90,13 @@ func _init(p_width: int = 0, p_height: int = 0, p_seed: int = 0, default_tile: S
 
 
 func in_bounds(x: int, y: int) -> bool:
+	if y >= Levels.STEP:  # upstairs: over a tile of the map, and not above the second level
+		y -= Levels.STEP
 	return x >= 0 and y >= 0 and x < width and y < height
 
 
 func index_of(x: int, y: int) -> int:
-	return y * width + x
+	return (y - Levels.STEP if y >= Levels.STEP else y) * width + x
 
 
 func set_tile(x: int, y: int, tile_id: String) -> void:
@@ -120,6 +122,13 @@ func is_walkable(x: int, y: int) -> bool:
 
 ## Whether the ground itself (ignoring objects) can be walked on.
 func is_ground_walkable(x: int, y: int) -> bool:
+	if y >= Levels.STEP and not floors.has(Vector2i(x, y)):
+		return false  # upstairs there is only floor to stand on
+	return terrain_walkable(x, y)
+
+
+## Whether the earth under this tile (or under the floor above it) is solid enough to build on.
+func terrain_walkable(x: int, y: int) -> bool:
 	var tile_id := get_tile_id(x, y)
 	if tile_id == "":
 		return false
@@ -244,6 +253,11 @@ func add_object(def_id: String, tile: Vector2i) -> PlacedObject:
 	_object_at_tile[tile] = placed
 	_object_by_id[placed.id] = placed
 	tile_changed.emit(tile)
+	if def_id == "stairs" and Levels.of(tile) == 0:  # the way up comes out on a landing
+		var top := Levels.lift(tile, 1)
+		if not floors.has(top):
+			floors[top] = "planks"
+		add_object("stairs_top", top)
 	return placed
 
 
@@ -257,6 +271,10 @@ func remove_object(id: int) -> bool:
 	_object_at_tile.erase(placed.tile)
 	_object_by_id.erase(id)
 	tile_changed.emit(placed.tile)
+	if placed.def_id == "stairs":  # and the landing at the top
+		var landing := _object_at_tile.get(Levels.lift(placed.tile, 1)) as PlacedObject
+		if landing != null and landing.def_id == "stairs_top":
+			remove_object(landing.id)
 	return true
 
 
@@ -287,12 +305,22 @@ func connection_mask(tile: Vector2i, group: String) -> int:
 	return mask
 
 
+## The tiles on the ground with stairs on them.
+func stairs_tiles() -> Array[Vector2i]:
+	var found: Array[Vector2i] = []
+	for placed in objects:
+		if placed.def_id == "stairs":
+			found.append(placed.tile)
+	return found
+
+
 func in_lot(tile: Vector2i) -> bool:
-	return lot.has_point(tile)
+	return lot.has_point(Levels.ground(tile))
 
 
 ## Whether the player may build on this tile: the home lot or any other lot they hold.
 func can_build_at(tile: Vector2i) -> bool:
+	tile = Levels.ground(tile)
 	if lot.has_point(tile):
 		return not home_lost
 	var here := lot_at(tile)
@@ -319,6 +347,7 @@ func lot_area(lot_id: String) -> int:
 ## The lot a tile belongs to: { "id", "public", ... }, or empty if it is open land. The player's
 ## own lot is { "id": "home", "public": false }.
 func lot_at(tile: Vector2i) -> Dictionary:
+	tile = Levels.ground(tile)
 	if lot.has_point(tile):
 		return { "id": HOME_LOT, "kind": "home", "name": "Your lot", "public": false, "rect": lot }
 	for entry in lots:
@@ -329,6 +358,7 @@ func lot_at(tile: Vector2i) -> Dictionary:
 
 ## The settlement a tile is in (inside its lots and streets, with a margin), or empty in open country.
 func town_at(tile: Vector2i, margin: int = 6) -> Dictionary:
+	tile = Levels.ground(tile)
 	for entry in towns:
 		if (entry["rect"] as Rect2i).grow(margin).has_point(tile):
 			return entry
@@ -388,7 +418,7 @@ func set_floor(tile: Vector2i, floor_id: String) -> bool:
 		floors.erase(tile)
 		tile_changed.emit(tile)
 		return true
-	if not DataRegistry.has_def("floors", floor_id) or not is_ground_walkable(tile.x, tile.y) or floors.get(tile, "") == floor_id:
+	if not DataRegistry.has_def("floors", floor_id) or not terrain_walkable(tile.x, tile.y) or floors.get(tile, "") == floor_id:
 		return false
 	floors[tile] = floor_id
 	tile_changed.emit(tile)

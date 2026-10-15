@@ -46,6 +46,7 @@ func _ready() -> void:
 	_section("clothing", _test_clothing)
 	_section("wardrobe", _test_wardrobe)
 	_section("family", _test_family_design)
+	_section("upstairs", _test_upstairs)
 	_section("events", _test_events)
 	_section("realm", _test_realm)
 	_section("faith_and_illness", _test_faith_and_illness)
@@ -6296,3 +6297,60 @@ func _test_family_design() -> void:
 		picked += 1 if str(DataRegistry.get_def("traits", trait_id).get("group", "")) != "orientation" else 0
 	_check(picked >= 2, "traits can be picked (%d)" % picked)
 	creator.queue_free()
+
+
+func _test_upstairs() -> void:
+	print("Upstairs")
+	var game := _open_field()
+	var sim: Simulation = game["sim"]
+	var world: WorldState = game["world"]
+	var anna: Pawn = game["anna"]
+	_check(Levels.of(Vector2i(5, 4)) == 0 and Levels.of(Levels.lift(Vector2i(5, 4), 1)) == 1 and Levels.ground(Levels.lift(Vector2i(5, 4), 1)) == Vector2i(5, 4), "an upstairs tile is the ground tile with its y lifted")
+	# A room on the home lot: walls round (4..9, 3..7), planks inside.
+	for x in range(4, 10):
+		for y in range(3, 8):
+			if x == 4 or x == 9 or y == 3 or y == 7:
+				world.add_object("wall", Vector2i(x, y))
+			else:
+				world.set_floor(Vector2i(x, y), "planks")
+	var inside := Vector2i(6, 5)
+	_check(sim.build_blocker("stairs", Vector2i(5, 4)).contains("roofed"), "stairs need a roofed room")
+	Rooms.auto_roof(world, Rect2i(3, 2, 8, 7))
+	_check(world.roofs.has(inside) and sim.build_blocker("stairs", Vector2i(5, 4)) == "", "and may go in one")
+	var top := Levels.lift(Vector2i(5, 4), 1)
+	_check(sim.build_floor("planks", Levels.lift(Vector2i(7, 5), 1))["ok"] == false, "there is no floor upstairs before there are stairs")
+	_check(sim.build_place("stairs", Vector2i(5, 4))["ok"], "the stairs are built")
+	_check(world.floor_at(top) == "planks" and world.object_at(top) != null and world.object_at(top).def_id == "stairs_top", "they come out on a landing upstairs")
+	_check(world.is_walkable(top.x, top.y) and not world.is_walkable(top.x + 1, top.y), "the landing can be stood on, the air beside it cannot")
+	_check(sim.build_floor("planks", Levels.lift(Vector2i(6, 4), 1))["ok"], "a floor grows out from the landing")
+	_check(not sim.build_floor("planks", Levels.lift(Vector2i(8, 6), 1))["ok"], "but not from nowhere")
+	_check(sim.build_floor("planks", Levels.lift(Vector2i(6, 5), 1))["ok"] and sim.build_floor("planks", Levels.lift(Vector2i(7, 5), 1))["ok"], "or further along")
+	_check(not sim.build_floor("planks", Levels.lift(Vector2i(12, 5), 1))["ok"] and Levels.floor_blocker(world, Levels.lift(Vector2i(12, 5), 1)).contains("roof"), "a floor needs a roofed room under it")
+	var chair_up := Levels.lift(Vector2i(6, 5), 1)
+	_check(sim.build_blocker("chair", Levels.lift(Vector2i(8, 6), 1)).contains("no floor") and sim.build_blocker("chair", chair_up) == "", "furniture goes where there is floor")
+	anna.tile = inside
+	anna.step_to = inside
+	var route := sim.pathfinder.find_path(anna.tile, chair_up)
+	_check(not route.is_empty() and Levels.lift(Vector2i(5, 4), 0) in route and top in route, "a way upstairs goes by the stairs (%d steps)" % route.size())
+	_check(sim.pathfinder.find_path(chair_up, inside).size() > 0 and sim.pathfinder.find_path(Levels.lift(Vector2i(7, 5), 1), Levels.lift(Vector2i(6, 4), 1)).size() > 0, "and back down, and about upstairs")
+	sim.order_move(anna, chair_up)
+	for tick in 120:
+		GameClock.advance_one_tick()
+		sim.step()
+	_check(anna.tile == chair_up and Levels.of(anna.tile) == 1, "somebody walks up the stairs and arrives upstairs")
+	_check(world.roofs.has(chair_up) == false and Rooms.region(world, chair_up)["closed"] == false, "upstairs is open until there are walls and a roof")
+	_check(world.can_build_at(chair_up) and world.lot_at(chair_up)["id"] == WorldState.HOME_LOT, "upstairs is still on the home lot")
+	var bed_up := Levels.lift(Vector2i(7, 5), 1)
+	var bed := world.add_object("bed", bed_up)
+	_check(bed != null and world.object_at(bed_up) == bed and world.object_at(Vector2i(7, 5)) == null, "a bed upstairs is not the tile below")
+	_check(sim.build_remove(chair_up)["ok"] == false, "somebody standing on a floor upstairs keeps it")
+	var saved := WorldState.from_dict(JSON.parse_string(JSON.stringify(world.to_dict())))
+	_check(saved.floor_at(top) == "planks" and saved.object_at(bed_up) != null and saved.is_walkable(top.x, top.y), "upstairs is saved and loaded")
+	sim.order_move(anna, inside)
+	for tick in 120:
+		GameClock.advance_one_tick()
+		sim.step()
+	_check(anna.tile == inside, "and back down")
+	var stairs := world.object_at(Vector2i(5, 4))
+	world.remove_object(stairs.id)
+	_check(world.object_at(top) == null and sim.pathfinder.find_path(anna.tile, chair_up).is_empty(), "taking the stairs down leaves no way up")

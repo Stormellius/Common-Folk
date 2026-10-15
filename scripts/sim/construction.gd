@@ -87,7 +87,11 @@ static func plan_floor(sim: Simulation, floor_id: String, tile: Vector2i) -> Dic
 		return { "ok": false, "message": "That floor doesn't exist" }
 	if not sim.world.can_build_at(tile):
 		return { "ok": false, "message": "Can't build here: outside your land" }
-	if not sim.world.is_ground_walkable(tile.x, tile.y):
+	if Levels.of(tile) == 1:
+		var upstairs := Levels.floor_blocker(sim.world, tile)
+		if upstairs != "" and sim.world.floor_at(tile) == "":
+			return { "ok": false, "message": "Can't build here: %s" % upstairs }
+	elif not sim.world.is_ground_walkable(tile.x, tile.y):
 		return { "ok": false, "message": "Can't build here: not solid ground" }
 	if sim.world.floor_at(tile) == floor_id:
 		return { "ok": false, "message": "" }
