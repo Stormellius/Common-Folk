@@ -8,5 +8,6 @@
     "formal_objects": ["pew", "altar"],
     "wash_objects": ["wash_basin"],
     "work_jobs": ["work", "build", "hunt"],
-    "work_min_stage": "youth" }
+    "work_min_stage": "youth",
+    "choices": ["casual", "worker", "formal", "warm", "winter", "undergarments"] }
 ]

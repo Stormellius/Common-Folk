@@ -184,6 +184,26 @@ static func person_set(stage: String, gender: String) -> Dictionary:
 	return {}
 
 
+## The body look in a set that is closest to a person's hair and skin.
+static func pick_look(entry: Dictionary, look: Dictionary) -> Dictionary:
+	var hair := Color(str(look.get("hair", "#4a3220")))
+	var skin := Color(str(look.get("skin", "#e0ac80")))
+	var best: Dictionary = (entry["looks"] as Array)[0]
+	var best_score := INF
+	for candidate: Dictionary in entry["looks"]:
+		var h := Color(str(candidate["hair"]))
+		var k := Color(str(candidate["skin"]))
+		var score := _gap(hair, h) + 0.7 * _gap(skin, k)
+		if score < best_score:
+			best_score = score
+			best = candidate
+	return best
+
+
+static func _gap(a: Color, b: Color) -> float:
+	return Vector3(a.r - b.r, a.g - b.g, a.b - b.b).length()
+
+
 ## The layer worn for an outfit in a set: the outfit itself, a likeness, or "" (the bare body: underclothes).
 static func layer_for(entry: Dictionary, outfit_id: String) -> String:
 	if outfit_id in ["undergarments", "swim"]:
@@ -199,13 +219,18 @@ static func layer_for(entry: Dictionary, outfit_id: String) -> String:
 ## Draws a person from layers: the body (its skin tinted toward theirs) with the outfit over it. Same
 ## walk bounce and bed pose as draw_person. False when there is no set for them.
 static func draw_layered_person(ci: CanvasItem, look: Dictionary, facing: Vector2i, u: float, phase: float, lying: bool, outfit: Dictionary, breath: float, stage: String, seed_value: int) -> bool:
-	var entry := person_set(stage, str(outfit.get("gender", "male")))
+	var entry := {}
+	if float(outfit.get("bump", 0.0)) > 0.3 and str(outfit.get("gender", "")) == "female":  # heavy with child: maternity pictures
+		entry = person_set(stage, "pregnant")
+	if entry.is_empty():
+		entry = person_set(stage, str(outfit.get("gender", "male")))
 	if entry.is_empty():
 		return false
+	var chosen_look := pick_look(entry, look)
 	var kind := PawnArt.facing_kind(facing)
 	var side := "back" if kind == PawnArt.NORTH and not lying else "front"
 	var folder := "%s/" % str(entry["dir"])
-	var body := texture(folder + "body_" + side)
+	var body := texture(folder + str(chosen_look["body"]) + "_" + side)
 	if body == null:
 		return false
 	var layer_id := layer_for(entry, str(outfit.get("clothes", "casual")))
@@ -220,7 +245,7 @@ static func draw_layered_person(ci: CanvasItem, look: Dictionary, facing: Vector
 		width *= 0.9
 	var flip := -1.0 if kind == PawnArt.WEST else 1.0
 	var skin := Color(str(look.get("skin", "#e0ac80")))
-	var base_skin := Color(str(entry.get("skin", "#f0b890")))
+	var base_skin := Color(str(chosen_look.get("skin", "#f0b890")))
 	var body_tint := Color(clampf(skin.r / base_skin.r, 0.4, 1.25), clampf(skin.g / base_skin.g, 0.4, 1.25), clampf(skin.b / base_skin.b, 0.4, 1.25))
 	var shade := 1.0 - 0.06 * ObjectArt.hash01(seed_value, 3, 71)
 	var tint := Color(shade, shade, shade)

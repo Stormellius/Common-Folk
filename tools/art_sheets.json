@@ -1353,6 +1353,19 @@
      975
     ]
    }
+  },
+  {
+   "source": "assets/source/sheet_wardrobe.png",
+   "out": "assets/art",
+   "pad": 2,
+   "crops": {
+    "props/wardrobe": [
+     0,
+     0,
+     916,
+     916
+    ]
+   }
   }
  ]
 }

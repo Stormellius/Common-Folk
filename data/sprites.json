@@ -69,12 +69,12 @@
   {"id": "object.quarry_face", "files": ["props/quarry_face"], "fit": [1.15, 1.15], "base": 0.5},
   {"id": "object.fishing_spot", "files": ["props/jetty"], "fit": [1.0, 1.0], "base": 0.5, "shadow": false},
   {"id": "object.field_plot", "files": ["props/field_stubble"], "fit": [1.15, 0.95], "base": 0.5, "shadow": false, "stages": ["props/field_stubble", "props/field_seedlings", "props/field_growing", "props/field_ripe", "props/field_stubble"]},
-  {"id": "people.adult_male", "stage": "adult", "gender": "male", "dir": "people/adult_male", "outfits": ["casual", "formal", "sleepwear", "winter", "worker"], "skin": "#f0b890"},
-  {"id": "people.adult_female", "stage": "adult", "gender": "female", "dir": "people/adult_female", "outfits": ["casual", "formal", "sleepwear", "winter", "worker"], "skin": "#f0b890"},
-  {"id": "people.elder_male", "stage": "elder", "gender": "male", "dir": "people/elder_male", "outfits": ["casual", "formal", "sleepwear", "winter"], "skin": "#f0b890"},
-  {"id": "people.elder_female", "stage": "elder", "gender": "female", "dir": "people/elder_female", "outfits": ["casual", "formal", "sleepwear", "winter"], "skin": "#f0b890"},
-  {"id": "people.youth", "stage": "youth", "gender": "any", "dir": "people/youth", "outfits": ["casual", "formal", "sleepwear", "winter", "worker"], "skin": "#f0b890"},
-  {"id": "people.child", "stage": "child", "gender": "any", "dir": "people/child", "outfits": ["casual", "formal", "sleepwear", "winter"], "skin": "#f0b890"},
+  {"id": "people.adult_male", "stage": "adult", "gender": "male", "dir": "people/adult_male", "outfits": ["casual", "formal", "sleepwear", "winter", "worker"], "looks": [{"id": "a", "body": "body", "skin": "#f1bd98", "hair": "#6d4e39"}, {"id": "b", "body": "body_b", "skin": "#935a3f", "hair": "#2a2a2a"}, {"id": "c", "body": "body_c", "skin": "#f4d1bb", "hair": "#e5bc6c"}]},
+  {"id": "people.adult_female", "stage": "adult", "gender": "female", "dir": "people/adult_female", "outfits": ["casual", "formal", "sleepwear", "winter", "worker"], "looks": [{"id": "a", "body": "body", "skin": "#e0b38c", "hair": "#c4a765"}, {"id": "b", "body": "body_b", "skin": "#87593f", "hair": "#292a2c"}, {"id": "c", "body": "body_c", "skin": "#f5d2be", "hair": "#b94629"}]},
+  {"id": "people.elder_male", "stage": "elder", "gender": "male", "dir": "people/elder_male", "outfits": ["casual", "formal", "sleepwear", "winter"], "looks": [{"id": "a", "body": "body", "skin": "#d7a685", "hair": "#e8e8e8"}, {"id": "b", "body": "body_b", "skin": "#d39566", "hair": "#9a9a9a"}]},
+  {"id": "people.elder_female", "stage": "elder", "gender": "female", "dir": "people/elder_female", "outfits": ["casual", "formal", "sleepwear", "winter"], "looks": [{"id": "a", "body": "body", "skin": "#dfb48f", "hair": "#b1aaa4"}, {"id": "b", "body": "body_b", "skin": "#6f3f31", "hair": "#ebebeb"}]},
+  {"id": "people.youth", "stage": "youth", "gender": "any", "dir": "people/youth", "outfits": ["casual", "formal", "sleepwear", "winter", "worker"], "looks": [{"id": "a", "body": "body", "skin": "#e0b090", "hair": "#462f21"}, {"id": "b", "body": "body_b", "skin": "#f3d0bb", "hair": "#e5af59"}, {"id": "c", "body": "body_c", "skin": "#6f4330", "hair": "#212121"}]},
+  {"id": "people.child", "stage": "child", "gender": "any", "dir": "people/child", "outfits": ["casual", "formal", "sleepwear", "winter"], "looks": [{"id": "a", "body": "body", "skin": "#f0c0a0", "hair": "#dc853e"}, {"id": "b", "body": "body_b", "skin": "#a8693f", "hair": "#322e2d"}]},
   {"id": "animal.deer", "file": "animals/deer"},
   {"id": "animal.rabbit", "file": "animals/rabbit"},
   {"id": "animal.boar", "file": "animals/boar"},
@@ -83,5 +83,7 @@
   {"id": "animal.donkey", "file": "animals/donkey"},
   {"id": "animal.ox", "file": "animals/ox"},
   {"id": "animal.dog", "file": "animals/dog"},
-  {"id": "animal.cat", "file": "animals/cat"}
+  {"id": "animal.cat", "file": "animals/cat"},
+  {"id": "people.adult_female_pregnant", "stage": "adult", "gender": "pregnant", "dir": "people/adult_female_pregnant", "outfits": ["casual", "formal", "sleepwear", "winter", "worker"], "looks": [{"id": "a", "body": "body", "skin": "#e0af87", "hair": "#c3a461"}]},
+  {"id": "object.wardrobe", "files": ["props/wardrobe"], "fit": [1.0, 1.3], "base": 0.52}
 ]

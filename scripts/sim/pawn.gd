@@ -138,6 +138,10 @@ var family_trade := ""
 var tool := ""
 var tool_lent := false
 var job_recipe := ""
+## What the player has told this person to wear (an outfit id, or "" for whatever suits), and, while they are at a
+## wardrobe, what they are changing into.
+var outfit_choice := ""
+var job_outfit := ""
 var mentor_gain := 1.0
 ## The animal they ride (0 for none), and how much each step costs: 1 on foot, less on a horse, more
 ## when stalking game (worked out again from those two, so not saved).
@@ -338,6 +342,7 @@ func to_dict() -> Dictionary:
 		"tool": tool,
 		"tool_lent": tool_lent,
 		"job_recipe": job_recipe,
+		"outfit_choice": outfit_choice,
 		"deeds": deeds.duplicate(),
 		"ambition": ambition,
 		"ambition_step": ambition_step,
@@ -450,6 +455,7 @@ static func from_dict(data: Dictionary) -> Pawn:
 	pawn.tool = str(data.get("tool", ""))
 	pawn.tool_lent = bool(data.get("tool_lent", false))
 	pawn.job_recipe = str(data.get("job_recipe", ""))
+	pawn.outfit_choice = str(data.get("outfit_choice", ""))
 	var saved_deeds: Variant = data.get("deeds", {})
 	if saved_deeds is Dictionary:
 		for key in saved_deeds:

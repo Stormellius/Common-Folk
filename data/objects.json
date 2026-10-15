@@ -29,6 +29,7 @@
   {"id": "lantern_post", "cost": 6, "name": "Lantern post", "category": "decor", "blocks_walking": true, "light": {"color": "#ffd9a0", "radius": 4.6, "energy": 0.85, "shadow": false}, "materials": {"wood": 1}},
   {"id": "flower_bed", "cost": 3, "name": "Flower bed", "category": "decor", "blocks_walking": false, "flammable": 0.15},
   {"id": "bush", "cost": 2, "name": "Bush", "category": "decor", "blocks_walking": true, "flammable": 0.4},
+  {"id": "wardrobe", "cost": 30, "name": "Wardrobe", "doing": "Changing clothes", "blocks_walking": true, "use_position": "beside", "max_use_minutes": 3, "materials": {"wood": 3}, "flammable": 0.8, "wardrobe": true},
   {"id": "chair", "cost": 6, "name": "Chair", "category": "decor", "blocks_walking": true, "materials": {"wood": 1}, "flammable": 0.8},
   {"id": "chest", "cost": 14, "name": "Chest", "category": "decor", "blocks_walking": true, "materials": {"wood": 2}, "flammable": 0.6},
   {"id": "crates", "cost": 8, "name": "Crates", "category": "decor", "blocks_walking": true, "materials": {"wood": 2}, "flammable": 0.7},

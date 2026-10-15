@@ -32,6 +32,7 @@ const SELL_PREFIX := "sell:"         # "sell:<resource id>"
 const FIRE_ACTION := "fight_fire"
 const TREAT_PREFIX := "treat:"       # "treat:<patient's id>"
 const CRAFT_PREFIX := "craft:"       # "craft:<recipe id>:<object id>"
+const WEAR_PREFIX := "wear:"         # "wear:<outfit id or auto>:<object id>"
 const BUY_PREFIX := "buy:"           # "buy:<tool or good id>"
 const HUNT_PREFIX := "hunt:"         # "hunt:<animal id>"
 const PET_PREFIX := "pet:"           # "pet:<animal id>"
@@ -90,6 +91,8 @@ static func list_for(sim: Simulation, pawn: Pawn, tile: Vector2i) -> Array[Dicti
 		actions.append_array(_sell_entries(sim, pawn))
 	if placed != null and bool(placed.def().get("recipes", false)):
 		actions.append_array(_recipe_entries(sim, pawn, placed))
+	if placed != null and bool(placed.def().get("wardrobe", false)) and sim.household.get_pawn(pawn.id) != null:
+		actions.append_array(_wardrobe_entries(sim, pawn, placed))
 	if placed != null and bool(placed.def().get("sells_tools", false)):
 		actions.append_array(_tool_entries(sim, pawn))
 	if placed != null and str(placed.def().get("offers_work", "")) == "town":
@@ -305,6 +308,18 @@ static func _recipe_entries(sim: Simulation, pawn: Pawn, placed: PlacedObject) -
 
 
 ## Tools for sale on a shop's rack, each with its price.
+static func _wardrobe_entries(sim: Simulation, pawn: Pawn, placed: PlacedObject) -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	var blocker := sim.use_blocker(pawn, placed)
+	for outfit_id in Clothing.choices():
+		var label := "Wear: %s" % Clothing.name_of(outfit_id).to_lower()
+		if pawn.outfit_choice == outfit_id:
+			label += " (now)"
+		entries.append(_entry(WEAR_PREFIX + "%s:%d" % [outfit_id, placed.id], label, blocker == "", blocker))
+	entries.append(_entry(WEAR_PREFIX + "auto:%d" % placed.id, "Wear: whatever suits the weather and work" + (" (now)" if pawn.outfit_choice == "" else ""), blocker == "", blocker))
+	return entries
+
+
 static func _tool_entries(sim: Simulation, pawn: Pawn) -> Array[Dictionary]:
 	var entries: Array[Dictionary] = []
 	var yours := sim.household.get_pawn(pawn.id) != null
@@ -427,6 +442,12 @@ static func _perform(sim: Simulation, pawn: Pawn, action_id: String, tile: Vecto
 		return sim.sell_stock(action_id.trim_prefix(SELL_PREFIX), pawn)
 	if action_id.begins_with(BUY_PREFIX):
 		return sim.buy_item(pawn, action_id.trim_prefix(BUY_PREFIX))
+	if action_id.begins_with(WEAR_PREFIX):
+		var wear_parts := action_id.trim_prefix(WEAR_PREFIX).split(":")
+		var wardrobe := sim.world.get_object(int(wear_parts[1])) if wear_parts.size() == 2 else null
+		if wardrobe == null:
+			return { "ok": false, "message": "That is gone" }
+		return sim.order_dress(pawn, wardrobe, wear_parts[0])
 	if action_id.begins_with(CRAFT_PREFIX):
 		var craft_parts := action_id.trim_prefix(CRAFT_PREFIX).split(":")
 		var bench := sim.world.get_object(int(craft_parts[1])) if craft_parts.size() == 2 else null

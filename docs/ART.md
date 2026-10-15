@@ -84,3 +84,10 @@ would be the next step up.
   Babies and toddlers are still drawn by code. More looks (hair, skin tones) mean more body sheets and their five edits.
 * **Animals** (`animal.<kind>` in `data/sprites.json`): all nine, side-on, turned for west.
 * Cut but not wired yet: goods icons (`assets/art/goods`), trees, rocks and a log (`assets/art/trees`), tools and fences.
+
+* **Body looks**: a set can have several bodies (`body_b_front.png`...), recoloured edits of the first, so every outfit layer fits all of them
+  (`make_layers.py --look`). A person gets the look nearest to their hair and skin; adults have 3, the youth 3, elders and the child 2.
+* **Maternity**: `people.adult_female_pregnant` is a heavily pregnant body with casual, work, formal, winter and sleepwear layers; it is used
+  once a woman's bump shows (earlier months use the normal set, with the code-drawn bump when painted people are off).
+* **Wardrobe**: a buildable object; right-click it to send someone there to change into an outfit (or back to dressing for the weather).
+  Their outfit stays until they change again, except in bed, and their body look is never touched.

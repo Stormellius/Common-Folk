@@ -44,6 +44,7 @@ func _ready() -> void:
 	_section("audio", _test_audio)
 	_section("art", _test_art)
 	_section("clothing", _test_clothing)
+	_section("wardrobe", _test_wardrobe)
 	_section("events", _test_events)
 	_section("realm", _test_realm)
 	_section("faith_and_illness", _test_faith_and_illness)
@@ -3980,7 +3981,10 @@ func _test_art() -> void:
 		var names: Array = entry.get("files", [entry.get("file", "")])
 		if str(entry["id"]).begins_with("people."):
 			names = []
-			for layer in ["body"] + (entry["outfits"] as Array):
+			var layers: Array = (entry["outfits"] as Array).duplicate()
+			for look_entry in entry["looks"]:
+				layers.append(str(look_entry["body"]))
+			for layer in layers:
 				for side in ["front", "back"]:
 					names.append("%s/%s_%s" % [entry["dir"], layer, side])
 		elif entry.has("variants"):
@@ -3996,7 +4000,7 @@ func _test_art() -> void:
 			if not exists:
 				missing += str(name) + " "
 			var picture := SpriteBank.texture(str(name))
-			sizes_ok = sizes_ok and picture != null and picture.get_width() >= 16 and picture.get_width() <= 800 and picture.get_height() >= 16 and picture.get_height() <= 800
+			sizes_ok = sizes_ok and picture != null and picture.get_width() >= 16 and picture.get_width() <= 1000 and picture.get_height() >= 16 and picture.get_height() <= 1000
 	_check(entries >= 34 and files_ok and sizes_ok, "every picture in data/sprites.json is a real file of a sensible size (%d entries%s)" % [entries, ", missing " + missing if missing != "" else ""])
 	var ids_ok := true
 	var shapes_ok := true
@@ -4055,6 +4059,14 @@ func _test_art() -> void:
 	for n in 24:
 		variants[str(SpriteBank.person_variant("adult", "worker", n * 8)["front"])] = true
 	_check(variants.size() == 2, "and each outfit has two looks, picked by who the person is")
+	# Body looks: someone gets the look nearest to their hair and skin, and a mother-to-be the maternity set.
+	var man := SpriteBank.person_set("adult", "male")
+	var dark := SpriteBank.pick_look(man, { "hair": "#1a1a1a", "skin": "#8a5a40" })
+	var fair := SpriteBank.pick_look(man, { "hair": "#e8c070", "skin": "#f4d4c0" })
+	var plain := SpriteBank.pick_look(man, { "hair": "#6d4e39", "skin": "#f1bd98" })
+	_check((man["looks"] as Array).size() >= 3 and dark["id"] == "b" and fair["id"] == "c" and plain["id"] == "a", "adults have three body looks and each person gets the nearest to their hair and skin")
+	var maternity := SpriteBank.person_set("adult", "pregnant")
+	_check(not maternity.is_empty() and "winter" in maternity["outfits"] and "sleepwear" in maternity["outfits"] and SpriteBank.person_set("adult", "female")["id"] != maternity["id"], "there is a set of maternity pictures")
 	var painted_before := Settings.painted_characters
 	painted_before = true  # the default (a saved setting may differ)
 	Settings.painted_characters = false
@@ -6194,3 +6206,34 @@ func _write_file(path: String, text: String) -> void:
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	file.store_string(text)
 	file.close()
+
+
+func _test_wardrobe() -> void:
+	print("Wardrobe")
+	var game := _open_field()
+	var sim: Simulation = game["sim"]
+	var world: WorldState = game["world"]
+	var anna: Pawn = game["anna"]
+	anna.tile = Vector2i(30, 25)
+	GameClock.set_time(3, 12)
+	var wardrobe := world.add_object("wardrobe", Vector2i(31, 25))
+	_check(Clothing.worn(sim, anna) == "casual", "someone dresses for the weather and work unless told otherwise")
+	var entries := PawnActions.list_for(sim, anna, wardrobe.tile)
+	var wear := entries.filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with(PawnActions.WEAR_PREFIX))
+	_check(wear.size() == Clothing.choices().size() + 1, "a wardrobe offers every outfit, and going back to dressing for the weather (%d)" % wear.size())
+	var told := PawnActions.perform(sim, anna, "%s%s:%d" % [PawnActions.WEAR_PREFIX, "formal", wardrobe.id], wardrobe.tile)
+	_check(told["ok"] and anna.job_kind == "use" and anna.job_outfit == "formal" and anna.outfit_choice == "", "asking to change sends them to the wardrobe, and they have not changed yet")
+	_minutes(sim, 90, func() -> bool: return anna.outfit_choice != "")
+	_check(anna.outfit_choice == "formal" and Clothing.worn(sim, anna) == "formal", "once there they change into it")
+	GameClock.set_time(50, 12)
+	_check(Clothing.worn(sim, anna) == "formal", "and keep wearing it, whatever the weather")
+	anna.pose = "lie"
+	_check(Clothing.worn(sim, anna) == "sleepwear", "except in bed")
+	anna.pose = ""
+	var copy := Pawn.from_dict(JSON.parse_string(JSON.stringify(anna.to_dict())))
+	_check(copy.outfit_choice == "formal", "the choice is saved")
+	GameClock.set_time(3, 12)
+	_check(PawnActions.perform(sim, anna, "%sauto:%d" % [PawnActions.WEAR_PREFIX, wardrobe.id], wardrobe.tile)["ok"], "they can go back to dressing for the weather")
+	_minutes(sim, 90, func() -> bool: return anna.outfit_choice == "")
+	_check(anna.outfit_choice == "" and Clothing.worn(sim, anna) == "casual", "and do")
+	_check(not sim.order_dress(anna, wardrobe, "swim")["ok"] and not sim.order_dress(game["ben"], world.add_object("bed", Vector2i(40, 25)), "formal")["ok"], "only the outfits on offer, and only at a wardrobe")

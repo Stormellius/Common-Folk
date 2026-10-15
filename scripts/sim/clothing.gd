@@ -36,6 +36,14 @@ static func name_of(outfit_id: String) -> String:
 	return str(DataRegistry.get_def("clothing", outfit_id).get("name", outfit_id))
 
 
+## The outfits a person can be told to wear (data/wardrobe.json "choices").
+static func choices() -> Array[String]:
+	var found: Array[String] = []
+	for outfit_id in rules().get("choices", []):
+		found.append(str(outfit_id))
+	return found
+
+
 ## What an outfit does to the drain of warmth (1 for no help, under 1 for a better coat).
 static func warmth_of(outfit_id: String) -> float:
 	return float(DataRegistry.get_def("clothing", outfit_id).get("warmth", 1.0))
@@ -78,6 +86,8 @@ static func worn(sim: Simulation, pawn: Pawn) -> String:
 			return "undergarments"
 		if placed.def_id in rules().get("formal_objects", []):
 			return "formal"
+	if pawn.outfit_choice != "" and DataRegistry.has_def("clothing", pawn.outfit_choice):  # as the player chose, at a wardrobe
+		return pawn.outfit_choice
 	var cold := chill(sim, pawn)
 	if cold >= float(rules().get("winter_from", 2.0)):
 		return "winter"
