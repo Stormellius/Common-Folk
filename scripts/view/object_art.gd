@@ -1,14 +1,15 @@
 class_name ObjectArt
 extends RefCounted
 ## Draws the things people use (bed, pot, hearth...) with code, in the same hand-inked
-## style as the people. Like PawnArt this is a placeholder: swap draw() for sprites later.
+## style as the people. A painted picture (see SpriteBank) is drawn instead where there is one; this
+## is what the rest look like, and what everything looks like with the code-drawn art chosen.
 ## An object whose id has no drawing here (for example one added by a mod) shows up as a crate.
 ##
 ## Drawing is centered on the tile; one tile is 48 units wide and `u` scales units to pixels.
 ## `t` is the time in seconds, for flames and steam; `occupied` is true while someone sleeps in it.
 
 const OUTLINE := Color(0.06, 0.05, 0.05, 0.85)
-const ANIMATED := ["hearth", "cooking_pot", "watch_post", "altar", "forge"]
+const ANIMATED := ["hearth", "cooking_pot", "watch_post", "altar", "forge", "oven"]
 ## How tall the south face of a wall looks, in units. Light comes from the top-left, as in the
 ## terrain shader, so a wall shows a lit top and a shaded face to the south.
 const WALL_FACE := 12.0
@@ -17,7 +18,7 @@ const STONE := Color(0.57, 0.57, 0.56)
 
 
 static func is_animated(def_id: String) -> bool:
-	return def_id in ANIMATED
+	return def_id in ANIMATED and not SpriteBank.has_object(def_id)  # a painted picture does not move
 
 
 ## How far the crops have got: 0 bare earth, 1 seedlings, 2 growing, 3 ripe, 4 stubble. They are
@@ -42,6 +43,8 @@ static func crop_stage() -> int:
 ## (1 north, 2 east, 4 south, 8 west; see WorldState.connection_mask). `cell` is the tile it
 ## stands on; it only varies the stonework and planks so neighbors do not look stamped.
 static func draw(ci: CanvasItem, def_id: String, u: float, t: float, occupied: bool = false, connections: int = 0, cell: Vector2i = Vector2i.ZERO) -> void:
+	if SpriteBank.draw_object(ci, def_id, u, cell):
+		return
 	match def_id:
 		"wall":
 			_wall(ci, u, connections, cell, false)
@@ -49,6 +52,10 @@ static func draw(ci: CanvasItem, def_id: String, u: float, t: float, occupied: b
 			_wall(ci, u, connections, cell, true)
 		"door":
 			_door(ci, u, connections, cell)
+		"stairs":
+			_stairs(ci, u, false)
+		"stairs_top":
+			_stairs(ci, u, true)
 		"grave":
 			_grave(ci, u)
 		"bed":
@@ -89,6 +96,10 @@ static func draw(ci: CanvasItem, def_id: String, u: float, t: float, occupied: b
 			_chamber_pot(ci, u)
 		"lute":
 			_lute(ci, u)
+		"harp":
+			_harp(ci, u)
+		"drum":
+			_drum(ci, u)
 		"table", "meal_table":
 			_table(ci, u)
 		"notice_board":
@@ -117,6 +128,14 @@ static func draw(ci: CanvasItem, def_id: String, u: float, t: float, occupied: b
 			_workbench(ci, u)
 		"tool_rack":
 			_tool_rack(ci, u)
+		"quern":
+			_quern(ci, u)
+		"oven":
+			_oven(ci, u, t)
+		"brew_vat":
+			_brew_vat(ci, u)
+		"tanning_rack":
+			_tanning_rack(ci, u)
 		_:
 			_crate(ci, u)
 
@@ -416,6 +435,42 @@ static func _lute(ci: CanvasItem, u: float) -> void:
 	ci.draw_circle(Vector2(-3, 2) * u, 2.8 * u, Color(0.18, 0.11, 0.07))
 
 
+## A frame harp on a blue rug: a tall pillar, a curved neck and a slanting soundboard with strings between.
+static func _harp(ci: CanvasItem, u: float) -> void:
+	_rect(ci, u, -19, -13, 38, 26, Color(0.24, 0.32, 0.44), 1.2)  # a small rug
+	_rect(ci, u, -16, -10, 32, 20, Color(0.34, 0.44, 0.58), 0.0)
+	var wood := Color(0.55, 0.36, 0.20)
+	var board := PackedVector2Array([Vector2(-11, 9), Vector2(-8, 9), Vector2(11, -3), Vector2(8, -6)])
+	var scaled := PackedVector2Array()
+	for point in board:
+		scaled.append(point * u)
+	ci.draw_colored_polygon(scaled, wood.darkened(0.1))  # the soundboard
+	for step in 7:  # the strings run from the soundboard up to the neck
+		var along := float(step) / 6.0
+		var from := Vector2(lerpf(-9.5, 9.5, along), lerpf(8.0, -4.5, along))
+		var to := Vector2(lerpf(-9.5, 8.5, along), lerpf(-10.0, -6.5, along))
+		ci.draw_line(from * u, to * u, Color(0.92, 0.88, 0.74, 0.9), maxf(1.0, 0.7 * u))
+	_rect(ci, u, -12, -12, 4, 22, wood, 1.0)  # the pillar
+	var neck := PackedVector2Array([Vector2(-12, -12), Vector2(9, -8), Vector2(9, -5), Vector2(-9, -9)])
+	var neck_scaled := PackedVector2Array()
+	for point in neck:
+		neck_scaled.append(point * u)
+	ci.draw_colored_polygon(neck_scaled, wood.lightened(0.08))
+
+
+## A drum on a red rug: a round shell, a pale skin, lacing round the side and two sticks laid across.
+static func _drum(ci: CanvasItem, u: float) -> void:
+	_rect(ci, u, -19, -13, 38, 26, Color(0.46, 0.17, 0.15), 1.2)  # a small rug
+	_rect(ci, u, -16, -10, 32, 20, Color(0.60, 0.26, 0.21), 0.0)
+	_ellipse(ci, u, Vector2(0, 1), Vector2(11.0, 11.0), Color(0.50, 0.30, 0.18), 1.2)  # the shell
+	for step in 10:
+		var angle := TAU * float(step) / 10.0
+		ci.draw_line(Vector2(cos(angle), sin(angle)) * 9.0 * u + Vector2(0, 1) * u, Vector2(cos(angle + 0.3), sin(angle + 0.3)) * 11.0 * u + Vector2(0, 1) * u, Color(0.78, 0.66, 0.44), maxf(1.0, 0.8 * u))
+	_ellipse(ci, u, Vector2(0, 0), Vector2(8.5, 8.5), Color(0.88, 0.80, 0.64), 0.8)  # the skin
+	ci.draw_line(Vector2(9, -9) * u, Vector2(18, -14) * u, Color(0.70, 0.55, 0.34), maxf(1.0, 1.6 * u))
+	ci.draw_line(Vector2(12, -6) * u, Vector2(19, -9) * u, Color(0.70, 0.55, 0.34), maxf(1.0, 1.6 * u))
+
+
 ## A wall fills its whole tile, so a run of them reads as one solid wall and corners and
 ## crossings join up. Its top is laid in courses (planks or stone blocks) that carry on from
 ## tile to tile, and where no wall continues to the south it shows a shaded front face.
@@ -519,6 +574,36 @@ static func _courses(ci: CanvasItem, u: float, area: Rect2, along_x: bool, rows:
 	var last0 := Vector2(start - origin, across_start + rows * across) if along_x else Vector2(across_start + rows * across, start - origin)
 	var last1 := Vector2(end - origin, across_start + rows * across) if along_x else Vector2(across_start + rows * across, end - origin)
 	ci.draw_line(last0 * u, last1 * u, mortar, width)
+
+
+## A flight of timber stairs seen from above, climbing toward the top of the picture; `landing` draws the
+## top of it as it is seen from upstairs: the opening with a rail round it and the steps going down.
+static func _stairs(ci: CanvasItem, u: float, landing: bool) -> void:
+	var wood := TIMBER.lightened(0.05)
+	var dark := Color(0.20, 0.14, 0.09)
+	if landing:
+		ci.draw_rect(Rect2(Vector2(-18, -20) * u, Vector2(36, 40) * u), dark)
+		for i in 5:  # the steps going down, seen over the edge
+			var y := -14.0 + i * 7.0
+			ci.draw_rect(Rect2(Vector2(-15, y) * u, Vector2(30, 5.5) * u), wood.darkened(0.12 + 0.07 * i))
+		var rail := TIMBER.lightened(0.18)
+		ci.draw_rect(Rect2(Vector2(-21, -22) * u, Vector2(4, 44) * u), rail)
+		ci.draw_rect(Rect2(Vector2(17, -22) * u, Vector2(4, 44) * u), rail)
+		ci.draw_rect(Rect2(Vector2(-21, -23) * u, Vector2(42, 4) * u), rail)
+		ci.draw_line(Vector2(-21, -23) * u, Vector2(21, -23) * u, OUTLINE, maxf(1.0, u))
+		ci.draw_line(Vector2(-21, -23) * u, Vector2(-21, 22) * u, OUTLINE, maxf(1.0, u))
+		ci.draw_line(Vector2(21, -23) * u, Vector2(21, 22) * u, OUTLINE, maxf(1.0, u))
+		return
+	ci.draw_rect(Rect2(Vector2(-21, -23) * u, Vector2(42, 46) * u), OUTLINE)
+	for i in 7:  # treads, the high ones lighter
+		var y := 19.0 - i * 6.2
+		ci.draw_rect(Rect2(Vector2(-18, y) * u, Vector2(36, 5.2) * u), wood.lightened(0.04 * i))
+		ci.draw_line(Vector2(-18, y) * u, Vector2(18, y) * u, wood.lightened(0.05 * i + 0.14), maxf(1.0, 0.8 * u))
+		ci.draw_line(Vector2(-18, y + 5.2) * u, Vector2(18, y + 5.2) * u, dark, maxf(1.0, 0.8 * u))
+	for x in [-21.0, 17.0]:  # the stringers
+		ci.draw_rect(Rect2(Vector2(x, -23) * u, Vector2(4, 46) * u), TIMBER.darkened(0.12))
+	var arrow := Color(1.0, 0.92, 0.65, 0.85)
+	ci.draw_colored_polygon(PackedVector2Array([Vector2(0, -17) * u, Vector2(-5, -9) * u, Vector2(5, -9) * u]), arrow)
 
 
 ## A door stands in a gap in the wall: timber jambs at either end, a plank leaf with iron
@@ -767,6 +852,57 @@ static func _tool_rack(ci: CanvasItem, u: float) -> void:
 	ci.draw_line(Vector2(16, -9) * u, Vector2(16, 7) * u, Color(0.30, 0.20, 0.12), maxf(1.5, 2.2 * u))
 	_rect(ci, u, 12, -10, 8, 5, Color(0.50, 0.52, 0.56), 0.8)
 	_rect(ci, u, -22, 9, 44, 4, Color(0.28, 0.19, 0.11), 0.0)
+
+
+## A hand mill: a round stone with a wooden handle, and a little flour about it.
+static func _quern(ci: CanvasItem, u: float) -> void:
+	_shadow(ci, u, 17.0)
+	ci.draw_circle(Vector2.ZERO, 17.0 * u, OUTLINE)
+	ci.draw_circle(Vector2.ZERO, 15.5 * u, Color(0.50, 0.50, 0.52))
+	ci.draw_circle(Vector2(-1, -1) * u, 12.0 * u, Color(0.64, 0.64, 0.66))
+	ci.draw_circle(Vector2.ZERO, 3.0 * u, Color(0.30, 0.30, 0.32))
+	ci.draw_line(Vector2(0, 0) * u, Vector2(9, -9) * u, Color(0.30, 0.20, 0.12), maxf(1.5, 2.8 * u))
+	for dust in [Vector2(-14, 8), Vector2(-10, 13), Vector2(12, 11), Vector2(15, 6)]:
+		ci.draw_circle(dust * u, 2.0 * u, Color(0.95, 0.93, 0.85, 0.85))
+
+
+## A brick bread oven: a dome with a glowing mouth.
+static func _oven(ci: CanvasItem, u: float, t: float) -> void:
+	_shadow(ci, u, 21.0)
+	ci.draw_circle(Vector2(0, 2) * u, 26.0 * u, Color(1.0, 0.5, 0.15, 0.08))
+	_ellipse(ci, u, Vector2.ZERO, Vector2(20, 18), Color(0.55, 0.36, 0.28), 1.3)
+	_ellipse(ci, u, Vector2(-1, -2), Vector2(16, 13), Color(0.66, 0.44, 0.34), 0.0)
+	for row in 3:
+		ci.draw_arc(Vector2(0, 2) * u, (6.0 + row * 5.0) * u, PI * 1.1, PI * 1.9, 10, Color(0.42, 0.26, 0.20), maxf(1.0, 0.9 * u))
+	_rect(ci, u, -7, 5, 14, 9, Color(0.10, 0.07, 0.06), 1.0)
+	var glow := 0.8 + 0.2 * sin(t * 5.0)
+	_ellipse(ci, u, Vector2(0, 10), Vector2(5.5, 2.8), Color(1.0, 0.55, 0.15) * glow, 0.0)
+	_flame(ci, u, Vector2(-2, 11), 5.0 + 1.5 * sin(t * 8.0), 4.0)
+
+
+## A wooden vat with a head of foam.
+static func _brew_vat(ci: CanvasItem, u: float) -> void:
+	_shadow(ci, u, 17.0)
+	ci.draw_circle(Vector2.ZERO, 17.0 * u, OUTLINE)
+	ci.draw_circle(Vector2.ZERO, 15.5 * u, Color(0.46, 0.32, 0.18))
+	for hoop in [14.0, 9.0]:
+		ci.draw_arc(Vector2.ZERO, hoop * u, 0.0, TAU, 20, Color(0.30, 0.30, 0.34), maxf(1.0, 1.4 * u))
+	ci.draw_circle(Vector2(0, -1) * u, 11.0 * u, Color(0.76, 0.52, 0.18))
+	for foam in [Vector2(-4, -3), Vector2(3, -4), Vector2(-1, 3), Vector2(5, 2), Vector2(-6, 2)]:
+		ci.draw_circle(foam * u, 3.2 * u, Color(0.96, 0.92, 0.80))
+	ci.draw_line(Vector2(4, 4) * u, Vector2(16, 14) * u, Color(0.30, 0.20, 0.12), maxf(1.5, 2.4 * u))  # a paddle
+
+
+## A frame with a hide stretched across it.
+static func _tanning_rack(ci: CanvasItem, u: float) -> void:
+	_shadow(ci, u, 20.0)
+	_rect(ci, u, -20, -14, 40, 28, Color(0.40, 0.28, 0.17), 1.3)
+	var hide := PackedVector2Array([Vector2(-16, -10), Vector2(15, -11), Vector2(17, -2), Vector2(14, 10), Vector2(-14, 11), Vector2(-17, 1)])
+	ci.draw_colored_polygon(_scaled(hide, u), Color(0.66, 0.46, 0.28))
+	ci.draw_polyline(_scaled(hide + PackedVector2Array([hide[0]]), u), OUTLINE, maxf(1.0, u))
+	for lace in [Vector2(-16, -10), Vector2(15, -11), Vector2(17, -2), Vector2(14, 10), Vector2(-14, 11), Vector2(-17, 1)]:
+		ci.draw_line(lace * u, (lace * 1.25) * u, Color(0.85, 0.80, 0.65), maxf(1.0, 0.9 * u))
+	ci.draw_circle(Vector2(-4, -2) * u, 4.0 * u, Color(0.58, 0.40, 0.24))
 
 
 # --- little shapes -----------------------------------------------------------------

@@ -1,0 +1,89 @@
+{
+ "note": "SpriteCook assets used by this project. asset_id is the stable id; use mcp list_recent_assets to recover links. api.spritecook.ai must be on the environment's allowed domains for downloads. people layers: see tools/people_sets.json.",
+ "assets": [
+  {
+   "asset_id": "f8d71633-9ec4-484a-bd93-b5d8cfb55096",
+   "label": "Asset pack: villagers, furniture, props, floor textures (the style reference for everything else)",
+   "file": "assets/source/pack_props_1.webp",
+   "sha12": "2aea690b0e74"
+  },
+  {
+   "asset_id": "f2bdc37a-c0db-49fb-9328-8951cfad10d5",
+   "label": "Life stages in undergarments and outfits, front and back",
+   "file": "assets/source/sheet_life_stages_1.webp",
+   "sha12": "df88a85f6bc1"
+  },
+  {
+   "asset_id": "81f96e3b-e0a8-4465-8daa-b321813c38a4",
+   "label": "Concept art the pack was made from (a game screenshot, 1600x900)"
+  },
+  {
+   "asset_id": "0d04a5f0-22cb-471c-89f2-09b2e67559dc",
+   "label": "Test: a cooking pot on a tripod over a fire (generated with the pack as the style reference; not downloaded yet)"
+  },
+  {
+   "asset_id": "e6d2889b-4dbe-4cfd-a2e8-574636e8c47a",
+   "label": "Sheet: home and kitchen"
+  },
+  {
+   "asset_id": "51f53387-f173-464a-b0e3-37059f255a6a",
+   "label": "Sheet: workshop"
+  },
+  {
+   "asset_id": "eac801d3-0007-4efc-87d3-dbc83f49006a",
+   "label": "Sheet: shop and market"
+  },
+  {
+   "asset_id": "074648ed-19ee-4f24-b56c-e484f06a2b99",
+   "label": "Sheet: chapel, clinic, instruments"
+  },
+  {
+   "asset_id": "21aaf4e4-89d7-444a-9017-948ca36f3fe1",
+   "label": "Sheet: farm, garden, quarry, jetty"
+  },
+  {
+   "asset_id": "2c5742d2-c32a-4a92-9c67-7089709d5583",
+   "label": "Sheet: animals"
+  },
+  {
+   "asset_id": "ab7cb47e-12a7-438a-9488-023e538a8439",
+   "label": "Sheet: goods icons"
+  },
+  {
+   "asset_id": "c8590719-2871-4a57-9165-14d2ef500928",
+   "label": "Sheet: trees and rocks"
+  },
+  {
+   "asset_id": "429aeb06-f3b9-419e-8325-992f3a9749b0",
+   "label": "Pregnant adult woman body sheet (maternity set)"
+  },
+  {
+   "asset_id": "64f9c9a9-61a1-4a29-8265-e7cb5e3efef7",
+   "label": "Wardrobe prop"
+  },
+  {
+   "asset_id": "9ab386a5-9bea-431d-9f46-179a28eb3077",
+   "label": "Garment on its own: adult_female tunic"
+  },
+  {
+   "asset_id": "f8dcf73d-176e-4b81-9398-5f87c45a12b7",
+   "label": "Garment on its own: adult_female trousers"
+  },
+  {
+   "asset_id": "e06c638c-21e0-45b4-b411-3a58c65dfade",
+   "label": "Garment on its own: adult_female boots"
+  },
+  {
+   "asset_id": "0f8fd067-d78e-49d9-9fb7-ac74697f284f",
+   "label": "Garment on its own: adult_male tunic"
+  },
+  {
+   "asset_id": "19234d84-2b02-4bab-adbb-db9e5b073204",
+   "label": "Garment on its own: adult_male trousers"
+  },
+  {
+   "asset_id": "b3d5f24e-3de7-4bfc-a285-f87b41f2067c",
+   "label": "Garment on its own: adult_male boots"
+  }
+ ]
+}

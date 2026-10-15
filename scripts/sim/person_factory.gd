@@ -42,8 +42,14 @@ static func make(rng: RandomNumberGenerator, family: String, used_names: Array[S
 		(orientations if str(trait_def.get("group", "")) == "orientation" else others).append(str(trait_def["id"]))
 	if pawn.adult and not orientations.is_empty():
 		pawn.traits.append(orientations[rng.randi() % orientations.size()])
-	for i in mini(RANDOM_TRAITS, others.size()):
-		var pick := others[rng.randi() % others.size()]
+	for i in RANDOM_TRAITS:
+		var fitting: Array[String] = []
+		for candidate in others:
+			if not FamilyDesign.clashes(candidate, pawn.traits):
+				fitting.append(candidate)
+		if fitting.is_empty():
+			break
+		var pick := fitting[rng.randi() % fitting.size()]
 		others.erase(pick)
 		pawn.traits.append(pick)
 	for need_id in Needs.active_ids():

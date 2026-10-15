@@ -20,8 +20,11 @@ func _ready() -> void:
 	_check(menus.current() == "title" and not main._in_game and not hud.visible, "an ordinary launch opens the title screen, with the HUD hidden")
 
 	menus.new_game_requested.emit(4242, "arrived", "short")
+	_check(menus.current() == "land" and not main._in_game and main._lot_picker.visible, "Begin first lets the player choose their land")
+	menus.land_confirmed.emit("home")
 	_check(main._in_game and hud.visible and not menus.is_open(), "Begin starts the game and shows the HUD")
-	_check(main.world.world_seed == 4242 and main.world.titles.size() > 0 and main.world.lifespan == "short" and GameClock.speed_level == 1, "with the chosen seed, start and lifespan, running")
+	_check(main.world.world_seed == 4242 and main.world.titles.size() > 0 and main.world.lifespan == "short" and GameClock.speed_level == 0 and main.build.active, "with the chosen seed, start and lifespan, paused in build mode on bare land")
+	GameClock.set_speed(1)
 
 	# Time passes slowly, but people walk at a human pace: a walk across the yard takes seconds.
 	var walker: Pawn = main.sim.household.selected()
@@ -64,6 +67,26 @@ func _ready() -> void:
 	_check(main._in_game and not menus.is_open() and main.world.world_seed == 4242, "loading the save puts the game back")
 	menus.load_requested.emit("user://saves/no_such_save.json")
 	_check(menus.current() == "load" and menus._load_error.visible, "a save that cannot be loaded says so on the load screen")
+
+	# The families screen: take up another family, and go back.
+	menus.close()
+	var before: int = main.sim.household.pawns.size()
+	var old_name: String = Families.family_name(main.sim.household.pawns)
+	main._open_menu(main._open_families)
+	_check(menus.current() == "families" and menus._family_list.get_child_count() > 6, "the families screen lists the town's families, the empty houses and what has happened")
+	var rows: Array = Families.rows(main.sim)
+	var lot_id := ""
+	for row in rows:
+		if str(row["blocker"]) == "":
+			lot_id = str(row["lot"])
+			break
+	menus.play_family_requested.emit(lot_id)
+	var new_name: String = Families.family_name(main.sim.household.pawns)
+	_check(lot_id != "" and not menus.is_open() and new_name != old_name and main.sim.household.selected() != null and main.sim.household.selected().home_lot == WorldState.HOME_LOT, "playing one closes the screen and you are that family (%s, then %s; %d folk before)" % [old_name, new_name, before])
+	main._open_menu(main._open_families)
+	menus.play_family_requested.emit(WorldState.HOME_LOT)
+	_check(menus.current() == "families" and "own family" in menus._family_note.text, "asking for your own family says why not")
+	menus.close()
 
 	SaveSlots.remove(path)
 	print("")

@@ -8,6 +8,10 @@ extends CanvasLayer
 ## opened from (the title screen or the pause menu); Esc goes back too, or closes the pause menu.
 
 signal new_game_requested(world_seed: int, start_id: String, lifespan: String)
+## The create screen's Begin: the seed, the start and the lifespan are picked and the family drawn; next is the land.
+signal land_picked(lot_id: String)
+signal land_confirmed(lot_id: String)
+signal land_cancelled
 signal load_requested(path: String)
 signal save_requested(slot_name: String)
 ## Leave the game for the title screen.
@@ -19,6 +23,12 @@ signal save_screen_requested
 signal closed
 ## A newborn of your household was given a name.
 signal baby_named(baby_id: int, given: String)
+## The families screen was asked for (from the pause menu, or the end of a line): the game fills it in.
+signal wardrobe_chosen(pawn_id: int, object_id: int, outfit_id: String, slots: Dictionary)
+signal families_requested
+## Take up the family on this lot, or move the household into the empty house on it.
+signal play_family_requested(lot_id: String)
+signal move_house_requested(lot_id: String)
 
 const CREDIT := "Type: IM Fell English by Igino Marini and Alegreya by Huerta Tipográfica, under the SIL Open Font License"
 
@@ -36,6 +46,21 @@ var _continue_note: Label
 ## One button per way of beginning, by start id; kept so tests can reach them.
 var _start_buttons: Dictionary = {}
 var _start_picked := ""
+## The family drawn up on the create screen, read by main.gd when the game begins.
+var family_design: Dictionary = {}
+var _wd_pawn: Pawn
+var _wd_object := 0
+var _wd_worn := "casual"
+var _wd_outfit_option: OptionButton
+var _wd_slot_options: Dictionary = {}
+var _wd_portrait: PawnPortrait
+var _land_list: VBoxContainer
+var _land_note: Label
+var _land_pick := ""
+var _land_funds: Label
+var _land_ids: Array[String] = []
+var _creator: FamilyCreator
+var _create_begin: Button
 var _begin_button: Button
 var _seed_field: LineEdit
 var _lifespan_option: OptionButton
@@ -52,6 +77,9 @@ var _pause_note: Label
 var _display_option: OptionButton
 var _size_option: OptionButton
 var _scale_option: OptionButton
+var _volume_sliders: Dictionary = {}  # setting name -> HSlider
+var _art_box: CheckBox
+var _people_box: CheckBox
 var _vsync_box: CheckBox
 var _autosave_box: CheckBox
 var _name_intro: Label
@@ -61,6 +89,8 @@ var _name_portrait: PawnPortrait
 var _name_baby := 0
 var _name_gender := ""
 var _name_used: Array[String] = []
+var _family_list: VBoxContainer
+var _family_note: Label
 
 
 func _ready() -> void:
@@ -75,12 +105,16 @@ func _ready() -> void:
 	_screens["title"] = _build_title()
 	_screens["pause"] = _build_pause()
 	_screens["new"] = _build_new_game()
+	_screens["create"] = _build_create()
+	_screens["land"] = _build_land()
+	_screens["wardrobe"] = _build_wardrobe()
 	_screens["load"] = _build_load()
 	_screens["save"] = _build_save()
 	_screens["settings"] = _build_settings()
 	_screens["confirm"] = _build_confirm()
 	_screens["game_over"] = _build_game_over()
 	_screens["name"] = _build_naming()
+	_screens["families"] = _build_families()
 	_show("")
 
 
@@ -129,6 +163,120 @@ func open_new_game() -> void:
 	_seed_field.text = ""
 	_pick_lifespan("normal")
 	_show("new")
+
+
+## The family screen, straight from the new game screen (for a screenshot or test).
+func open_create() -> void:
+	_begin_button.pressed.emit()
+
+
+## The wardrobe: what somebody puts on, as a whole outfit and piece by piece. `worn` is what they have on now.
+func open_wardrobe(pawn: Pawn, object_id: int, worn: String) -> void:
+	_wd_pawn = pawn
+	_wd_object = object_id
+	_wd_worn = worn
+	_wd_outfit_option.clear()
+	_wd_outfit_option.add_item("Whatever suits the weather and work")
+	_wd_outfit_option.set_item_metadata(0, "auto")
+	var chosen := 0
+	for outfit_id in Clothing.choices():
+		_wd_outfit_option.add_item(Clothing.name_of(outfit_id))
+		_wd_outfit_option.set_item_metadata(_wd_outfit_option.item_count - 1, outfit_id)
+		if outfit_id == pawn.outfit_choice:
+			chosen = _wd_outfit_option.item_count - 1
+	_wd_outfit_option.select(chosen)
+	for slot in Clothing.SLOTS:
+		var option: OptionButton = _wd_slot_options[slot]
+		option.clear()
+		option.add_item("As the outfit has it")
+		option.set_item_metadata(0, "")
+		var picked := 0
+		for def in Clothing.available(pawn, slot):
+			option.add_item(str(def.get("name", def["id"])))
+			option.set_item_metadata(option.item_count - 1, str(def["id"]))
+			if str(def["id"]) == str(pawn.garments.get(slot, "")):
+				picked = option.item_count - 1
+		option.select(picked)
+	_wd_refresh()
+	_show("wardrobe")
+
+
+func _wd_choice() -> Dictionary:
+	var slots := {}
+	for slot in Clothing.SLOTS:
+		var option: OptionButton = _wd_slot_options[slot]
+		var garment_id := str(option.get_item_metadata(option.selected)) if option.selected >= 0 else ""
+		if garment_id != "":
+			slots[slot] = garment_id
+	var outfit_id := str(_wd_outfit_option.get_item_metadata(_wd_outfit_option.selected)) if _wd_outfit_option.selected >= 0 else "auto"
+	return { "outfit": outfit_id, "slots": slots }
+
+
+func _wd_refresh() -> void:
+	if _wd_pawn == null:
+		return
+	var choice := _wd_choice()
+	var outfit_id := _wd_worn if str(choice["outfit"]) == "auto" else str(choice["outfit"])
+	_wd_portrait.look = _wd_pawn.look
+	_wd_portrait.outfit = PawnArt.outfit_for(_wd_pawn, outfit_id, Clothing.pieces_with(outfit_id, choice["slots"]))
+	_wd_portrait.queue_redraw()
+
+
+func _build_wardrobe() -> Control:
+	var parts := _card("Wardrobe", 560.0)
+	var box: VBoxContainer = parts[1]
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 18)
+	box.add_child(row)
+	var frame := Control.new()
+	frame.custom_minimum_size = Vector2(150, 190)
+	row.add_child(frame)
+	var backing := Panel.new()
+	backing.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var backing_box := StyleBoxFlat.new()
+	backing_box.bg_color = Color(0.47, 0.56, 0.36, 0.6)
+	backing_box.border_color = Color(UiTheme.DARK_INK_DIM, 0.8)
+	backing_box.set_border_width_all(2)
+	backing_box.set_corner_radius_all(14)
+	backing.add_theme_stylebox_override("panel", backing_box)
+	frame.add_child(backing)
+	_wd_portrait = PawnPortrait.new()
+	_wd_portrait.scale = Vector2(3.0, 3.0)
+	_wd_portrait.position = Vector2(9, 52)
+	frame.add_child(_wd_portrait)
+	var fields := VBoxContainer.new()
+	fields.add_theme_constant_override("separation", 8)
+	fields.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(fields)
+	fields.add_child(_ink_label("Outfit", "InkLabel"))
+	_wd_outfit_option = OptionButton.new()
+	_wd_outfit_option.item_selected.connect(func(_index: int) -> void: _wd_refresh())
+	fields.add_child(_wd_outfit_option)
+	fields.add_child(_ink_rule())
+	fields.add_child(_ink_label("Or piece by piece", "InkDim"))
+	for slot in Clothing.SLOTS:
+		fields.add_child(_ink_label({ "top": "Top", "bottom": "Bottoms", "feet": "Shoes" }.get(slot, slot), "InkLabel"))
+		var option := OptionButton.new()
+		option.item_selected.connect(func(_index: int) -> void: _wd_refresh())
+		fields.add_child(option)
+		_wd_slot_options[slot] = option
+	var cancel := Button.new()
+	cancel.text = "Cancel"
+	cancel.pressed.connect(close)
+	var go := Button.new()
+	go.text = "Go and change"
+	go.pressed.connect(func() -> void:
+		var choice := _wd_choice()
+		var pawn_id := _wd_pawn.id if _wd_pawn != null else 0
+		close()
+		wardrobe_chosen.emit(pawn_id, _wd_object, str(choice["outfit"]), choice["slots"]))
+	box.add_child(_button_row([cancel, go]))
+	return parts[0]
+
+
+## Back from the land screen to the family screen.
+func back_to_create() -> void:
+	_show("create")
 
 
 ## The save screen; `default_name` fills the name field.
@@ -217,7 +365,7 @@ func close() -> void:
 func _show(screen: String) -> void:
 	for name in _screens:
 		_screens[name].visible = name == screen
-	_shade.visible = screen != "" and screen != "title"
+	_shade.visible = screen != "" and screen != "title" and screen != "land"
 	_current = screen
 	if screen == "" and get_viewport() != null:
 		get_viewport().gui_release_focus()
@@ -234,6 +382,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			close()
 		"name":
 			_on_name_chosen()  # Esc keeps the name in the box
+		"wardrobe":
+			close()
+		"create":
+			_show("new")
+		"land":
+			land_cancelled.emit()
 		"confirm":
 			_show(_confirm_back)
 		"title", "game_over":
@@ -332,6 +486,7 @@ func _build_pause() -> Control:
 		["Load Game", func() -> void:
 			_refresh_load_list()
 			_show("load")],
+		["Town Families", func() -> void: families_requested.emit()],
 		["Settings", func() -> void:
 			_refresh_settings()
 			_show("settings")],
@@ -416,12 +571,115 @@ func _build_new_game() -> Control:
 	_lifespan_note.custom_minimum_size = Vector2(540, 0)
 	box.add_child(_lifespan_note)
 	_begin_button = Button.new()
-	_begin_button.text = "Begin"
+	_begin_button.text = "Next: Your Family"
+	_begin_button.custom_minimum_size = Vector2(190, 0)
 	_begin_button.pressed.connect(func() -> void:
 		if _start_picked != "":
-			new_game_requested.emit(seed_from_text(_seed_field.text), _start_picked, chosen_lifespan()))
+			_creator.reset()
+			_create_begin.disabled = _creator.problem() != ""
+			_show("create"))
 	box.add_child(_button_row([_back_button(), _begin_button]))
 	return parts[0]
+
+
+func _build_create() -> Control:
+	var parts := _card("Your Family", 820.0)
+	var box: VBoxContainer = parts[1]
+	_creator = FamilyCreator.new()
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size = Vector2(0, 560)
+	_creator.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(_creator)
+	box.add_child(scroll)
+	_create_begin = Button.new()
+	_create_begin.text = "Begin"
+	_creator.changed.connect(func() -> void: _create_begin.disabled = _creator.problem() != "")
+	_create_begin.pressed.connect(func() -> void:
+		if _start_picked != "" and _creator.problem() == "":
+			family_design = _creator.design.duplicate(true)
+			new_game_requested.emit(seed_from_text(_seed_field.text), _start_picked, chosen_lifespan()))
+	var back := Button.new()
+	back.text = "Back"
+	back.pressed.connect(func() -> void: _show("new"))
+	box.add_child(_button_row([back, _create_begin]))
+	return parts[0]
+
+
+## The land screen: a card on the left listing the plots on offer while the map shows them.
+func open_land(options: Array[Dictionary], first: String, funds: int, start_text: String) -> void:
+	_clear(_land_list)
+	_land_ids.clear()
+	var group := ButtonGroup.new()
+	for option in options:
+		_land_ids.append(str(option["id"]))
+		var button := Button.new()
+		button.toggle_mode = true
+		button.button_group = group
+		button.text = "%s: %s" % [str(option["town"]), str(option["name"])]
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.custom_minimum_size = Vector2(380, 38)
+		button.tooltip_text = str(option["note"])
+		var id := str(option["id"])
+		button.button_pressed = id == first
+		button.pressed.connect(func() -> void:
+			_land_pick = id
+			_land_note.text = str(option["note"])
+			land_picked.emit(id))
+		_land_list.add_child(button)
+	_land_pick = first
+	for option in options:
+		if str(option["id"]) == first:
+			_land_note.text = str(option["note"])
+	_land_funds.text = "%s  You begin with %s to put up a home." % [start_text, Economy.format(funds)] if funds > 0 else start_text
+	_show("land")
+
+
+## Marks which plot is chosen when the map was clicked instead.
+func mark_land(lot_id: String) -> void:
+	_land_pick = lot_id
+	var index := 0
+	for button: Button in _land_list.get_children():
+		button.set_pressed_no_signal(index == _land_index(lot_id))
+		index += 1
+
+
+func _land_index(lot_id: String) -> int:
+	return _land_ids.find(lot_id)
+
+
+func _build_land() -> Control:
+	var parts := _card("Choose Your Land", 430.0)
+	var panel: PanelContainer = parts[0]
+	panel.set_anchors_preset(Control.PRESET_CENTER_LEFT)
+	panel.offset_left = 24.0
+	panel.offset_right = 24.0 + 430.0
+	panel.grow_horizontal = Control.GROW_DIRECTION_END
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	var box: VBoxContainer = parts[1]
+	_land_funds = _ink_label("", "InkLabel")
+	_land_funds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(_land_funds)
+	box.add_child(_ink_label("Look about the map, then pick a plot here or click it. The one you choose is where you will build.", "InkDim"))
+	(box.get_child(box.get_child_count() - 1) as Label).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, 230)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	box.add_child(scroll)
+	_land_list = VBoxContainer.new()
+	_land_list.add_theme_constant_override("separation", 4)
+	scroll.add_child(_land_list)
+	_land_note = _ink_label("", "InkDim")
+	_land_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(_land_note)
+	var back := Button.new()
+	back.text = "Back"
+	back.pressed.connect(func() -> void: land_cancelled.emit())
+	var settle := Button.new()
+	settle.text = "Settle here"
+	settle.pressed.connect(func() -> void: land_confirmed.emit(_land_pick))
+	box.add_child(_button_row([back, settle]))
+	return panel
 
 
 ## A seed typed by the player: a number is used as it is, any other text is turned into one (so
@@ -633,6 +891,25 @@ func _build_settings() -> Control:
 	_scale_option.item_selected.connect(func(index: int) -> void: Settings.set_value("ui_scale", Settings.UI_SCALES[index]))
 	_setting_row(grid, "Interface size", _scale_option)
 
+	for entry in [["master_volume", "Volume"], ["music_volume", "Music"], ["ambience_volume", "Wind, rain and town"], ["effects_volume", "Work and effects"]]:
+		var slider := HSlider.new()
+		slider.min_value = 0.0
+		slider.max_value = 1.0
+		slider.step = 0.05
+		slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		var key: String = entry[0]
+		slider.value_changed.connect(func(value: float) -> void: Settings.set_value(key, value))
+		_volume_sliders[key] = slider
+		_setting_row(grid, entry[1], slider)
+
+	_art_box = CheckBox.new()
+	_art_box.toggled.connect(func(on: bool) -> void: Settings.set_value("illustrated_art", on))
+	_setting_row(grid, "Painted art", _art_box)
+
+	_people_box = CheckBox.new()
+	_people_box.toggled.connect(func(on: bool) -> void: Settings.set_value("painted_characters", on))
+	_setting_row(grid, "Painted people", _people_box)
+
 	_vsync_box = CheckBox.new()
 	_vsync_box.toggled.connect(func(on: bool) -> void: Settings.set_value("vsync", on))
 	_setting_row(grid, "Vertical sync", _vsync_box)
@@ -665,6 +942,10 @@ func _refresh_settings() -> void:
 		if absf(Settings.UI_SCALES[i] - Settings.ui_scale) < absf(Settings.UI_SCALES[nearest] - Settings.ui_scale):
 			nearest = i
 	_scale_option.select(nearest)
+	for key in _volume_sliders:
+		(_volume_sliders[key] as HSlider).set_value_no_signal(float(Settings.get(key)))
+	_art_box.set_pressed_no_signal(Settings.illustrated_art)
+	_people_box.set_pressed_no_signal(Settings.painted_characters)
 	_vsync_box.set_pressed_no_signal(Settings.vsync)
 	_autosave_box.set_pressed_no_signal(Settings.autosave)
 
@@ -745,8 +1026,97 @@ func _build_game_over() -> Control:
 	var title_button := Button.new()
 	title_button.text = "Main Menu"
 	title_button.pressed.connect(func() -> void: title_requested.emit())
-	box.add_child(_button_row([load_button, new_button, title_button]))
+	var family_button := Button.new()
+	family_button.text = "Another Family"
+	family_button.pressed.connect(func() -> void: families_requested.emit())
+	box.add_child(_button_row([family_button, load_button, new_button, title_button]))
 	return parts[0]
+
+
+# --- the town's families -----------------------------------------------------------
+
+func _build_families() -> Control:
+	var parts := _card("The Town's Families", 760.0)
+	var box: VBoxContainer = parts[1]
+	_family_note = _ink_label("", "InkDim")
+	_family_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_family_note.custom_minimum_size = Vector2(720, 0)
+	box.add_child(_family_note)
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(720, 400)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	box.add_child(scroll)
+	_family_list = VBoxContainer.new()
+	_family_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_family_list.add_theme_constant_override("separation", 6)
+	scroll.add_child(_family_list)
+	box.add_child(_button_row([_back_button()]))
+	return parts[0]
+
+
+## The families screen. `families` and `empty` are the rows from Families.rows and Families.empty_rows,
+## `chronicle` the lines of what has happened, and `note` says who you are now.
+func open_families(families: Array[Dictionary], empty: Array[Dictionary], chronicle: Array[String], note: String) -> void:
+	if _current == "":
+		_back_to = "pause"
+	_family_note.text = note
+	_clear(_family_list)
+	_family_list.add_child(_ink_label("Families of the town", "InkHeader"))
+	var last_town := "~"
+	for row in families:
+		if str(row["town"]) != last_town:
+			last_town = str(row["town"])
+			var heading := _ink_label(last_town, "InkLabel")
+			heading.add_theme_font_override("font", UiTheme.bold_font())
+			_family_list.add_child(heading)
+		_family_list.add_child(_family_row("%s  ·  %s" % [row["title"], row["class"]], str(row["who"]), "Play", str(row["blocker"]), str(row["lot"]), play_family_requested))
+	if families.is_empty():
+		_family_list.add_child(_ink_label("Nobody else lives in the town.", "InkDim"))
+	_family_list.add_child(_ink_rule())
+	_family_list.add_child(_ink_label("Empty houses", "InkHeader"))
+	for row in empty:
+		_family_list.add_child(_family_row("%s  ·  %s" % [row["title"], row["town"]], "%d beds" % int(row["beds"]), "Move in", str(row["blocker"]), str(row["lot"]), move_house_requested))
+	if empty.is_empty():
+		_family_list.add_child(_ink_label("Every house is lived in.", "InkDim"))
+	_family_list.add_child(_ink_rule())
+	_family_list.add_child(_ink_label("What has happened", "InkHeader"))
+	for line in chronicle.slice(0, 14):
+		var entry := _ink_label(line, "InkDim")
+		entry.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		entry.custom_minimum_size = Vector2(680, 0)
+		_family_list.add_child(entry)
+	if chronicle.is_empty():
+		_family_list.add_child(_ink_label("Nothing yet.", "InkDim"))
+	_show("families")
+
+
+## Words on the families screen (why something could not be done).
+func show_families_note(text: String) -> void:
+	_family_note.text = text
+
+
+func _family_row(title: String, detail: String, button_text: String, blocker: String, lot_id: String, request: Signal) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	var words := VBoxContainer.new()
+	words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	words.add_theme_constant_override("separation", 0)
+	row.add_child(words)
+	var heading := _ink_label(title, "InkLabel")
+	heading.add_theme_font_override("font", UiTheme.bold_font())
+	words.add_child(heading)
+	var who := _ink_label(detail, "InkDim")
+	who.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	who.custom_minimum_size = Vector2(540, 0)
+	words.add_child(who)
+	var button := Button.new()
+	button.text = button_text
+	button.disabled = blocker != ""
+	button.tooltip_text = blocker
+	button.custom_minimum_size = Vector2(90, 0)
+	button.pressed.connect(func() -> void: request.emit(lot_id))
+	row.add_child(button)
+	return row
 
 
 # --- small parts -------------------------------------------------------------------

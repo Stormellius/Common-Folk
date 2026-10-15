@@ -1,5 +1,5 @@
 [
-  {"id": "planks", "cost": 1, "name": "Wood planks", "color": "#9b7a4d", "line": "#6f5433", "pattern": "planks", "flammable": 0.6},
-  {"id": "flagstone", "cost": 2, "name": "Flagstone", "color": "#8a8c8d", "line": "#5d5f61", "pattern": "flags", "flammable": 0.0},
-  {"id": "straw", "cost": 1, "name": "Straw mat", "color": "#b79a55", "line": "#8d733a", "pattern": "straw", "flammable": 1.0}
+  {"id": "planks", "cost": 1, "name": "Wood planks", "color": "#9b7a4d", "line": "#6f5433", "pattern": "planks", "flammable": 0.6, "skill": "carpentry"},
+  {"id": "flagstone", "cost": 2, "name": "Flagstone", "color": "#8a8c8d", "line": "#5d5f61", "pattern": "flags", "flammable": 0.0, "skill": "masonry"},
+  {"id": "straw", "cost": 1, "name": "Straw mat", "color": "#b79a55", "line": "#8d733a", "pattern": "straw", "flammable": 1.0, "skill": "carpentry"}
 ]

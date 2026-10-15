@@ -17,7 +17,7 @@ extends RefCounted
 ## nobody is dying, and the old graves hold nobody restless), and formats 1 to 9 had one town and
 ## wrote every tile out as a number (the lots become one town, and the tiles are read as they come).
 
-const FORMAT_VERSION := 10
+const FORMAT_VERSION := 14
 
 
 ## Writes the save file. Returns OK or a Godot error code. `view` is anything the screen wants
@@ -77,6 +77,11 @@ static func load_from(path: String) -> Dictionary:
 	if not (saved_world is Dictionary) or int(saved_world.get("width", 0)) <= 0 or int(saved_world.get("height", 0)) <= 0:
 		return { "ok": false, "error": "Save file is damaged" }
 	var world := WorldState.from_dict(saved_world)
+	if not world.fauna_seeded and world.width >= 200:  # a game from before there were animals gets some
+		var fauna_rng := RandomNumberGenerator.new()
+		fauna_rng.seed = world.world_seed * 6151 + 29
+		Fauna.populate(world, fauna_rng)
+		Fauna.give_pets(world, fauna_rng)
 	GameClock.from_dict(parsed.get("clock", {}))
 	var household: Household = null
 	if parsed.get("household") is Dictionary:

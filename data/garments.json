@@ -1,0 +1,20 @@
+[
+  {"id": "casual_top", "slot": "top", "name": "Everyday top", "warm": 0.04},
+  {"id": "casual_bottom", "slot": "bottom", "name": "Everyday bottoms", "warm": 0.02},
+  {"id": "casual_feet", "slot": "feet", "name": "Everyday shoes", "warm": 0.01},
+  {"id": "worker_top", "slot": "top", "name": "Work top", "warm": 0.04},
+  {"id": "worker_bottom", "slot": "bottom", "name": "Work bottoms", "warm": 0.02},
+  {"id": "worker_feet", "slot": "feet", "name": "Work boots", "warm": 0.01},
+  {"id": "formal_top", "slot": "top", "name": "Good top", "warm": 0.05},
+  {"id": "formal_bottom", "slot": "bottom", "name": "Good bottoms", "warm": 0.04},
+  {"id": "formal_feet", "slot": "feet", "name": "Good shoes", "warm": 0.01},
+  {"id": "winter_top", "slot": "top", "name": "Winter coat", "warm": 0.18},
+  {"id": "winter_bottom", "slot": "bottom", "name": "Winter bottoms", "warm": 0.08},
+  {"id": "winter_feet", "slot": "feet", "name": "Winter boots", "warm": 0.04},
+  {"id": "sleepwear_top", "slot": "top", "name": "Nightshirt", "warm": 0.04},
+  {"id": "sleepwear_bottom", "slot": "bottom", "name": "Night bottoms", "warm": 0.04},
+  {"id": "sleepwear_feet", "slot": "feet", "name": "Slippers", "warm": 0.02},
+  {"id": "tunic_top", "slot": "top", "name": "Blue linen tunic", "warm": 0.04},
+  {"id": "trousers_bottom", "slot": "bottom", "name": "Grey wool trousers", "warm": 0.04},
+  {"id": "boots_feet", "slot": "feet", "name": "Leather boots", "warm": 0.03}
+]

@@ -11,6 +11,8 @@ const PLANK_ROWS := 4
 
 
 static func draw(ci: CanvasItem, floor_id: String, rect: Rect2, cell: Vector2i = Vector2i.ZERO) -> void:
+	if SpriteBank.draw_floor(ci, floor_id, rect, cell):
+		return
 	var def := DataRegistry.get_def("floors", floor_id)
 	var fill := Color(str(def.get("color", "#ff00ff")))
 	var line := Color(str(def.get("line", "#000000")))

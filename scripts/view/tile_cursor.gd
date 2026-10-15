@@ -26,7 +26,7 @@ func _process(_delta: float) -> void:
 	if world == null:
 		return
 	var mouse := get_global_mouse_position()
-	var tile := Vector2i(floori(mouse.x / MapView.TILE_SIZE), floori(mouse.y / MapView.TILE_SIZE))
+	var tile := Levels.lift(Vector2i(floori(mouse.x / MapView.TILE_SIZE), floori(mouse.y / MapView.TILE_SIZE)), Levels.view)
 	if not world.in_bounds(tile.x, tile.y):
 		tile = Vector2i(-1, -1)
 	if tile != hovered:
@@ -46,6 +46,6 @@ func _draw() -> void:
 		for y in world.height + 1:
 			draw_line(Vector2(0, y * size), Vector2(world.width * size, y * size), grid_color)
 	if hovered.x >= 0:
-		var rect := Rect2(Vector2(hovered) * size, Vector2(size, size))
+		var rect := Rect2(Vector2(Levels.ground(hovered)) * size, Vector2(size, size))
 		draw_rect(rect, Color(1, 1, 1, 0.18))
 		draw_rect(rect, Color(1, 1, 1, 0.9), false, 2.0)

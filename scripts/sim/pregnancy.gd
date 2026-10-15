@@ -95,7 +95,7 @@ static func try_conceive(sim: Simulation, a: Pawn, b: Pawn, chance: float, rng: 
 	var father := b if mother == a else a
 	if sim.person(mother.id) == null or not can_conceive(mother):
 		return false
-	if rng.randf() >= chance:
+	if rng.randf() >= chance * Traits.mult(a, "conception") * Traits.mult(b, "conception"):
 		return false
 	begin(sim, mother, father, rng)
 	return true
@@ -286,12 +286,18 @@ static func _give_birth(sim: Simulation, mother: Pawn, rng: RandomNumberGenerato
 	var babies: Array[Pawn] = []
 	for i in maxi(1, mother.babies_due):
 		babies.append(_make_baby(sim, mother, rng))
+	var father := sim.person(mother.pregnancy_father)
+	for baby in babies:
+		Ambitions.note(mother, "child")
+		if father != null:
+			Ambitions.note(father, "child")
 	sim.end_labour(mother)
 	mother.pregnant_since = -1
 	mother.labour_since = -1
 	mother.babies_due = 1
 	var recovery := roundi(_number("recovery_years", 0.25) * Life.days_per_year(sim.world) * GameClock.MINUTES_PER_DAY)
 	mother.recovered_at = GameClock.tick + recovery * (2 if hard else 1)
+	sim.sound_made.emit("baby", mother.tile)
 	for relative in _family_of(sim, mother):
 		Mood.add_event(relative, "birth", GameClock.tick)
 	Mood.add_event(mother, "gave_birth", GameClock.tick)

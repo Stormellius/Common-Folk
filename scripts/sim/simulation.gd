@@ -10,6 +10,8 @@ extends RefCounted
 
 const THINK_COOLDOWN_TICKS := 30  # wait this long after finding nothing to fix a need with
 const OPTIONS_PER_NEED := 3       # how many nearest objects to try
+const NEED_REACH := 70            # how far someone goes to fill a need that is not pressing, tiles
+const NEED_DESPERATE := 20.0      # below this a need is pressing and no distance is too far
 const SOCIAL_RADIUS := 50         # how far someone lonely will go to find a person to talk to (towns are big)
 const GATHER_CHANCE := 0.04       # per minute, for an idle townsperson while an event draws a crowd
 const EVENT_EVERY := 10           # minutes between giving event thoughts and company
@@ -45,6 +47,11 @@ signal event_ended(event_name: String)
 signal realm_notice(text: String)
 ## Someone in the household fell ill, or got better.
 signal health_notice(text: String)
+## Something happened that has a sound (see SoundBank): its id and where, or (-1, -1) for a sound the
+## player should hear wherever the camera is (a chime, a coin).
+signal sound_made(sound_id: String, tile: Vector2i)
+## The player took up another family of the town, or moved house (see Families); `name` is the family's.
+signal family_changed(name: String)
 ## Who is in the household changed without a death: a baby was born, or grew old enough to be controlled.
 signal household_changed
 ## Babies were born into your household (their ids): the view may ask what to call them.
@@ -54,6 +61,13 @@ var active_needs: Array[String] = []
 var _announced := {}  # contagious illnesses the player has been told about
 var _fillers_by_need := {}  # need id -> the objects that can fill it
 var _fillers_dirty := true
+var _object_kinds := {}  # def id -> true for every kind of object standing in the world
+var _object_kinds_dirty := true
+var _wish_every := 40    # how often (minutes) an idle person with a wish looks into acting on it
+var _wish_from := 420    # and between which minutes of the day
+var _wish_until := 1260
+var _wish_reach := 36    # how far they will go for it
+var _wish_retry := 90    # and how long they leave a wish alone after nothing came of it
 var _has_infants := true  # whether anyone is a baby, worked out each minute; babies are carried along as people walk
 ## The dead Death has just led away, for the view to show their going: { "tile", "tick", "name",
 ## "death_at" (where Death stood, in tiles, or null) }. Kept an hour or so, never saved.
@@ -74,6 +88,13 @@ func _init(p_world: WorldState, p_household: Household, p_town: Household = null
 	world.tile_changed.connect(_on_world_changed)
 	active_needs = Needs.active_ids()
 	_repair_after_load()
+	var dreams := Ambitions.rules()
+	_wish_every = maxi(1, int(dreams.get("pursue_every", _wish_every)))
+	_wish_from = int(dreams.get("pursue_from_minute", _wish_from))
+	_wish_until = int(dreams.get("pursue_until_minute", _wish_until))
+	_wish_reach = int(dreams.get("pursue_reach", _wish_reach))
+	_wish_retry = int(dreams.get("pursue_retry", _wish_retry))
+	Ambitions.start(self)
 
 
 ## People take their steps (a fraction of a game minute: see GameClock.SUBSTEPS_PER_MINUTE). The
@@ -87,6 +108,8 @@ func step_motion() -> void:
 			pawn.tick(world)
 	if _has_infants:
 		Pregnancy.carry_infants(self)
+	Fauna.step_motion(self)
+	Caravans.step_motion(self)
 
 
 ## One game minute passes. Called from the clock's `ticked` signal. `motion_steps` is how many
@@ -117,6 +140,8 @@ func step(motion_steps: int = 1) -> void:
 		health_notice.emit(notice)
 	for notice in Fire.step(self, _rng):
 		health_notice.emit(notice)
+	Fauna.step(self, _rng)
+	Caravans.step(self, _rng)
 	if minute % 10 == 0:
 		for caught in Illness.spread(self, _rng, 10):
 			_announce_illness(caught)
@@ -133,6 +158,12 @@ func step(motion_steps: int = 1) -> void:
 		for notice in Romance.new_day(self, _rng):
 			health_notice.emit(notice)
 		Skills.find_work(self, _rng)
+		Ambitions.new_day(self)
+		for notice in Families.new_day(self):
+			health_notice.emit(notice)
+		for notice in Fauna.new_day(self, _rng):
+			health_notice.emit(notice)
+		Caravans.new_day(self, _rng)
 		for notice in realm.new_day(self):
 			realm_notice.emit(notice)
 		_roll_illness(everyone)
@@ -141,18 +172,26 @@ func step(motion_steps: int = 1) -> void:
 	for pawn in everyone:
 		if pawn.is_infant() or pawn.is_dying():
 			continue  # carried by the household, or lying still until Death comes
-		var cause := _drain_needs(pawn, Life.drain_multipliers(pawn, Pregnancy.drain_multipliers(pawn, Illness.drain_multipliers(pawn, season_multipliers))))
+		var cause := _drain_needs(pawn, Clothing.drain_multipliers(self, pawn, Shelter.drain_multipliers(world, pawn, Life.drain_multipliers(pawn, Pregnancy.drain_multipliers(pawn, Illness.drain_multipliers(pawn, season_multipliers))))))
 		if cause != "":
 			Mortality.fall(self, pawn, cause)
 			continue
 		if household.get_pawn(pawn.id) != null or (GameClock.tick + pawn.id) % MOOD_EVERY == 0:
 			_update_mood(pawn, everyone)  # the town's mood changes slowly, so it is looked at less often
+		if (GameClock.tick + pawn.id) % 10 == 0:
+			Ambitions.step(self, pawn)
 		_step_job(pawn)
 		if pawn.think_cooldown > 0:
 			pawn.think_cooldown -= 1
 		elif not pawn.is_busy():
-			if not _think(pawn, minute) and not _try_work(pawn, minute) and town.get_pawn(pawn.id) != null:
+			if not _think(pawn, minute) and not _try_work(pawn, minute) and not _pursue_wish(pawn, minute) and town.get_pawn(pawn.id) != null:
 				_roam(pawn, minute)
+	for pawn in household.pawns:  # wishes granted, ambitions furthered
+		if not pawn.news.is_empty():
+			for line in pawn.news:
+				health_notice.emit(line)
+			pawn.news.clear()
+			sound_made.emit("chime", Vector2i(-1, -1))
 
 
 ## Everyone in the world: the player's household first, then the town.
@@ -294,6 +333,25 @@ func order_craft(pawn: Pawn, placed: PlacedObject, recipe_id: String) -> Diction
 	return result
 
 
+## Sends a pawn to a wardrobe to change into an outfit (an id of data/clothing.json, or "auto" to go back to dressing for
+## the weather and the work). Their body, hair and size stay as they are.
+func order_dress(pawn: Pawn, placed: PlacedObject, outfit_id: String, slots: Dictionary = {}) -> Dictionary:
+	if not bool(placed.def().get("wardrobe", false)) or household.get_pawn(pawn.id) == null:
+		return { "ok": false, "message": "Nothing to change into there" }
+	if outfit_id != "auto" and outfit_id not in Clothing.choices():
+		return { "ok": false, "message": "They have nothing like that" }
+	var wanted: Dictionary = {}
+	for slot in slots:
+		var garment_id := str(slots[slot])
+		if garment_id != "" and str(Clothing.garment(garment_id).get("slot", "")) == str(slot):
+			wanted[str(slot)] = garment_id
+	var result := order_use(pawn, placed)
+	if result["ok"]:
+		pawn.job_outfit = outfit_id
+		pawn.job_garments = wanted
+	return result
+
+
 ## Buys a tool from a shop's rack, or a stocked good (a ring) from its counter, with the household's money.
 func buy_item(pawn: Pawn, item_id: String) -> Dictionary:
 	var price := Economy.shop_price(item_id)
@@ -303,13 +361,15 @@ func buy_item(pawn: Pawn, item_id: String) -> Dictionary:
 		return { "ok": false, "message": "Can't afford it (%s)" % Economy.format(price) }
 	spend(pawn, price)
 	household.add_stock(item_id, 1)
+	sound_made.emit("coin", Vector2i(-1, -1))
 	return { "ok": true, "message": "%s bought %s for %s." % [_first_name(pawn), Economy.item_phrase(item_id), Economy.format(price)] }
 
 
 ## Why `pawn` cannot do the interaction with `other` right now, or "" if they can. Both people
 ## must be willing: that is how consent works here. Someone who isn't in the mood says no,
 ## and the menu shows the entry switched off with that reason.
-func interaction_blocker(pawn: Pawn, other: Pawn, interaction_id: String) -> String:
+## `eager` is for a person acting on a wish: they do not wait to be in the mood.
+func interaction_blocker(pawn: Pawn, other: Pawn, interaction_id: String, eager: bool = false) -> String:
 	var interaction := DataRegistry.get_def("interactions", interaction_id)
 	if interaction.is_empty() or pawn.id == other.id:
 		return "not possible"
@@ -342,7 +402,7 @@ func interaction_blocker(pawn: Pawn, other: Pawn, interaction_id: String) -> Str
 		return "%s isn't close enough to you yet" % other_name
 	if pawn.opinion_of(other.id) < min_opinion:
 		return "%s isn't close enough to %s yet" % [_first_name(pawn), other_name]
-	var limits: Dictionary = interaction.get("willing_below", {})
+	var limits: Dictionary = {} if eager else interaction.get("willing_below", {})
 	var unwilling := str(interaction.get("unwilling", "isn't willing"))
 	for need_id in limits:
 		if float(other.needs.get(need_id, 0.0)) >= float(limits[need_id]):
@@ -360,10 +420,17 @@ func _romance_blocker(pawn: Pawn, other: Pawn, interaction: Dictionary) -> Strin
 	var other_name := _first_name(other)
 	if Relations.are_kin(pawn, other):
 		return "%s is family" % other_name
-	if pawn.partner_id != 0 and pawn.partner_id != other.id:
+	for pair in [[pawn, other], [other, pawn]]:  # the faithful keep to their partner
+		var loyal: Pawn = pair[0]
+		if Traits.has(loyal, "faithful") and loyal.partner_id != 0 and loyal.partner_id != pair[1].id:
+			return "%s is devoted to %s" % [_first_name(loyal), _first_name(person(loyal.partner_id)) if person(loyal.partner_id) != null else "their partner"]
+	if pawn.partner_id != 0 and pawn.partner_id != other.id and not Traits.has(pawn, "polyamorous"):
 		return "%s is already seeing someone" % _first_name(pawn)
-	if other.partner_id != 0 and other.partner_id != pawn.id:
+	if other.partner_id != 0 and other.partner_id != pawn.id and not Traits.has(other, "polyamorous"):
 		return "%s is already seeing someone" % other_name
+	if bool(interaction.get("begins_dating", false)) or bool(interaction.get("proposes", false)):
+		if (pawn.partner_id != 0 and pawn.partner_id != other.id) or (other.partner_id != 0 and other.partner_id != pawn.id):
+			return "one of them already has a partner"  # an open relationship is not a second marriage
 	if bool(interaction.get("begins_dating", false)) and Romance.together(pawn, other):
 		return "already together"
 	if bool(interaction.get("proposes", false)):
@@ -401,8 +468,8 @@ func _attracted_to(person: Pawn, other: Pawn) -> bool:
 
 ## Sends `pawn` to stand beside `other` and start an interaction from data/interactions.json.
 ## `other` waits where they are until it is over.
-func order_interact(pawn: Pawn, other: Pawn, interaction_id: String) -> Dictionary:
-	var blocker := interaction_blocker(pawn, other, interaction_id)
+func order_interact(pawn: Pawn, other: Pawn, interaction_id: String, eager: bool = false) -> Dictionary:
+	var blocker := interaction_blocker(pawn, other, interaction_id, eager)
 	if blocker != "":
 		return { "ok": false, "message": "Not now: %s" % blocker }
 	var plan := _plan_beside(pawn, other.tile)
@@ -791,6 +858,8 @@ func _needs_break(pawn: Pawn) -> bool:
 ## An idle person with a job goes to work when their shift starts (unless the player took them
 ## off it today). Returns true if they set off.
 func _try_work(pawn: Pawn, minute: int) -> bool:
+	if pawn.contract_until > 0 and town.get_pawn(pawn.id) != null and not _needs_break(pawn) and Construction.try_contract(self, pawn):
+		return true  # hired to build for the player
 	if pawn.work_job == "" or pawn.skip_work_day == GameClock.get_day_number() or _needs_break(pawn):
 		return false
 	var job := DataRegistry.get_def("jobs", pawn.work_job)
@@ -885,9 +954,15 @@ func build_blocker(def_id: String, tile: Vector2i, ignoring: int = 0) -> String:
 	var there := world.object_at(tile)
 	if there != null and there.id != ignoring:
 		return "the %s is in the way" % there.display_name().to_lower()
+	if Levels.of(tile) == 1 and world.floors.has(tile) == false:
+		return "there is no floor there yet"
 	if not world.is_ground_walkable(tile.x, tile.y):
 		var tile_id := world.get_tile_id(tile.x, tile.y)
 		return "can't build on %s" % str(DataRegistry.get_def("tiles", tile_id).get("name", tile_id)).to_lower()
+	if bool(def.get("stairs", false)):
+		var stairs_issue := Levels.stairs_blocker(world, tile)
+		if stairs_issue != "":
+			return stairs_issue
 	if bool(def.get("blocks_walking", true)):
 		for pawn in people():
 			if tile == pawn.tile or tile == pawn.committed_tile():
@@ -917,6 +992,8 @@ func build_move(object_id: int, to_tile: Vector2i) -> Dictionary:
 	var placed := world.get_object(object_id)
 	if placed == null:
 		return { "ok": false, "message": "That is gone" }
+	if bool(placed.def().get("stairs", false)):
+		return { "ok": false, "message": "Stairs can't be moved, only taken down" }
 	var blocker := build_blocker(placed.def_id, to_tile, placed.id)
 	if blocker != "":
 		return { "ok": false, "message": "Can't move it here: %s" % blocker }
@@ -930,6 +1007,8 @@ func build_move(object_id: int, to_tile: Vector2i) -> Dictionary:
 func build_remove(tile: Vector2i) -> Dictionary:
 	if not world.can_build_at(tile):
 		return { "ok": false, "message": "Outside your land" }
+	if Construction.cancel_at(self, tile) > 0:
+		return { "ok": true, "message": "" }  # a plan that was never built is simply called off
 	var placed := world.object_at(tile)
 	if placed != null and not bool(placed.def().get("buildable", true)):
 		return { "ok": false, "message": "The %s can't be taken down" % placed.display_name().to_lower() }
@@ -940,6 +1019,10 @@ func build_remove(tile: Vector2i) -> Dictionary:
 		_reroute_blocked_walks()
 		return { "ok": true, "message": "" }
 	var old_floor := world.floor_at(tile)
+	if Levels.of(tile) == 1 and old_floor != "":
+		for pawn in people():
+			if pawn.tile == tile or pawn.committed_tile() == tile:
+				return { "ok": false, "message": "%s is standing on it" % _first_name(pawn) }
 	if world.set_floor(tile, ""):
 		household.coins += Economy.refund(Economy.floor_cost(old_floor))
 		return { "ok": true, "message": "" }
@@ -951,7 +1034,11 @@ func build_floor(floor_id: String, tile: Vector2i) -> Dictionary:
 		return { "ok": false, "message": "That floor doesn't exist" }
 	if not world.can_build_at(tile):
 		return { "ok": false, "message": "Can't build here: outside your land" }
-	if not world.is_ground_walkable(tile.x, tile.y):
+	if Levels.of(tile) == 1:
+		var upstairs := Levels.floor_blocker(world, tile)
+		if upstairs != "":
+			return { "ok": false, "message": "Can't build here: %s" % upstairs }
+	elif not world.is_ground_walkable(tile.x, tile.y):
 		return { "ok": false, "message": "Can't build here: not solid ground" }
 	var cost := Economy.floor_cost(floor_id)
 	if cost > household.coins:
@@ -1018,6 +1105,23 @@ func describe_activity(pawn: Pawn) -> String:
 		var date_partner := person(pawn.job_partner)
 		var date_name := _first_name(date_partner) if date_partner != null else "someone"
 		text = "On a date with %s" % date_name if pawn.job_stage == "using" else "Going on a date with %s" % date_name
+	elif pawn.job_kind == "cart":
+		var cart := world.get_caravan(pawn.caravan)
+		var destination := str(world.get_town(cart.to_town if cart != null and cart.to_town != "" else (cart.next_town if cart != null else "")).get("name", "the next town"))
+		text = "Riding with the caravan to %s" % destination if cart != null and cart.state == "travelling" else "Waiting on the cart for the caravan to leave"
+	elif pawn.job_kind == "build":
+		var plan := world.get_site(pawn.job_site)
+		var plan_name := Construction.site_name(plan) if plan != null else "the building work"
+		text = "Building the %s" % plan_name if pawn.job_stage == "working" else ("Hauling materials to the %s" % plan_name if pawn.job_stage == "site" else "Fetching materials")
+	elif pawn.job_kind == "hunt":
+		var game := world.get_animal(pawn.job_animal)
+		text = ("Taking aim at %s" if pawn.job_stage == "using" else "Stalking %s") % (game.title() if game != null else "game")
+	elif pawn.job_kind == "pet":
+		var friend := world.get_animal(pawn.job_animal)
+		text = ("Making a fuss of %s" if pawn.job_stage == "using" else "Going to %s") % (friend.title() if friend != null else "an animal")
+	elif pawn.job_kind == "mount":
+		var steed := world.get_animal(pawn.job_animal)
+		text = "Going to %s" % (steed.title() if steed != null else "the horse")
 	elif pawn.job_kind == "wed":
 		var spouse := person(pawn.job_partner)
 		var spouse_name := _first_name(spouse) if spouse != null else "someone"
@@ -1037,7 +1141,7 @@ func describe_activity(pawn: Pawn) -> String:
 		var dying_name := _first_name(dying) if dying != null else "someone"
 		text = "Pleading with Death for %s" % dying_name if pawn.job_stage == "using" else "Hurrying to %s" % dying_name
 	elif pawn.has_orders():
-		text = "Walking"
+		text = "Riding" if pawn.mount != 0 else "Walking"
 	if pawn.is_infant():
 		return "Being carried"
 	if pawn.is_dying():
@@ -1152,6 +1256,8 @@ func _drain_needs(pawn: Pawn, season_multipliers: Dictionary) -> String:
 ## next person in the household. With nobody left the playthrough is over.
 func die(pawn: Pawn, cause: String) -> void:
 	_end_job(pawn)
+	if household.get_pawn(pawn.id) == null:
+		Families.settle_estate(self, pawn)  # what they earned last included, and before the marriage ends with the death
 	Romance.on_death(self, pawn)
 	pawn.path.clear()
 	var spot := pawn.committed_tile()
@@ -1160,11 +1266,13 @@ func die(pawn: Pawn, cause: String) -> void:
 	var grave := _place_grave(spot)
 	if household.get_pawn(pawn.id) == null:  # someone from the town
 		town.dead.append({ "name": pawn.display_name, "cause": cause, "day": GameClock.get_day_number() })
+		sound_made.emit("toll", spot)
 		town.remove_pawn(pawn.id)
 		Mortality.after_death(self, pawn, cause, grave, _rng, false)
 		town_death.emit(pawn.display_name, cause)
 		return
 	household.dead.append({ "name": pawn.display_name, "cause": cause, "day": GameClock.get_day_number() })
+	sound_made.emit("toll", Vector2i(-1, -1))
 	household.remove_pawn(pawn.id)
 	Mortality.after_death(self, pawn, cause, grave, _rng, true)
 	var successor := household.selected()
@@ -1248,6 +1356,8 @@ func _open_around(tile: Vector2i) -> bool:
 
 
 func _step_job(pawn: Pawn) -> void:
+	if pawn.mount != 0 and pawn.job_kind != "" and pawn.job_kind != "mount" and not pawn.has_orders():
+		Fauna.dismount(self, pawn)  # at the door or the workplace the rider gets down
 	if pawn.job_kind == "interact":
 		_step_interaction(pawn)
 		return
@@ -1259,6 +1369,21 @@ func _step_job(pawn: Pawn) -> void:
 		return
 	if pawn.job_kind == "date":
 		_step_date(pawn)
+		return
+	if pawn.job_kind == "cart":
+		Caravans.step_ride(self, pawn)
+		return
+	if pawn.job_kind == "build":
+		Construction.step_build(self, pawn, _rng)
+		return
+	if pawn.job_kind == "hunt":
+		Fauna.step_hunt(self, pawn, _rng)
+		return
+	if pawn.job_kind == "pet":
+		Fauna.step_pet(self, pawn)
+		return
+	if pawn.job_kind == "mount":
+		Fauna.step_mount(self, pawn)
 		return
 	if pawn.job_kind == "wed":
 		_step_wedding(pawn)
@@ -1321,10 +1446,11 @@ func _step_job(pawn: Pawn) -> void:
 	var all_full := not object_def.has("gathers") and recipe.is_empty()  # gathering and making go on until the time is up
 	var skill_id := str(object_def.get("skill", ""))
 	var boost := Skills.boost(pawn, skill_id) if skill_id != "" else 1.0
+	var open_sky := Shelter.rest_factor(world, placed, object_def)  # a bed with no roof over it gives less rest
 	for need_id in satisfies:
 		if not pawn.needs.has(need_id):
 			continue
-		var value := minf(Needs.FULL, float(pawn.needs[need_id]) + float(satisfies[need_id]) * boost / 60.0)
+		var value := minf(Needs.FULL, float(pawn.needs[need_id]) + float(satisfies[need_id]) * boost * ((open_sky * Traits.mult(pawn, "rest_gain")) if need_id == "rest" else 1.0) / 60.0)
 		pawn.needs[need_id] = value
 		if value < Needs.FULL:
 			all_full = false
@@ -1353,6 +1479,13 @@ func _step_job(pawn: Pawn) -> void:
 	var minutes_needed := Skills.recipe_minutes(pawn, recipe) if not recipe.is_empty() else int(object_def.get("max_use_minutes", 60))
 	if all_full or pawn.job_minutes >= minutes_needed:
 		Mood.add_event(pawn, "used:%s" % placed.def_id, GameClock.tick)
+		if bool(object_def.get("private", false)):
+			_be_seen([pawn])
+		if pawn.job_outfit != "" and bool(object_def.get("wardrobe", false)):
+			pawn.outfit_choice = "" if pawn.job_outfit == "auto" else pawn.job_outfit
+			pawn.garments = pawn.job_garments.duplicate()
+		if open_sky < 1.0:
+			Mood.add_event(pawn, "slept_rough", GameClock.tick)
 		if not recipe.is_empty():
 			_finish_craft(pawn, recipe)
 		if satisfies.has("hunger"):
@@ -1377,8 +1510,15 @@ func _collect(pawn: Pawn, object_def: Dictionary) -> void:
 		var amount := int(gathers[resource_id])
 		if pawn.traits.has("lazy"):
 			amount = maxi(1, amount - 1)
+		if object_def.has("gather_seasons") and Traits.mult(pawn, "crop_yield") != 1.0:
+			var scaled := float(amount) * Traits.mult(pawn, "crop_yield")
+			amount = floori(scaled) + (1 if _rng.randf() < scaled - floorf(scaled) else 0)
 		if skill_id != "":
 			amount = Skills.yield_amount(pawn, skill_id, amount, _rng)
+		var packed := Fauna.pack_bonus(self, pawn)
+		if packed > 0.0:  # a pack animal carries the rest
+			var exact := float(amount) * (1.0 + packed)
+			amount = floori(exact) + (1 if _rng.randf() < exact - floorf(exact) else 0)
 		if amount <= 0:
 			continue
 		household.add_stock(str(resource_id), amount)
@@ -1425,22 +1565,34 @@ func treat(nurse: Pawn, patient: Pawn) -> Dictionary:
 	patient.treated_until = GameClock.tick + roundi(days * GameClock.MINUTES_PER_DAY)
 	Skills.practice(self, nurse, "healing", 40.0)
 	Mood.add_event(patient, "cared_for", GameClock.tick)
+	Ambitions.note(nurse, "healed")
 	return { "ok": true, "message": "%s nurses %s with herbs." % [_first_name(nurse), _first_name(patient)] }
 
 
 ## What the shop would pay for all of one resource in the stockpile (0 if there is none).
-func sale_price(resource_id: String) -> int:
-	return Economy.sell_price(resource_id, household.stock_of(resource_id), events.sell_multiplier())
+func sale_price(resource_id: String, seller: Pawn = null) -> int:
+	return Economy.sell_price(resource_id, household.stock_of(resource_id), events.sell_multiplier() * _haggling(resource_id, seller))
+
+
+## What the place and the seller's way with a bargain do to the price of a good: dearer where it is
+## scarce, and a practised trader gets a little more.
+func _haggling(resource_id: String, seller: Pawn) -> float:
+	if seller == null:
+		return 1.0
+	return Economy.region_multiplier(world, seller.tile, resource_id) * (1.0 + Skills.effect(seller, "trading", "price"))
 
 
 ## Sells everything of a resource at the shop counter. Returns { "ok", "message" }.
-func sell_stock(resource_id: String) -> Dictionary:
+func sell_stock(resource_id: String, seller: Pawn = null) -> Dictionary:
 	var amount := household.stock_of(resource_id)
 	if amount <= 0:
 		return { "ok": false, "message": "You have no %s to sell" % Economy.resource_name(resource_id).to_lower() }
-	var earned := sale_price(resource_id)
+	var earned := sale_price(resource_id, seller)
 	household.add_stock(resource_id, -amount)
 	household.coins += earned
+	if seller != null:
+		Skills.practice(self, seller, "trading", 10.0)
+	sound_made.emit("coin", Vector2i(-1, -1))
 	return { "ok": true, "message": "Sold %d %s for %s" % [amount, Economy.resource_name(resource_id).to_lower(), Economy.format(earned)] }
 
 
@@ -1517,9 +1669,70 @@ func _finish_interaction(pawn: Pawn, partner: Pawn, interaction: Dictionary) -> 
 		var engaged := Romance.engage(self, pawn, partner)
 		if household.get_pawn(pawn.id) != null or household.get_pawn(partner.id) != null:
 			health_notice.emit(engaged)
+	if bool(interaction.get("romantic", false)) and not flopped:
+		_note_strays(pawn, partner)
+	if str(interaction.get("id", "")) in ["kiss", "intimacy"]:
+		_be_seen([pawn, partner])
+	if str(interaction.get("id", "")) in ["chat", "joke"] and not flopped:
+		_gossip(pawn, partner)
+		_gossip(partner, pawn)
 	var conception := float(interaction.get("conception_chance", 0.0))
 	if conception > 0.0 and not flopped:
 		Pregnancy.try_conceive(self, pawn, partner, conception, _rng)
+
+
+## When somebody's partner is romantic with another person, they mind (a jealous one a great deal) and think less of
+## both. Only the open-hearted can be, since nobody else may.
+func _note_strays(a: Pawn, b: Pawn) -> void:
+	for pair in [[a, b], [b, a]]:
+		var straying: Pawn = pair[0]
+		var other: Pawn = pair[1]
+		var spouse := person(straying.partner_id) if straying.partner_id != 0 else null
+		if spouse == null or spouse.id == other.id or Traits.has(spouse, "polyamorous"):
+			continue
+		Mood.add_event(spouse, "partner_strayed", GameClock.tick)
+		var jealous := Traits.has(spouse, "jealous")
+		spouse.add_opinion(straying.id, -12.0 if jealous else -4.0)
+		spouse.add_romance(straying.id, -8.0 if jealous else -3.0)
+		if household.get_pawn(spouse.id) != null:
+			health_notice.emit("%s is %s that %s and %s were so close." % [_first_name(spouse), "furious" if jealous else "hurt", _first_name(straying), _first_name(other)])
+
+
+## How many people who are up and about stand near enough to see: not the ones in `ignore`, babies or the sleeping.
+func witnesses(pawn: Pawn, ignore: Array, radius: int = 6) -> int:
+	var count := 0
+	for other in people():
+		if other.id == pawn.id or other.id in ignore or other.is_infant() or other.pose == "lie" or other.is_dying():
+			continue
+		if Levels.of(other.tile) == Levels.of(pawn.tile) and _distance(other.tile, pawn.tile) <= radius:
+			count += 1
+	return count
+
+
+## Being seen at something private: the shy are mortified and the exhibitionists delighted.
+func _be_seen(who: Array) -> void:
+	var ids: Array = []
+	for pawn: Pawn in who:
+		ids.append(pawn.id)
+	for pawn: Pawn in who:
+		if (Traits.has(pawn, "shy") or Traits.has(pawn, "exhibitionist")) and witnesses(pawn, ids) > 0:
+			Mood.add_event(pawn, "seen", GameClock.tick)
+
+
+## A gossip tells the one they are talking to what they think of somebody else, and the listener comes round a little.
+func _gossip(teller: Pawn, listener: Pawn) -> void:
+	if not Traits.has(teller, "gossip"):
+		return
+	var known: Array[int] = []
+	for other_id in teller.relations:
+		var third := int(other_id)
+		if third != listener.id and absf(teller.opinion_of(third)) >= 12.0 and person(third) != null:
+			known.append(third)
+	if known.is_empty():
+		return
+	var subject := known[_rng.randi() % known.size()]
+	listener.add_opinion(subject, clampf(teller.opinion_of(subject) * 0.25, -4.0, 4.0))
+	Mood.add_event(teller, "gossiped", GameClock.tick)
 
 
 ## Lines for the panel: who `pawn` knows best (or least well), as { "name", "label", "opinion" }.
@@ -1659,6 +1872,15 @@ func _end_job(pawn: Pawn) -> void:
 		placed.user_id = 0
 	Skills.unequip(self, pawn)
 	pawn.job_recipe = ""
+	pawn.job_outfit = ""
+	pawn.job_garments = {}
+	if pawn.job_kind == "build":
+		Construction.release(self, pawn)
+	if pawn.caravan != 0:
+		Caravans.leave(self, pawn)
+	if pawn.job_animal != 0:
+		pawn.job_animal = 0
+		Fauna.refresh_pace(self, pawn)  # no more creeping after game
 	var partner: Pawn = person(pawn.job_partner) if pawn.job_kind in ["interact", "date", "wed"] else null
 	var partner_kind := pawn.job_kind
 	pawn.job_kind = ""
@@ -1668,6 +1890,8 @@ func _end_job(pawn: Pawn) -> void:
 	pawn.job_partner = 0
 	pawn.job_interaction = ""
 	pawn.pose = ""
+	if pawn.pace > 1.0 or pawn.mount != 0:
+		Fauna.refresh_pace(self, pawn)
 	# An interaction has two people: when one stops, so does the other.
 	if partner != null and partner.job_kind == partner_kind and partner.job_partner == pawn.id:
 		_end_job(partner)
@@ -1700,7 +1924,7 @@ func _plan_best(pawn: Pawn, candidates: Array[Vector2i]) -> Dictionary:
 	var origin := pawn.committed_tile()
 	var best := {}
 	for candidate in candidates:
-		if not world.is_walkable(candidate.x, candidate.y):
+		if not world.is_walkable(candidate.x, candidate.y) or (candidate != origin and _boxed_in(candidate)):
 			continue
 		var route: Array[Vector2i] = []
 		if candidate != origin:
@@ -1710,6 +1934,15 @@ func _plan_best(pawn: Pawn, candidates: Array[Vector2i]) -> Dictionary:
 		if best.is_empty() or route.size() < best["route"].size():
 			best = { "tile": candidate, "route": route }
 	return best
+
+
+## Whether every side of a tile is blocked, so nobody can get to it (looking for a way in would search the whole map).
+func _boxed_in(tile: Vector2i) -> bool:
+	for step in [Vector2i(0, 1), Vector2i(1, 0), Vector2i(0, -1), Vector2i(-1, 0)]:
+		var next: Vector2i = tile + step
+		if world.is_walkable(next.x, next.y):
+			return false
+	return true
 
 
 func _first_name(pawn: Pawn) -> String:
@@ -1725,7 +1958,7 @@ func _think(pawn: Pawn, minute: int) -> bool:
 	var wants: Array = []
 	for need_id in active_needs:
 		var value := float(pawn.needs.get(need_id, Needs.FULL))
-		if value < Needs.seek_below(need_id, minute):
+		if value < Needs.seek_below(need_id, minute, pawn):
 			wants.append([value, need_id])
 	if wants.is_empty():
 		return false
@@ -1736,8 +1969,9 @@ func _think(pawn: Pawn, minute: int) -> bool:
 				return true
 			continue
 		var options: Array[PlacedObject] = []
+		var reach := NEED_REACH if float(want[0]) > NEED_DESPERATE else 100000  # nobody crosses the country for a lute, but they will for a meal
 		for placed in _fillers(str(want[1])):
-			if placed.user_id == 0 and _may_use(pawn, placed) and price_of(placed.def_id) <= coins_of(pawn) and bool(placed.def().get("autonomous", true)):
+			if placed.user_id == 0 and _distance(pawn.tile, placed.tile) <= reach and _may_use(pawn, placed) and price_of(placed.def_id) <= coins_of(pawn) and bool(placed.def().get("autonomous", true)):
 				options.append(placed)
 		options.sort_custom(func(a: PlacedObject, b: PlacedObject) -> bool:
 			return _effort(pawn, a) < _effort(pawn, b))
@@ -1745,6 +1979,96 @@ func _think(pawn: Pawn, minute: int) -> bool:
 			if order_use(pawn, placed)["ok"]:
 				return true
 	pawn.think_cooldown = THINK_COOLDOWN_TICKS  # nothing within reach; try again later
+	return false
+
+
+## Whether an object of this kind stands anywhere in the world (a list kept until something is built, moved or removed).
+func has_object_kind(def_id: String) -> bool:
+	if _object_kinds_dirty:
+		_object_kinds.clear()
+		for placed in world.objects:
+			_object_kinds[placed.def_id] = true
+		_object_kinds_dirty = false
+	return _object_kinds.has(def_id)
+
+
+## An idle person sets about one of their wishes now and then, in waking hours: to the lute, to someone
+## for a chat. (A wish granted some other way, say the player sent them, counts all the same.)
+func _pursue_wish(pawn: Pawn, minute: int) -> bool:
+	if pawn.wishes.is_empty() or (GameClock.tick + pawn.id * 7) % _wish_every != 0 or minute < _wish_from or minute >= _wish_until:
+		return false
+	var yours := household.get_pawn(pawn.id) != null
+	for wish in pawn.wishes:
+		var action: Dictionary = DataRegistry.get_def("wishes", str(wish["id"])).get("do", {})
+		if action.is_empty() or (yours and bool(action.get("npc_only", false))) or int(wish.get("retry", 0)) > GameClock.tick:
+			continue
+		if _do_wish(pawn, action):
+			return true
+		wish["retry"] = GameClock.tick + _wish_retry  # nothing came of it; not again for a while
+	return false
+
+
+func _do_wish(pawn: Pawn, action: Dictionary) -> bool:
+	if action.has("use"):
+		var options: Array[PlacedObject] = []
+		for placed in world.objects:
+			if placed.def_id == str(action["use"]) and placed.user_id == 0 and _distance(pawn.tile, placed.tile) <= _wish_reach and _may_use(pawn, placed) and price_of(placed.def_id) <= coins_of(pawn):
+				options.append(placed)
+		options.sort_custom(func(a: PlacedObject, b: PlacedObject) -> bool:
+			return _effort(pawn, a) < _effort(pawn, b))
+		for placed in options.slice(0, OPTIONS_PER_NEED):
+			if order_use(pawn, placed)["ok"]:
+				return true
+		return false
+	if action.has("interact"):
+		var candidates: Array[Pawn] = []
+		if str(action.get("with", "")) == "partner":
+			var partner := person(pawn.partner_id)
+			if partner != null:
+				candidates.append(partner)
+		else:
+			for other in (town.pawns if town.get_pawn(pawn.id) != null else people()):
+				if other.id != pawn.id and not other.is_infant() and _distance(pawn.tile, other.tile) <= SOCIAL_RADIUS and not other.is_busy():
+					candidates.append(other)
+			candidates.sort_custom(func(a: Pawn, b: Pawn) -> bool:
+				return _distance(pawn.tile, a.tile) - 0.3 * pawn.opinion_of(a.id) < _distance(pawn.tile, b.tile) - 0.3 * pawn.opinion_of(b.id))
+		for other in candidates.slice(0, 4):
+			if interaction_blocker(pawn, other, str(action["interact"]), true) == "" and order_interact(pawn, other, str(action["interact"]), true)["ok"]:
+				return true
+		return false
+	if action.has("pet"):
+		var best: Animal = null
+		for animal in world.animals:
+			if _distance(pawn.tile, animal.tile) <= 14 and (best == null or _distance(pawn.tile, animal.tile) < _distance(pawn.tile, best.tile)) and Fauna.pet_blocker(self, pawn, animal) == "":
+				best = animal
+		return best != null and bool(Fauna.order_pet(self, pawn, best)["ok"])
+	if action.has("visit"):
+		return _visit_other_town(pawn)
+	return false
+
+
+## Heads for a public place in a town the person has not been to (or any other, if they have seen them all).
+func _visit_other_town(pawn: Pawn) -> bool:
+	var here := str(world.town_at(pawn.tile, 2).get("id", ""))
+	var fresh: Array[Dictionary] = []
+	var others: Array[Dictionary] = []
+	for entry in world.lots:
+		var town_id := str(entry.get("town", ""))
+		if bool(entry["public"]) and town_id != "" and town_id != here:
+			others.append(entry)
+			if town_id not in pawn.visited:
+				fresh.append(entry)
+	var pool := fresh if not fresh.is_empty() else others
+	if pool.is_empty():
+		return false
+	var rect: Rect2i = pool[(GameClock.tick / 30 + pawn.id) % pool.size()]["rect"]
+	var middle := rect.get_center()
+	for radius in 5:
+		for dy in range(-radius, radius + 1):
+			for dx in range(-radius, radius + 1):
+				var goal := middle + Vector2i(dx, dy)
+				if world.is_walkable(goal.x, goal.y) and world.object_at(goal) == null:
+					return bool(order_move(pawn, goal)["ok"])
 	return false
 
 
@@ -1762,6 +2086,7 @@ func _fillers(need_id: String) -> Array:
 
 
 func _on_world_changed(_tile: Vector2i) -> void:
+	_object_kinds_dirty = true
 	_fillers_dirty = true
 
 
@@ -1778,16 +2103,16 @@ func _react_to_fire(pawn: Pawn) -> void:
 			_end_job(pawn)
 			_flee(pawn, pawn.job_target)
 		return
-	var danger := Fire.nearest(world, pawn.tile, int(Fire.config().get("flee_radius", 3)))
+	var danger := Fire.nearest(world, pawn.tile, maxi(1, int(Fire.config().get("flee_radius", 3)) + int(Traits.add(pawn, "flee_radius_shift"))))
 	if danger.x >= 0 or standing:
 		if pawn.job_kind != "" or pawn.has_orders():
 			_end_job(pawn)
 		_flee(pawn, danger if danger.x >= 0 else pawn.tile)
 		Mood.add_event(pawn, "saw_fire", GameClock.tick)
 		return
-	if pawn.adult and not pawn.is_busy() and not _needs_break(pawn) and pawn.age >= 14:
+	if pawn.adult and not pawn.is_busy() and not _needs_break(pawn) and pawn.age >= 14 and not Traits.has(pawn, "coward"):
 		var near := Fire.nearest(world, pawn.tile, int(Fire.config().get("fight_radius", 12)))
-		if near.x >= 0 and Fire.count_near(world, near, 5) <= int(Fire.config().get("max_fightable", 10)):
+		if near.x >= 0 and Fire.count_near(world, near, 5) <= int(float(Fire.config().get("max_fightable", 10)) * Traits.mult(pawn, "fire_fight_bonus")):
 			order_extinguish(pawn, near)
 
 
@@ -2028,6 +2353,11 @@ func _distance(a: Vector2i, b: Vector2i) -> int:
 
 ## A loaded save may predate needs or objects, or name things that are gone: make it consistent.
 func _repair_after_load() -> void:
+	if world.needs_roofing:  # a save from before roofs: its buildings are roofed now
+		world.needs_roofing = false
+		for lot in world.lots:
+			Rooms.auto_roof(world, lot["rect"])
+		Rooms.auto_roof(world, world.lot)
 	if household.get_pawn(realm.head_id) == null:
 		realm.choose_head(household)
 	var anyone_knows_anyone := false
@@ -2050,6 +2380,9 @@ func _repair_after_load() -> void:
 				pawn.needs[need_id] = 80.0
 		if pawn.job_kind == "" and pawn.tool != "":
 			Skills.unequip(self, pawn)  # a tool left in hand by an old save goes back on the shelf
+		if pawn.mount != 0 and (world.get_animal(pawn.mount) == null or world.get_animal(pawn.mount).rider != pawn.id):
+			pawn.mount = 0  # the horse is gone
+		Fauna.refresh_pace(self, pawn)
 		if pawn.job_kind == "use":
 			var placed := world.get_object(pawn.job_object)
 			if placed == null or (placed.user_id != 0 and placed.user_id != pawn.id):

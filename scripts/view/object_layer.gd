@@ -9,10 +9,19 @@ var _views: Dictionary = {}  # object id -> ObjectView
 var _beds: Array[PlacedObject] = []  # what people lie in, so the sleepers can be shown
 var _watched: WorldState
 var _dirty := false
+var _seen_view := -1
 
 
 func _ready() -> void:
 	y_sort_enabled = true
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS  # painted pictures are scaled down smoothly
+	Settings.changed.connect(_on_setting_changed)
+
+
+func _on_setting_changed(key: String) -> void:
+	if key == "illustrated_art":
+		for view in _views.values():
+			view.queue_redraw()
 
 
 func bind(new_sim: Simulation) -> void:
@@ -46,6 +55,7 @@ func _sync() -> void:
 			view.setup(placed)
 			_views[placed.id] = view
 		view.refresh()
+		_show_for_level(view, placed)
 		var group := str(placed.def().get("connects", ""))
 		view.connections = sim.world.connection_mask(placed.tile, group) if group != "" else 0
 	for id in _views.keys():
@@ -54,9 +64,26 @@ func _sync() -> void:
 			_views.erase(id)
 
 
+## What is on screen: the floor being looked at in full, and the floor below it, where nothing is built
+## over it, dimmed.
+func _show_for_level(view: ObjectView, placed: PlacedObject) -> void:
+	var level := Levels.of(placed.tile)
+	if level == Levels.view:
+		view.visible = true
+		view.modulate = Color.WHITE
+	elif level == 0 and Levels.view == 1:
+		view.visible = not sim.world.floors.has(Levels.lift(placed.tile, 1))
+		view.modulate = Color(0.62, 0.66, 0.78)
+	else:
+		view.visible = false
+
+
 func _process(_delta: float) -> void:
 	if sim == null:
 		return
+	if _seen_view != Levels.serial:
+		_seen_view = Levels.serial
+		_dirty = true
 	if _dirty:
 		_sync()
 	for placed in _beds:

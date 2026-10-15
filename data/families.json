@@ -1,0 +1,13 @@
+[
+  { "id": "families",
+    "arrive_chance": 0.06,
+    "move_chance": 0.25,
+    "settle_days": 15,
+    "couple_chance": 0.7,
+    "kids": [0, 3],
+    "adult_ages": [19, 52],
+    "kid_ages": [2, 15],
+    "orphan_age": 18,
+    "chronicle_limit": 40,
+    "tool_sale_percent": 50 }
+]

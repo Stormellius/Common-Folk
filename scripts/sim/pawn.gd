@@ -88,6 +88,8 @@ var job_object := 0          # id of the PlacedObject being used
 var job_stage := ""          # "walking" on the way there, "using" once started
 var job_tile := Vector2i.ZERO  # where the person stands while using it
 var job_target := Vector2i.ZERO  # what they are working on, when it is a tile (a fire to put out)
+var job_animal := 0          # id of the animal they are hunting, petting or going to ride
+var job_site := 0            # id of the BuildSite they are working on
 var job_minutes := 0         # how long the use has gone on
 ## "" standing, or "lie" while sleeping. Set by the simulation, read by the view.
 var pose := ""
@@ -136,7 +138,38 @@ var family_trade := ""
 var tool := ""
 var tool_lent := false
 var job_recipe := ""
+## What the player has told this person to wear (an outfit id, or "" for whatever suits), and, while they are at a
+## wardrobe, what they are changing into.
+var outfit_choice := ""
+var job_outfit := ""
+## Garments they chose for themselves, by slot (see Clothing); empty means whatever the outfit calls for. job_garments is
+## what they are on their way to a wardrobe to put on.
+var garments: Dictionary = {}
+var job_garments: Dictionary = {}
 var mentor_gain := 1.0
+## The animal they ride (0 for none), and how much each step costs: 1 on foot, less on a horse, more
+## when stalking game (worked out again from those two, so not saved).
+var mount := 0
+var pace := 1.0
+## What a builder is carrying to a site, by resource id; and the tick until which a townsperson is
+## hired to build on the player's land (0 when not).
+var carrying: Dictionary = {}
+var contract_until := 0
+## The caravan a person is riding with (0 for none): see Caravans.
+var caravan := 0
+## Ambitions and wishes (see Ambitions): what they have done in their life, counted by event key; the
+## ambition they are after, which step they are on, the tick from which they may take up a new one, and
+## the ambitions they have fulfilled; the small wishes they have now ({ "id", "until", maybe "retry" }), when each was
+## last granted, the towns they have been to, and, not saved, news for the player.
+var deeds: Dictionary = {}
+var ambition := ""
+var ambition_step := 0
+var ambition_next := 0
+var ambitions_done: Array[String] = []
+var wishes: Array[Dictionary] = []
+var wish_done: Dictionary = {}
+var visited: Array[String] = []
+var news: Array[String] = []
 ## Ticks to wait before looking for something to do about a need again.
 var think_cooldown := 0
 
@@ -237,17 +270,22 @@ func tick(world: WorldState) -> void:
 			path.clear()  # the world changed under us
 			return
 		path.remove_at(0)
-		var diagonal := next.x != tile.x and next.y != tile.y
+		var climbing := Levels.of(next) != Levels.of(tile)  # up or down a flight of stairs
+		var diagonal := not climbing and next.x != tile.x and next.y != tile.y
 		var cost := BASE_MOVE_TICKS * maxf(world.get_move_cost(next.x, next.y), 1.0)
+		if climbing:
+			cost *= 2.0
 		if diagonal:
 			cost *= 1.41421
 		if slowed:
 			cost *= 1.5
 		cost *= Life.walk_multiplier(self)  # elders take their time
+		cost *= pace  # a horse is quicker, stalking slower
 		step_to = next
 		step_ticks_total = maxi(1, roundi(cost))
 		step_ticks_done = 0
-		facing = next - tile
+		if not climbing:
+			facing = next - tile
 	step_ticks_done += 1
 	if step_ticks_done >= step_ticks_total:
 		tile = step_to
@@ -312,6 +350,16 @@ func to_dict() -> Dictionary:
 		"tool": tool,
 		"tool_lent": tool_lent,
 		"job_recipe": job_recipe,
+		"outfit_choice": outfit_choice,
+		"garments": garments.duplicate(),
+		"deeds": deeds.duplicate(),
+		"ambition": ambition,
+		"ambition_step": ambition_step,
+		"ambition_next": ambition_next,
+		"ambitions_done": Array(ambitions_done),
+		"wishes": wishes.duplicate(true),
+		"wish_done": wish_done.duplicate(),
+		"visited": Array(visited),
 		"look": look.duplicate(),
 		"tile": _vec_to_array(tile),
 		"facing": _vec_to_array(facing),
@@ -331,6 +379,12 @@ func to_dict() -> Dictionary:
 		"job_stage": job_stage,
 		"job_tile": _vec_to_array(job_tile),
 		"job_target": _vec_to_array(job_target),
+		"job_animal": job_animal,
+		"job_site": job_site,
+		"carrying": carrying.duplicate(),
+		"contract_until": contract_until,
+		"caravan": caravan,
+		"mount": mount,
 		"job_minutes": job_minutes,
 		"pose": pose,
 		"think": think_cooldown,
@@ -410,6 +464,32 @@ static func from_dict(data: Dictionary) -> Pawn:
 	pawn.tool = str(data.get("tool", ""))
 	pawn.tool_lent = bool(data.get("tool_lent", false))
 	pawn.job_recipe = str(data.get("job_recipe", ""))
+	pawn.outfit_choice = str(data.get("outfit_choice", ""))
+	var saved_garments: Variant = data.get("garments", {})
+	if saved_garments is Dictionary:
+		for slot in saved_garments:
+			pawn.garments[str(slot)] = str(saved_garments[slot])
+	var saved_deeds: Variant = data.get("deeds", {})
+	if saved_deeds is Dictionary:
+		for key in saved_deeds:
+			pawn.deeds[str(key)] = int(saved_deeds[key])
+	pawn.ambition = str(data.get("ambition", ""))
+	pawn.ambition_step = int(data.get("ambition_step", 0))
+	pawn.ambition_next = int(data.get("ambition_next", 0))
+	for done_id in data.get("ambitions_done", []):
+		pawn.ambitions_done.append(str(done_id))
+	for saved_wish in data.get("wishes", []):
+		if saved_wish is Dictionary and saved_wish.has("id"):
+			var wish := { "id": str(saved_wish["id"]), "until": int(saved_wish.get("until", 0)) }
+			if saved_wish.has("retry"):
+				wish["retry"] = int(saved_wish["retry"])
+			pawn.wishes.append(wish)
+	var saved_wish_done: Variant = data.get("wish_done", {})
+	if saved_wish_done is Dictionary:
+		for wish_id in saved_wish_done:
+			pawn.wish_done[str(wish_id)] = int(saved_wish_done[wish_id])
+	for town_id in data.get("visited", []):
+		pawn.visited.append(str(town_id))
 	var saved_look: Variant = data.get("look", {})
 	pawn.look = saved_look.duplicate() if saved_look is Dictionary else {}
 	if pawn.look.has("hair_style"):
@@ -445,6 +525,15 @@ static func from_dict(data: Dictionary) -> Pawn:
 	pawn.job_stage = str(data.get("job_stage", ""))
 	pawn.job_tile = _array_to_vec(data.get("job_tile", [0, 0]))
 	pawn.job_target = _array_to_vec(data.get("job_target", [0, 0]))
+	pawn.job_animal = int(data.get("job_animal", 0))
+	pawn.job_site = int(data.get("job_site", 0))
+	pawn.contract_until = int(data.get("contract_until", 0))
+	pawn.caravan = int(data.get("caravan", 0))
+	var saved_carrying: Variant = data.get("carrying", {})
+	if saved_carrying is Dictionary:
+		for resource_id in saved_carrying:
+			pawn.carrying[str(resource_id)] = int(saved_carrying[resource_id])
+	pawn.mount = int(data.get("mount", 0))
 	pawn.job_minutes = int(data.get("job_minutes", 0))
 	pawn.pose = str(data.get("pose", ""))
 	pawn.think_cooldown = int(data.get("think", 0))

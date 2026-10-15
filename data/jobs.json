@@ -9,5 +9,7 @@
   {"id": "herbalist", "name": "Herbalist", "workplace": "herb_garden", "positions": 2, "wage": 4, "from": 8, "to": 15, "station": "herb_bed", "min_age": 16},
   {"id": "fisher", "name": "Fisher", "workplace": "jetty", "positions": 2, "wage": 4, "from": 5, "to": 13, "station": "fishing_spot", "min_age": 14},
   {"id": "smith", "name": "Smith", "workplace": "smithy", "positions": 2, "wage": 6, "from": 7, "to": 15, "station": "forge", "min_age": 16, "heavy": true},
-  {"id": "carpenter", "name": "Carpenter", "workplace": "workshop", "positions": 2, "wage": 5, "from": 8, "to": 16, "station": "workbench", "min_age": 16}
+  {"id": "carpenter", "name": "Carpenter", "workplace": "workshop", "positions": 2, "wage": 5, "from": 8, "to": 16, "station": "workbench", "min_age": 16},
+  {"id": "stablehand", "name": "Stablehand", "skill": "husbandry", "workplace": "stable", "positions": 2, "wage": 4, "from": 6, "to": 14, "station": "haystack", "min_age": 14},
+  {"id": "baker", "name": "Baker", "skill": "cooking", "workplace": "bakery", "positions": 2, "wage": 4, "from": 5, "to": 13, "station": "oven", "min_age": 14}
 ]

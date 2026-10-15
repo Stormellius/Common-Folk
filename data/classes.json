@@ -1,5 +1,5 @@
 [
-  {"id": "peasant", "name": "Peasant", "rank": 0, "tax_multiplier": 0.75, "text": "Poor, and taxed lightly.", "skills": ["farming", "woodcutting", "fishing", "herbalism", "mining"]},
-  {"id": "burgher", "name": "Burgher", "rank": 1, "tax_multiplier": 1.0, "text": "A townsman with a trade.", "skills": ["trading", "cooking", "carpentry", "smithing", "herbalism", "music"]},
-  {"id": "gentry", "name": "Gentry", "rank": 2, "tax_multiplier": 1.25, "text": "Landed family. Pays more tax and will not do menial work.", "skills": ["music", "trading", "healing", "cooking"]}
+  {"id": "peasant", "name": "Peasant", "rank": 0, "tax_multiplier": 0.75, "text": "Poor, and taxed lightly.", "skills": ["farming", "woodcutting", "fishing", "herbalism", "mining", "hunting", "husbandry", "masonry"]},
+  {"id": "burgher", "name": "Burgher", "rank": 1, "tax_multiplier": 1.0, "text": "A townsman with a trade.", "skills": ["trading", "cooking", "carpentry", "smithing", "herbalism", "music", "husbandry", "masonry"]},
+  {"id": "gentry", "name": "Gentry", "rank": 2, "tax_multiplier": 1.25, "text": "Landed family. Pays more tax and will not do menial work.", "skills": ["music", "trading", "healing", "cooking", "hunting", "husbandry"]}
 ]

@@ -1,0 +1,8 @@
+{
+ "adult_male": {"stage":"adult","gender":"male","body":"6397a59e-c32c-4866-b52f-28d159d2039b","casual":"b7059ce0-b1c0-480f-92cd-a76667534bdc","worker":"9670981e-c998-4b51-9c96-edc2f603c59c","formal":"212ce349-18b5-447f-a07d-e41fb23c96c2","winter":"c85ae93c-6bd5-4e02-9813-119c4642031f","sleepwear":"cc934740-e6bd-44b4-bd7b-d7f1151c2b35"},
+ "adult_female": {"stage":"adult","gender":"female","body":"9d167512-a66a-49cf-96e1-a1aa3207f097","casual":"61e2f0a2-f89f-4082-b2a0-72a62809059a","worker":"cd35dcb3-8b8d-4067-823d-cd9257465a5d","formal":"aced8ab9-e7e2-4772-84fe-5d2764cddff5","winter":"ae12f8c9-6f24-4f50-a60c-61d28d31e326","sleepwear":"1fbc23d1-f4c5-4bf4-a0c9-9efc2667070d"},
+ "elder_male": {"stage":"elder","gender":"male","body":"724b951a-0f30-4d35-a30d-82616a530307"},
+ "elder_female": {"stage":"elder","gender":"female","body":"08104de1-0d8a-4f0c-8b01-ce88d39e380e"},
+ "youth": {"stage":"youth","gender":"any","body":"10aa0910-9a4a-4b89-8a2d-f3251b65b83c"},
+ "child": {"stage":"child","gender":"any","body":"327ec909-ef86-4868-8086-8dd09df6248b"}
+}

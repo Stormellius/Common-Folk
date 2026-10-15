@@ -33,6 +33,7 @@ static func fall(sim: Simulation, pawn: Pawn, cause: String) -> void:
 	if pawn.is_dying():
 		return
 	sim.order_stop(pawn)
+	Fauna.dismount(sim, pawn)
 	pawn.dying_cause = cause
 	pawn.dying_since = GameClock.tick
 	pawn.pleaded = false

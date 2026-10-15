@@ -81,6 +81,39 @@ static func create(world: WorldState) -> Household:
 	return town
 
 
+## Moves a family into an empty house: people of the given ages, all with the name `family`, who
+## take the house's class (peasants unless it is a grand house) and have skills like the town's
+## people do. Returns who they are; they are added to `town`.
+static func settle(world: WorldState, town: Household, rng: RandomNumberGenerator, lot: Dictionary, family: String, ages: Array[int]) -> Array[Pawn]:
+	var spots := _free_tiles(world, lot["rect"])
+	if spots.is_empty():  # a house with no floors (an old camp): anywhere open will do
+		for y in range((lot["rect"] as Rect2i).position.y, (lot["rect"] as Rect2i).end.y):
+			for x in range((lot["rect"] as Rect2i).position.x, (lot["rect"] as Rect2i).end.x):
+				if world.is_walkable(x, y) and world.object_at(Vector2i(x, y)) == null:
+					spots.append(Vector2i(x, y))
+	var made: Array[Pawn] = []
+	if spots.is_empty():
+		return made
+	_shuffle(rng, spots)
+	var used_names: Array[String] = []
+	var home := { "lot": lot, "family": family, "spots": spots, "used_names": used_names, "size": 0 }
+	for age in ages:
+		_add(town, rng, world, home, age)
+		made.append(town.pawns.back())
+	var class_id := str(_template(str(lot.get("template", ""))).get("class", "peasant"))
+	var grown: Array[Pawn] = []
+	for pawn in made:
+		pawn.class_id = class_id
+		Skills.seed_pawn(pawn, rng)
+		if pawn.adult:
+			grown.append(pawn)
+	for pawn in made:
+		if not pawn.adult:
+			Skills.inherit(pawn, grown, rng)
+	Relations.make_family(made)
+	return made
+
+
 ## The settlement a home is in, as a key of `wanted` ("" when the world has no settlements).
 static func _settlement_of(wanted: Dictionary, home: Dictionary) -> String:
 	var key := str(home["lot"].get("town", ""))

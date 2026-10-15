@@ -18,6 +18,8 @@ const HIDE_NAMES_BELOW := 0.5  # camera zoom
 var sim: Simulation
 
 var _views: Dictionary = {}  # pawn id -> PawnView
+var _animal_views: Dictionary = {}  # animal id -> AnimalView
+var _caravan_views: Dictionary = {}  # caravan id -> CaravanView
 var _overlay_was_drawn := false
 
 
@@ -30,6 +32,12 @@ func bind(new_sim: Simulation) -> void:
 	for view in _views.values():
 		view.queue_free()
 	_views.clear()
+	for view in _animal_views.values():
+		view.queue_free()
+	_animal_views.clear()
+	for view in _caravan_views.values():
+		view.queue_free()
+	_caravan_views.clear()
 	_sync_views()
 	queue_redraw()
 
@@ -40,7 +48,7 @@ func visual_position(id: int) -> Vector2:
 		return _views[id].position
 	var pawn := sim.person(id) if sim != null else null
 	if pawn != null:
-		return (Vector2(pawn.tile) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE
+		return Levels.pixel(pawn.tile)
 	return Vector2.ZERO
 
 
@@ -49,14 +57,27 @@ func _process(_delta: float) -> void:
 		return
 	if _views.size() != sim.household.pawns.size() + sim.town.pawns.size():
 		_sync_views()
+	_sync_animal_views()
+	_sync_caravan_views()
 	var camera := get_viewport().get_camera_2d()
 	var names_visible := camera == null or camera.zoom.x >= HIDE_NAMES_BELOW
+	for caravan_id in _caravan_views:
+		var caravan_view: CaravanView = _caravan_views[caravan_id]
+		caravan_view.show_name = names_visible
+		caravan_view.label_scale = 1.0 / camera.zoom.x if camera != null else 1.0
+	for animal_id in _animal_views:
+		var animal_view: AnimalView = _animal_views[animal_id]
+		animal_view.show_name = names_visible and animal_view.animal.owner == "household"
+		animal_view.label_scale = 1.0 / camera.zoom.x if camera != null else 1.0
 	for id in _views:
 		var view: PawnView = _views[id]
 		view.selected = (id == sim.household.selected_id)
 		view.show_name = names_visible
 		view.label_scale = 1.0 / camera.zoom.x if camera != null else 1.0
 		view.townsfolk = sim.household.get_pawn(id) == null
+		view.clothes = Clothing.worn(sim, view.pawn)
+		view.pieces = Clothing.pieces(sim, view.pawn)
+		view.visible = view.pawn.caravan == 0 and Levels.of(_level_tile(view.pawn)) == Levels.view  # a rider is drawn on the cart; the floor not on screen is not shown
 	if names_visible:
 		_stack_labels(camera.zoom.x if camera != null else 1.0)
 	var chosen := sim.household.selected()
@@ -87,6 +108,42 @@ func _stack_labels(zoom: float) -> void:
 					moved = true
 		taken.append(rect)
 		view.label_drop = drop
+
+
+## Keeps one picture for every animal in the world; a ridden one follows its rider's.
+func _sync_animal_views() -> void:
+	var seen := {}
+	for animal in sim.world.animals:
+		seen[animal.id] = true
+		var view: AnimalView = _animal_views.get(animal.id)
+		if view == null:
+			view = AnimalView.new()
+			add_child(view)
+			view.setup(animal)
+			_animal_views[animal.id] = view
+		view.follow = _views.get(animal.rider) if animal.rider != 0 else null
+	if _animal_views.size() != seen.size():
+		for id in _animal_views.keys():
+			if not seen.has(id):
+				_animal_views[id].queue_free()
+				_animal_views.erase(id)
+
+
+## Keeps one picture for every caravan on the roads.
+func _sync_caravan_views() -> void:
+	var seen := {}
+	for caravan in sim.world.caravans:
+		seen[caravan.id] = true
+		if not _caravan_views.has(caravan.id):
+			var view := CaravanView.new()
+			add_child(view)
+			view.setup(caravan, sim)
+			_caravan_views[caravan.id] = view
+	if _caravan_views.size() != seen.size():
+		for id in _caravan_views.keys():
+			if not seen.has(id):
+				_caravan_views[id].queue_free()
+				_caravan_views.erase(id)
 
 
 func _sync_views() -> void:
@@ -126,7 +183,12 @@ func _draw() -> void:
 
 
 func _tile_center(cell: Vector2i) -> Vector2:
-	return (Vector2(cell) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE
+	return Levels.pixel(cell)
+
+
+## The tile that says which floor somebody is on: halfway up or down a flight of stairs they have changed floors.
+func _level_tile(pawn: Pawn) -> Vector2i:
+	return pawn.step_to if pawn.is_moving() and pawn.step_progress() > 0.5 else pawn.tile
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -140,7 +202,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 	elif event.button_index == MOUSE_BUTTON_RIGHT:
 		if sim.household.selected() != null:
-			var tile := Vector2i(floori(world_point.x / MapView.TILE_SIZE), floori(world_point.y / MapView.TILE_SIZE))
+			var tile := Levels.lift(Vector2i(floori(world_point.x / MapView.TILE_SIZE), floori(world_point.y / MapView.TILE_SIZE)), Levels.view)
 			context_menu_requested.emit(event.position, tile)
 			get_viewport().set_input_as_handled()
 
@@ -149,7 +211,7 @@ func _pawn_at(world_point: Vector2) -> Pawn:
 	var best: Pawn = null
 	var best_distance := PICK_RADIUS * MapView.TILE_SIZE
 	for pawn in sim.household.pawns:
-		if pawn.is_infant():
+		if pawn.is_infant() or (_views.has(pawn.id) and not _views[pawn.id].visible):
 			continue
 		var distance := visual_position(pawn.id).distance_to(world_point)
 		if distance < best_distance:

@@ -75,12 +75,12 @@ static func fatal_after_hours(need_id: String) -> float:
 
 
 ## Below this value an idle person starts looking for a fix.
-static func seek_below(need_id: String, minute_of_day: int) -> float:
+static func seek_below(need_id: String, minute_of_day: int, pawn: Pawn = null) -> float:
 	var override: Variant = DataRegistry.get_def("needs", need_id).get("seek_below")
 	if override != null:
 		return float(override)
 	if need_id == "rest" and (minute_of_day >= NIGHT_START_MINUTE or minute_of_day < NIGHT_END_MINUTE):
-		return NIGHT_REST_SEEK_BELOW
+		return NIGHT_REST_SEEK_BELOW + Traits.add(pawn, "night_rest_seek")
 	return DEFAULT_SEEK_BELOW
 
 

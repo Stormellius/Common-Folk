@@ -18,11 +18,11 @@ extends RefCounted
 
 const LEGEND := {
 	"b": "bed", "p": "cooking_pot", "h": "hearth", "w": "wash_basin", "c": "chamber_pot",
-	"l": "lute", "t": "table", "k": "counter", "s": "shelf", "r": "barrel", "n": "bench", "W": "well",
+	"l": "lute", "j": "harp", "d": "drum", "t": "table", "k": "counter", "s": "shelf", "r": "barrel", "n": "bench", "W": "well",
 	"m": "meal_table", "a": "ale_barrel", "f": "food_shelf", "B": "notice_board",
-	"A": "altar", "P": "pew", "H": "sickbed", "F": "forge", "K": "workbench", "T": "tool_rack",
+	"A": "altar", "P": "pew", "H": "sickbed", "F": "forge", "K": "workbench", "T": "tool_rack", "Z": "haystack", "Y": "hitching_post", "Q": "quern", "O": "oven", "V": "brew_vat", "U": "tanning_rack",
 }
-const PRIORITY := ["tavern", "shop", "clinic", "chapel", "smithy", "workshop", "park", "house", "vacant"]
+const PRIORITY := ["tavern", "shop", "clinic", "chapel", "smithy", "workshop", "stable", "bakery", "park", "house", "vacant"]
 const YARD := 1       # tiles of open ground around a building, inside its lot
 const JITTER := 6.0   # how much chance shuffles the order of lots along the streets
 const MAIN_WIDTH := 3
@@ -323,6 +323,8 @@ static func _build(world: WorldState, template: Dictionary, grid: Array[String],
 				while lot.has_point(outside):
 					world.set_tile(outside.x, outside.y, "dirt")  # a bare path across the yard
 					outside += DOOR_FACING[rot]
+	if floor_id != "":
+		Rooms.auto_roof(world, foot)  # the building's closed rooms are roofed
 	return way_in
 
 
@@ -334,6 +336,7 @@ static func _clear_lot(world: WorldState, entry: Dictionary) -> void:
 	for y in range(rect.position.y, rect.end.y):
 		for x in range(rect.position.x, rect.end.x):
 			world.set_floor(Vector2i(x, y), "")
+			world.set_roof(Vector2i(x, y), "")
 
 
 # --- the finishing touches -----------------------------------------------------------
@@ -411,7 +414,7 @@ static func _decorate_lot(world: WorldState, rng: RandomNumberGenerator, entry: 
 		"clinic":
 			for i in 3:
 				_put(world, "flower_bed", ring[rng.randi() % ring.size()])
-		"smithy", "workshop":
+		"smithy", "workshop", "stable", "bakery":
 			for i in 3:
 				_put(world, "woodpile", ring[rng.randi() % ring.size()])
 			_put(world, "cart", ring[rng.randi() % ring.size()])

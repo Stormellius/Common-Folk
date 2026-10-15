@@ -1,0 +1,13 @@
+[
+  { "id": "wardrobe",
+    "winter_from": 2.0,
+    "warm_from": 1.15,
+    "night_from_hour": 21,
+    "night_to_hour": 6,
+    "night_chill": 1.25,
+    "formal_objects": ["pew", "altar"],
+    "wash_objects": ["wash_basin"],
+    "work_jobs": ["work", "build", "hunt"],
+    "work_min_stage": "youth",
+    "choices": ["casual", "worker", "formal", "warm", "winter", "undergarments"] }
+]

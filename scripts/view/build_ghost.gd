@@ -9,9 +9,13 @@ var connections := 0
 var cell := Vector2i.ZERO
 
 
+func _ready() -> void:
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+
+
 func show_at(new_cell: Vector2i, valid: bool) -> void:
 	cell = new_cell
-	position = (Vector2(cell) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE
+	position = Levels.pixel(cell)
 	modulate = Color(0.75, 1.0, 0.75, 0.7) if valid else Color(1.0, 0.45, 0.45, 0.7)
 	visible = true
 	queue_redraw()

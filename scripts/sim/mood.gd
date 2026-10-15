@@ -52,6 +52,7 @@ static func evaluate(pawn: Pawn, others: Variant, now: int) -> Dictionary:
 ## `about` if it names someone. A thought they already have (about the same person) just has its
 ## time renewed.
 static func add_event(pawn: Pawn, key: String, now: int, about: String = "") -> void:
+	Ambitions.note(pawn, key)  # whatever happens to someone counts toward their wishes and ambition
 	for def in DataRegistry.get_list("thoughts"):
 		if str(def.get("on", "")) != key or not _applies(def, pawn):
 			continue
@@ -128,6 +129,8 @@ static func _holds(condition: Dictionary, pawn: Pawn, people: Array) -> bool:
 	if condition.has("heavy") and bool(condition["heavy"]) != Pregnancy.is_heavy(pawn):
 		return false
 	if condition.has("in_labour") and bool(condition["in_labour"]) != Pregnancy.in_labour(pawn):
+		return false
+	if condition.has("fulfilled") and bool(condition["fulfilled"]) != not pawn.ambitions_done.is_empty():
 		return false
 	if condition.has("ill") and bool(condition["ill"]) != (pawn.illness != ""):
 		return false

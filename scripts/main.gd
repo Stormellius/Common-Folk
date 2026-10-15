@@ -12,6 +12,8 @@ var _menu_tile := Vector2i.ZERO  # and which tile it was opened on
 var _loading := false           # true while a save is being put in place (no autosave then)
 ## False on the title screen, where the town behind is only to look at.
 var _in_game := false
+var _lot_picker := LotPicker.new()
+var _pending := {}   # the new game being set up: seed, start, lifespan, the family drawn
 var _speed_before_menu := 1     # the speed to go back to when the menus close
 var _to_name: Array[int] = []  # babies of your household still waiting for a name
 var _loaded_view: Dictionary = {}  # the camera of the save just loaded
@@ -26,17 +28,36 @@ var _loaded_view: Dictionary = {}  # the camera of the save just loaded
 @onready var cloud_shadows: CloudShadows = $CloudShadows
 @onready var weather: Weather = $Weather
 @onready var object_layer: ObjectLayer = $ObjectLayer
+@onready var site_layer: SiteLayer = $SiteLayer
+@onready var roof_layer: RoofLayer = $RoofLayer
+var floor_upper := FloorLayer.new()   # what is laid, shaded and roofed upstairs (see Levels)
+var shadow_upper := ShadowLayer.new()
+var roof_upper := RoofLayer.new()
+@onready var tree_layer: TreeLayer = $TreeLayer
 @onready var build: BuildController = $BuildController
 @onready var pawn_layer: PawnLayer = $PawnLayer
 @onready var tile_cursor: TileCursor = $TileCursor
 @onready var camera: CameraController = $Camera
 @onready var hud: Hud = $HUD
 @onready var menus: Menus = $Menus
+@onready var audio: AudioDirector = $Audio
 
 
 func _ready() -> void:
+	floor_upper.level = 1
+	shadow_upper.level = 1
+	roof_upper.level = 1
+	add_child(floor_upper)
+	add_child(shadow_upper)
+	add_child(roof_upper)
+	move_child(floor_upper, shadow_layer.get_index() + 1)
+	move_child(shadow_upper, floor_upper.get_index() + 1)
+	move_child(roof_upper, roof_layer.get_index() + 1)
+	hud.level_requested.connect(_show_level)
 	tile_cursor.hovered_changed.connect(_on_tile_hovered)
-	pawn_layer.pawn_selected.connect(hud.set_selected)
+	pawn_layer.pawn_selected.connect(func(id: int) -> void:
+		hud.set_selected(id)
+		_follow_level(sim.household.get_pawn(id)))
 	pawn_layer.context_menu_requested.connect(_on_context_menu_requested)
 	hud.action_chosen.connect(_on_action_chosen)
 	hud.pawn_chosen.connect(_on_pawn_chosen)
@@ -47,6 +68,16 @@ func _ready() -> void:
 	build.tool_cleared.connect(hud.clear_build_selection)
 	build.message.connect(func(text: String) -> void: hud.show_message(text))
 	menus.new_game_requested.connect(_on_new_game_requested)
+	menus.land_confirmed.connect(_finish_new_game)
+	menus.wardrobe_chosen.connect(_on_wardrobe_chosen)
+	menus.land_cancelled.connect(_cancel_land)
+	menus.land_picked.connect(_on_land_picked)
+	_lot_picker.camera = camera
+	_lot_picker.visible = false
+	_lot_picker.picked.connect(func(lot_id: String) -> void:
+		menus.mark_land(lot_id)
+		_on_land_picked(lot_id))
+	add_child(_lot_picker)
 	menus.load_requested.connect(_on_load_requested)
 	menus.save_screen_requested.connect(func() -> void: menus.open_save(_default_save_name()))
 	menus.save_requested.connect(_on_save_requested)
@@ -54,6 +85,9 @@ func _ready() -> void:
 	menus.quit_requested.connect(func() -> void: get_tree().quit())
 	menus.closed.connect(_on_menus_closed)
 	menus.baby_named.connect(_on_baby_named)
+	menus.families_requested.connect(_open_families)
+	menus.play_family_requested.connect(_on_play_family)
+	menus.move_house_requested.connect(_on_move_house)
 	GameClock.ticked.connect(_on_tick)
 	GameClock.motion_ticked.connect(_on_motion_tick)
 	GameClock.day_changed.connect(_on_day_changed)
@@ -91,6 +125,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_open_pause()
 		KEY_H:
 			hud.toggle_help()
+		KEY_I:
+			hud.toggle_details()
 		KEY_SPACE:
 			GameClock.toggle_pause()
 		KEY_1, KEY_KP_1:
@@ -105,6 +141,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			build.toggle()
 		KEY_G:
 			tile_cursor.toggle_grid()
+		KEY_R:
+			hud.show_message(roof_layer.cycle())
+			roof_upper.mode = roof_layer.mode
+			roof_upper._alpha = -1.0
+		KEY_PAGEUP:
+			_show_level(1)
+		KEY_PAGEDOWN:
+			_show_level(0)
 		KEY_TAB:
 			if sim != null:
 				sim.household.cycle_selection(-1 if event.shift_pressed else 1)
@@ -117,6 +161,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_visit_next_town()
 		KEY_M:
 			_toggle_overview()
+		KEY_F:
+			_open_menu(_open_families)
 		KEY_N:
 			_open_menu(menus.open_new_game)
 		KEY_F5:
@@ -146,8 +192,10 @@ func _unhandled_input(event: InputEvent) -> void:
 ## lifespan = how fast people age in a new game (an id from data/lifespans.json; normal if not given),
 ## fall = minutes: the selected person fell that long ago and lies dying (to see Death come),
 ## ghost = 1: a townsperson has died, and their ghost walks tonight,
-## screen = a menu to open at the start: pause, save, load, settings, new, name or game_over,
-## fire = 1: the nearest thing that can burn to the selected person catches alight.
+## screen = a menu to open at the start: pause, save, load, settings, new, name, families or game_over,
+## fire = 1: the nearest thing that can burn to the selected person catches alight,
+## dreams = 1: the selected person is partway up an ambition and has two wishes,
+## painted = 1: people drawn as painted pictures (a preview), code_art = 1: everything drawn by code, for this run.
 ## Handy for screenshots and testing.
 func _launch_option(name: String) -> String:
 	var prefix := "--%s=" % name
@@ -225,6 +273,16 @@ func _apply_launch_options() -> void:
 		GameClock.set_time(int(_launch_option("day")), hour)
 	if _launch_option("fire") != "" and sim != null and sim.household.selected() != null:
 		_start_demo_fire()
+	if _launch_option("caravan") != "" and sim != null:
+		_start_demo_caravan()
+	if _launch_option("plans") != "" and sim != null:
+		_start_demo_plans(int(_launch_option("plans")))
+	if _launch_option("painted") != "":
+		Settings.painted_characters = _launch_option("painted") == "1"  # for this run only
+	if _launch_option("code_art") != "":
+		Settings.illustrated_art = _launch_option("code_art") != "1"
+	if _launch_option("dreams") != "" and sim != null and sim.household.selected() != null:
+		_start_demo_dreams(sim.household.selected())
 	if _launch_option("wedding") != "" and sim != null and sim.household.selected() != null:
 		_start_demo_wedding()
 	if _launch_option("speed") != "":
@@ -249,6 +307,15 @@ func _apply_launch_options() -> void:
 				sim.household.selected().skills[parts[0]] = Skills.xp_for_level(int(parts[1]))
 	if _launch_option("tool") != "" and sim != null and sim.household.selected() != null:
 		Skills.equip(sim, sim.household.selected(), _launch_option("tool"), true)
+	if _launch_option("spawn") != "" and sim != null and sim.household.selected() != null:
+		var around := sim.household.selected().tile
+		var index := 0
+		for kind in _launch_option("spawn").split(","):
+			index += 1
+			var spot := around + Vector2i((index - 1) % 5 * 3 - 5, 2 + (index - 1) / 5 * 3)
+			var animal := Fauna.spawn(world, kind, spot, sim.rng(), "household" if not Fauna.def_of(kind).get("type", "wild") == "wild" else "", WorldState.HOME_LOT)
+			animal.think_at = GameClock.tick + 100000  # stand still for the picture
+		camera.position = (Vector2(around) + Vector2(1.5, 3.5)) * MapView.TILE_SIZE
 	if _launch_option("together") != "" and sim != null and sim.household.pawns.size() >= 2:
 		for person in sim.household.pawns:
 			person.needs["libido"] = 10.0
@@ -312,6 +379,76 @@ func _build_demo_house() -> void:
 	sim.build_place("wall", origin + Vector2i(5, 3))
 	sim.build_place("bed", origin + Vector2i(2, 2))
 	sim.build_place("hearth", origin + Vector2i(7, 2))
+	if _launch_option("upstairs") != "":  # a second storey, for pictures
+		Rooms.auto_roof(world, Rect2i(origin, Vector2i(9, 7)))
+		sim.build_place("stairs", origin + Vector2i(1, 1))
+		for dx in range(1, 8):
+			for dy in range(1, 6):
+				sim.build_floor("planks", Levels.lift(origin + Vector2i(dx, dy), 1))
+		for dx in range(0, 9):
+			for dy in [0, 6]:
+				world.set_floor(Levels.lift(origin + Vector2i(dx, dy), 1), "planks")
+		for dx in range(0, 9):
+			for dy in [0, 6]:
+				world.add_object("wall", Levels.lift(origin + Vector2i(dx, dy), 1))
+		for dy in range(1, 6):
+			for dx in [0, 8]:
+				world.set_floor(Levels.lift(origin + Vector2i(dx, dy), 1), "planks")
+				world.add_object("wall", Levels.lift(origin + Vector2i(dx, dy), 1))
+		world.add_object("bed", Levels.lift(origin + Vector2i(3, 2), 1))
+		world.add_object("table", Levels.lift(origin + Vector2i(6, 3), 1))
+		Rooms.auto_roof(world, Rect2i(Levels.lift(origin, 1), Vector2i(9, 7)))
+		if _launch_option("upstairs") == "up":
+			var chosen := sim.household.selected()
+			chosen.tile = Levels.lift(origin + Vector2i(4, 3), 1)
+			chosen.step_to = chosen.tile
+			_show_level(1)
+
+
+## For screenshots: the selected person is on the way to mastering a craft, and has two wishes.
+func _start_demo_dreams(pawn: Pawn) -> void:
+	pawn.ambition = "master_craftsman"
+	pawn.ambition_step = 1
+	pawn.skills["carpentry"] = Skills.xp_for_level(4) + 40.0
+	pawn.wishes = [{ "id": "play_lute", "until": GameClock.tick + 20 * 60 }, { "id": "kiss_partner", "until": GameClock.tick + 30 * 60 }]
+	pawn.ambitions_done = ["friend_to_all"] as Array[String]
+
+
+## For looking at building work: the demo house gets a roof planned, a bed and a table, and two of
+## your folk set to building it; time runs on `minutes` before the picture is taken.
+func _start_demo_plans(minutes: int) -> void:
+	_build_demo_house()
+	var origin := world.lot.position + Vector2i(world.lot.size.x - 11, 2)
+	sim.household.add_stock("hammer", 2)
+	Construction.plan_object(sim, "table", origin + Vector2i(2, 4))
+	Construction.plan_object(sim, "bench", origin + Vector2i(6, 4))
+	Construction.plan_object(sim, "bed", origin + Vector2i(1, 4))
+	var roofed := Construction.plan_room_roof(sim, "thatch", origin + Vector2i(2, 3))
+	if not bool(roofed["ok"]):
+		push_warning(str(roofed["message"]))
+	for member in sim.household.pawns:
+		if not member.is_infant():
+			Construction.order_build(sim, member)
+	for minute in minutes:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+	camera.position = (Vector2(origin) + Vector2(4.5, 3.5)) * MapView.TILE_SIZE
+
+
+## For looking at a caravan: one sets out for the home town and the time runs on until it has made
+## camp on the square; the camera goes to it.
+func _start_demo_caravan() -> void:
+	var cart := Caravans.spawn(sim, sim.rng(), str(world.home_town().get("id", "")))
+	if cart == null:
+		return
+	for minute in 3000:
+		if cart.state == "camped":
+			break
+		GameClock.advance_one_tick()
+		for step in GameClock.SUBSTEPS_PER_MINUTE:
+			Caravans.step_motion(sim)
+		Caravans.step(sim, sim.rng())
+	camera.position = (Vector2(cart.tile) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE
 
 
 # --- the title screen and the menus ----------------------------------------------
@@ -320,6 +457,7 @@ func _build_demo_house() -> void:
 ## evening while the camera drifts slowly over the rooftops.
 func _show_title() -> void:
 	_in_game = false
+	audio.listening = false
 	build.set_active(false)
 	hud.close_action_menu()
 	_start_new_world(randi(), "bought", "normal")
@@ -338,6 +476,7 @@ func _show_title() -> void:
 ## the player's again.
 func _begin_game() -> void:
 	_in_game = true
+	audio.listening = true
 	hud.visible = true
 	tile_cursor.visible = true
 	camera.drift = Vector2.ZERO
@@ -373,15 +512,61 @@ func _open_screen(screen: String) -> void:
 			menus.open_settings()
 		"new":
 			menus.open_new_game()
+		"create":
+			menus.open_new_game()
+			menus.open_create()
+		"wardrobe":
+			var chosen := sim.household.selected()
+			var spot := chosen.tile + Vector2i(1, 0)
+			var closet := world.add_object("wardrobe", spot)
+			menus.open_wardrobe(chosen, closet.id if closet != null else 0, Clothing.worn(sim, chosen))
+		"land":
+			menus.open_new_game()
+			_on_new_game_requested(42, "bought", "normal")
 		"name":
 			var rng := RandomNumberGenerator.new()
 			rng.seed = 11
 			var baby := PersonFactory.make(rng, "Brook", [], 0)
 			menus.open_naming(baby, "A baby %s for the Brook family, born to Maud." % ("girl" if baby.gender == "female" else "boy"), baby.display_name.get_slice(" ", 0), [])
+		"families":
+			_open_families()
 		"game_over":
 			menus.show_game_over("Gisela Brook starved.\n\nYour folk have all passed on, after 12 days.")
 		_:
 			_open_pause()
+
+
+## The families screen: who the player could be, the empty houses, and what has happened in the towns.
+func _open_families() -> void:
+	if sim == null:
+		return
+	var who := "You follow the %s family." % Families.family_name(sim.household.pawns) if not sim.household.pawns.is_empty() else "Your line has ended; take up another family."
+	menus.open_families(Families.rows(sim), Families.empty_rows(sim), Families.chronicle_lines(sim), who)
+
+
+func _on_play_family(lot_id: String) -> void:
+	var result := Families.play(sim, lot_id)
+	if not bool(result["ok"]):
+		menus.show_families_note(str(result["message"]))
+		return
+	_after_family_change(str(result["message"]))
+
+
+func _on_move_house(lot_id: String) -> void:
+	var result := Families.move(sim, lot_id)
+	if not bool(result["ok"]):
+		menus.show_families_note(str(result["message"]))
+		return
+	_after_family_change(str(result["message"]))
+
+
+## The household changed hands or homes: look at it afresh.
+func _after_family_change(message: String) -> void:
+	menus.close()
+	hud.set_household(sim.household)
+	_on_pawn_chosen(sim.household.selected_id)
+	_center_on_selected()
+	hud.show_message(message, 6.0)
 
 
 func _on_menus_closed() -> void:
@@ -391,11 +576,54 @@ func _on_menus_closed() -> void:
 
 
 func _on_new_game_requested(world_seed: int, start_id: String, lifespan: String) -> void:
+	# The world is made and shown first, so that the player can look about and choose where to settle.
+	_pending = { "seed": world_seed, "start": start_id, "lifespan": lifespan, "design": menus.family_design.duplicate(true) }
+	_in_game = false
+	audio.listening = false
+	build.set_active(false)
+	hud.close_action_menu()
+	hud.visible = false
+	tile_cursor.visible = false
+	_start_new_world(world_seed, start_id, lifespan, _pending["design"])
+	GameClock.set_speed(0)
+	var options := Starts.land_options(world)
+	_lot_picker.show_options(options, WorldState.HOME_LOT)
+	camera.drift = Vector2.ZERO
+	camera.input_enabled = true
+	camera.zoom = Vector2(0.5, 0.5)
+	camera.focus_on((Vector2(world.lot.get_center()) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE)
+	var start_def := DataRegistry.get_def("starts", start_id)
+	var funds := int(start_def.get("coins", Economy.start_coins()))
+	var homed := str(start_def.get("house", "")) != ""
+	menus.open_land(options, WorldState.HOME_LOT, funds, "A house is waiting on your plot." if homed else "Your land is bare ground and a camp.")
+
+
+func _on_land_picked(lot_id: String) -> void:
+	for option in Starts.land_options(world):
+		if str(option["id"]) == lot_id:
+			camera.focus_on((Vector2(option["rect"].get_center()) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE)
+
+
+func _cancel_land() -> void:
+	_lot_picker.hide_picker()
+	camera.input_enabled = false
+	camera.drift = Vector2(16, 6)
+	menus.back_to_create()
+
+
+## The plot is chosen: the world is made again with the player on it, and the game begins.
+func _finish_new_game(lot_id: String) -> void:
+	_lot_picker.hide_picker()
 	_begin_game()
-	_start_new_world(world_seed, start_id, lifespan)
+	_start_new_world(int(_pending.get("seed", randi())), str(_pending.get("start", "")), str(_pending.get("lifespan", "normal")), _pending.get("design", {}), lot_id)
 	menus.close()
-	GameClock.set_speed(1)
-	hud.show_message("A new life begins. The world's seed is %d." % world.world_seed, 4.0)
+	var builds := str(DataRegistry.get_def("starts", str(_pending.get("start", ""))).get("house", "")) == ""
+	GameClock.set_speed(0 if builds else 1)
+	if builds:
+		build.set_active(true)
+		hud.show_message("Raise a home with your %s. Press Space when you are ready for time to pass." % Economy.format(sim.household.coins), 9.0)
+	else:
+		hud.show_message("A new life begins. The world's seed is %d." % world.world_seed, 4.0)
 
 
 func _on_load_requested(path: String) -> void:
@@ -459,13 +687,14 @@ func _describe_newest_save() -> String:
 	return "Your last save"
 
 
-func _start_new_world(world_seed: int, start_id: String = "", lifespan: String = "normal") -> void:
+func _start_new_world(world_seed: int, start_id: String = "", lifespan: String = "normal", design: Dictionary = {}, lot_id: String = "") -> void:
 	GameClock.reset()
 	var new_world := RegionGenerator.generate(world_seed)  # terrain, the towns, their roads, the player's lot
 	new_world.lifespan = lifespan if DataRegistry.has_def("lifespans", lifespan) else "normal"
 	if new_world.lot.size == Vector2i.ZERO:  # no town described in the data
 		new_world.lot = WorldState.centered_lot(new_world.width, new_world.height)
-	var begun := Starts.begin(new_world, start_id)  # the household, its land and its camp
+	Starts.choose_lot(new_world, lot_id)
+	var begun := Starts.begin(new_world, start_id, design)  # the household, its land and its camp
 	_show_world(new_world, begun["household"], NpcGenerator.create(new_world), begun["realm"])
 
 
@@ -483,17 +712,26 @@ func _show_world(new_world: WorldState, household: Household, town: Household = 
 	sim.event_ended.connect(_on_event_ended)
 	map_view.set_world(world)
 	tile_cursor.set_world(world)
+	Levels.set_view(0)
+	hud.set_level(0)
 	floor_layer.bind(world)
+	floor_upper.bind(world)
 	shadow_layer.bind(world)
+	shadow_upper.bind(world)
+	roof_upper.bind(world)
 	smoke_layer.bind(sim)
 	cloud_shadows.set_world(world)
 	weather.bind(world)
 	object_layer.bind(sim)
+	site_layer.bind(sim)
+	roof_layer.bind(world)
 	pawn_layer.bind(sim)
 	death_layer.bind(sim)
 	fire_layer.bind(sim)
 	town_labels.bind(world)
 	build.bind(sim)
+	audio.bind(sim, camera)
+	tree_layer.bind(world, camera, map_view)
 	hud.close_action_menu()
 	hud.set_household(household)
 	camera.set_world_size(Vector2(world.width, world.height) * MapView.TILE_SIZE)
@@ -505,9 +743,11 @@ func _process(_delta: float) -> void:
 	if sim != null and _in_game:
 		hud.update_household_status(sim.household)
 		var chosen := sim.household.selected()
-		hud.show_pawn(chosen, sim.describe_activity(chosen) if chosen != null else "", sim.job_text(chosen) if chosen != null else "", sim.relationship_lines(chosen) if chosen != null else [])
+		hud.show_pawn(chosen, sim.describe_activity(chosen) if chosen != null else "", sim.job_text(chosen) if chosen != null else "", sim.relationship_lines(chosen) if chosen != null else [], Ambitions.summary(sim, chosen) if chosen != null else {}, Clothing.worn(sim, chosen) if chosen != null else "", Clothing.pieces(sim, chosen) if chosen != null else null)
 		hud.set_events(sim.events.names())
 		hud.set_purse(sim.household.coins, sim.household.stock)
+		hud.set_animals(Fauna.kept_text(sim))
+		hud.set_building(Construction.summary(sim))
 		hud.set_realm(sim.realm.summary(sim))
 		var here := world.town_at(chosen.tile) if chosen != null else {}
 		hud.set_place(str(here["name"]) if not here.is_empty() else ("Open country" if chosen != null and not world.towns.is_empty() else ""))
@@ -617,14 +857,42 @@ func _on_action_chosen(action_id: String) -> void:
 	var result := PawnActions.perform(sim, pawn, action_id, _menu_tile)
 	if result["message"] != "":
 		hud.show_message(result["message"])
+	if str(result.get("dialog", "")) == "wardrobe":
+		_open_menu(func() -> void: menus.open_wardrobe(pawn, int(result["object"]), Clothing.worn(sim, pawn)))
+		return
 	hud.set_selected(sim.household.selected_id)  # an action may have switched person
+
+
+## The wardrobe dialog was confirmed: they go and change into what was chosen.
+func _on_wardrobe_chosen(pawn_id: int, object_id: int, outfit_id: String, slots: Dictionary) -> void:
+	var pawn := sim.household.get_pawn(pawn_id)
+	var wardrobe := world.get_object(object_id)
+	if pawn == null or wardrobe == null:
+		return
+	var result := sim.order_dress(pawn, wardrobe, outfit_id, slots)
+	if str(result["message"]) != "":
+		hud.show_message(str(result["message"]))
 
 
 func _on_pawn_chosen(id: int) -> void:
 	hud.close_action_menu()
 	if sim.household.select(id):
 		hud.set_selected(id)
+		_follow_level(sim.household.get_pawn(id))
 		camera.focus_on(pawn_layer.visual_position(id))
+
+
+## Shows the other floor of a two-storey house (PageUp: upstairs, PageDown: the ground floor).
+func _show_level(level: int) -> void:
+	Levels.set_view(level)
+	hud.set_level(Levels.view)
+	hud.close_action_menu()
+
+
+## The floor on screen is the one somebody was chosen on.
+func _follow_level(pawn: Pawn) -> void:
+	if pawn != null and Levels.of(pawn.committed_tile()) != Levels.view:
+		_show_level(Levels.of(pawn.committed_tile()))
 
 
 ## The camera goes to the player's own town.
@@ -759,9 +1027,11 @@ func _describe_tile(tile: Vector2i) -> String:
 		return footer
 	var tile_id := world.get_tile_id(tile.x, tile.y)
 	var tile_name := str(DataRegistry.get_def("tiles", tile_id).get("name", tile_id))
+	if Levels.of(tile) == 1:
+		tile_name = "Upstairs, %s" % ("floor" if world.floors.has(tile) else "open air")
 	var walk := "walkable" if world.is_walkable(tile.x, tile.y) else "blocked"
 	var placed := world.object_at(tile)
 	var what := tile_name if placed == null else "%s with %s" % [tile_name, placed.display_name().to_lower()]
 	var town := world.town_at(tile)
 	var place := "%s: " % str(town["name"]) if not town.is_empty() else ""
-	return "%sTile (%d, %d): %s, %s\n%s" % [place, tile.x, tile.y, what, walk, footer]
+	return "%sTile (%d, %d): %s, %s\n%s" % [place, Levels.ground(tile).x, Levels.ground(tile).y, what, walk, footer]

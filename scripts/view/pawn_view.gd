@@ -34,6 +34,11 @@ var label_drop := 0.0:
 			label_drop = value
 			queue_redraw()
 
+## What they are wearing (an outfit id; the layer sets it each frame from Clothing).
+var clothes := "casual"
+## The garments they have on, by slot (see Clothing.pieces).
+var pieces: Dictionary = {}
+
 var _phase := 0.0
 ## Townspeople's names are drawn a little dimmer than your household's.
 var townsfolk := false
@@ -46,9 +51,9 @@ func setup(new_pawn: Pawn) -> void:
 
 
 func _target() -> Vector2:
-	var here := Vector2(pawn.tile) + Vector2(0.5, 0.5)
+	var here := Vector2(Levels.ground(pawn.tile)) + Vector2(0.5, 0.5)
 	if pawn.is_moving():
-		here = here.lerp(Vector2(pawn.step_to) + Vector2(0.5, 0.5), pawn.step_progress())
+		here = here.lerp(Vector2(Levels.ground(pawn.step_to)) + Vector2(0.5, 0.5), pawn.step_progress())
 	if pawn.is_infant() and pawn.pose != "lie":
 		here += Vector2(0.2, -0.12)  # on the carer's arm
 	return here * MapView.TILE_SIZE
@@ -90,8 +95,14 @@ func _draw() -> void:
 	self_modulate = Color(0.72, 0.72, 0.78) if fallen else Color.WHITE  # the dying grow grey
 	if fallen:  # lying on the ground where they fell, a little askew
 		draw_set_transform(Vector2(0.0, 4.0) * u, -0.35 if pawn.id % 2 == 0 else 0.35, Vector2.ONE)
-	PawnArt.draw(self, pawn.look, pawn.facing, u, _phase, asleep or fallen, PawnArt.outfit_for(pawn), breath)
+	if pawn.mount != 0:  # sitting in the saddle, a little above the ground
+		draw_set_transform(Vector2(0.0, -7.0) * u, 0.0, Vector2.ONE)
+	var outfit := PawnArt.outfit_for(pawn, clothes, pieces)
+	outfit["fallen"] = fallen
+	PawnArt.draw(self, pawn.look, pawn.facing, u, _phase * 0.5 if pawn.mount != 0 else _phase, asleep or fallen, outfit, breath)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	if not pawn.carrying.is_empty() and not fallen and not asleep:
+		PawnArt.draw_carry(self, pawn.carrying, pawn.facing, u)
 	if pawn.tool != "" and not fallen and not asleep:
 		PawnArt.draw_tool(self, pawn.tool, pawn.facing, u, Time.get_ticks_msec() / 1000.0 + pawn.id, pawn.job_stage == "using")
 	if asleep:
@@ -123,7 +134,7 @@ func label_anchor() -> Vector2:
 
 ## A blanket pulled up to the chest, and a little Zzz drifting up from the head.
 func _draw_blanket_and_zzz(u: float) -> void:
-	if not pawn.is_infant():  # (a baby in its cradle is already wrapped up)
+	if not pawn.is_infant() and not SpriteBank.has_object("bed"):  # (a baby in its cradle is already wrapped up, and a painted bed has its own blanket)
 		draw_rect(Rect2(Vector2(-15.0, -1.0) * u, Vector2(30.0, 17.0) * u), PawnArt.OUTLINE)
 		draw_rect(Rect2(Vector2(-14.0, 0.0) * u, Vector2(28.0, 15.0) * u), Color(0.49, 0.31, 0.31))
 		draw_line(Vector2(-14.0, 3.0) * u, Vector2(14.0, 3.0) * u, Color(0.64, 0.44, 0.44), maxf(1.0, 1.5 * u))

@@ -1,0 +1,6 @@
+[
+  { "id": "thatch", "name": "Thatched roof", "materials": { "wood": 1 }, "minutes": 7, "skill": "carpentry",
+    "color": "#b8914c", "edge": "#6f5630", "text": "Reed and straw on a timber frame." },
+  { "id": "tile", "name": "Tiled roof", "materials": { "stone": 1 }, "minutes": 10, "skill": "masonry",
+    "color": "#9c5b49", "edge": "#5e3329", "text": "Fired clay tiles: safer from fire and longer lasting." }
+]

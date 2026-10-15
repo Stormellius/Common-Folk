@@ -4,5 +4,16 @@
   { "id": "grain", "name": "Grain", "price": 2, "color": "#d6b24a" },
   { "id": "fish",  "name": "Fish",  "price": 3, "color": "#7fa6c4" },
   { "id": "herbs", "name": "Herbs", "price": 4, "color": "#6f9f55" },
-  { "id": "ring", "name": "Ring", "price": 20, "color": "#e0c060", "stocked": true, "text": "A plain band for a betrothal." }
+  { "id": "ring", "name": "Ring", "price": 20, "color": "#e0c060", "stocked": true, "text": "A plain band for a betrothal." },
+  { "id": "meat", "name": "Meat", "price": 4, "color": "#c0614f" },
+  { "id": "hide", "name": "Hide", "price": 5, "color": "#a07850" },
+  { "id": "flour",   "name": "Flour",   "price": 4,  "color": "#e8e0c8" },
+  { "id": "bread",   "name": "Bread",   "price": 6,  "color": "#c9964e" },
+  { "id": "ale",     "name": "Ale",     "price": 6,  "color": "#c98a2e" },
+  { "id": "iron",    "name": "Iron",    "price": 22, "color": "#6c7480" },
+  { "id": "leather", "name": "Leather", "price": 12, "color": "#7a5232" },
+  { "id": "cloth",   "name": "Cloth",   "price": 10, "color": "#b8c4d8", "trade": true },
+  { "id": "salt",    "name": "Salt",    "price": 7,  "color": "#f0f0f0", "trade": true },
+  { "id": "wine",    "name": "Wine",    "price": 14, "color": "#7a2a4a", "trade": true },
+  { "id": "spice",   "name": "Spice",   "price": 18, "color": "#c2641e", "trade": true }
 ]

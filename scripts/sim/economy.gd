@@ -160,3 +160,14 @@ static func item_phrase(item_id: String) -> String:
 		return Skills.tool_phrase(item_id)
 	var label := resource_name(item_id).to_lower()
 	return ("an " if label.substr(0, 1) in ["a", "e", "i", "o", "u"] else "a ") + label
+
+
+## What a town's market makes of a good: the "prices" of its profile in data/worldgen.json (a fishing
+## village pays little for fish and a lot for salt), 1 where it says nothing. `tile` is where the
+## selling is done.
+static func region_multiplier(world: WorldState, tile: Vector2i, resource_id: String) -> float:
+	var town := world.town_at(tile)
+	if town.is_empty():
+		return 1.0
+	var profile := DataRegistry.get_def("worldgen", str(town.get("profile", "town")))
+	return float(profile.get("prices", {}).get(resource_id, 1.0))

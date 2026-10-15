@@ -14,6 +14,7 @@ var width: int = 0
 var height: int = 0
 ## Something on a tile was built, moved or removed (an object or a floor). The views redraw
 ## and the path finder updates that one cell; see Simulation.
+signal roofs_changed
 signal tile_changed(tile: Vector2i)
 
 ## Tile ids used by this world. Index 0 is the default tile every cell starts as.
@@ -24,6 +25,8 @@ var tiles: PackedInt32Array = PackedInt32Array()
 var objects: Array[PlacedObject] = []
 ## The player's home lot: the only place they may build. An empty rect means no lot.
 var lot := Rect2i()
+## Which side of its street the home lot is on, as TownGenerator turns a house (2: south of it, the door to the north).
+var lot_rot := 2
 ## The other lots of the town (see TownGenerator): { "id", "kind", "name", "template", "facing",
 ## "rect": Rect2i, "public": bool }. Things on a private lot can only be used by the people who
 ## live there (Pawn.home_lot); public ones (tavern, shop, clinic, green) by anyone. Land outside
@@ -49,7 +52,30 @@ var fires: Dictionary = {}
 ## One entry for each of the dead who lies in a grave (see Mortality): { "name", "look", "grave":
 ## [x, y], "restless": bool, "haunt_until": tick }.
 var spirits: Array[Dictionary] = []
+## The animals (see Fauna), wild and tame, and whether the wilds have been stocked yet (a game saved
+## before there were animals is stocked when it is loaded).
+var animals: Array[Animal] = []
+var fauna_seeded := false
+## Roofs (Vector2i -> a roof id from data/roofs.json): a roofed tile is indoors. What the player has
+## planned to build and nobody has finished (see Construction), and the materials set aside for it
+## and not yet carried to a site, by resource id.
+var roofs: Dictionary = {}
+var sites: Array[BuildSite] = []
+var reserved: Dictionary = {}
+## What has happened to the families of the towns (see Families): { "day", "text" }, newest last.
+var chronicle: Array[Dictionary] = []
+## True for a world loaded from a save that had no roofs: the buildings need roofing (see Rooms).
+var needs_roofing := false
 
+## The trading caravans on the roads (see Caravans).
+var caravans: Array[Caravan] = []
+
+var _next_caravan_id := 1
+var _next_site_id := 1
+var _site_by_id := {}  # site id -> BuildSite
+
+var _next_animal_id := 1
+var _animal_by_id := {}  # animal id -> Animal
 var _next_object_id := 1
 var _object_at_tile := {}  # Vector2i -> PlacedObject
 var _object_by_id := {}  # object id -> PlacedObject
@@ -64,11 +90,13 @@ func _init(p_width: int = 0, p_height: int = 0, p_seed: int = 0, default_tile: S
 
 
 func in_bounds(x: int, y: int) -> bool:
+	if y >= Levels.STEP:  # upstairs: over a tile of the map, and not above the second level
+		y -= Levels.STEP
 	return x >= 0 and y >= 0 and x < width and y < height
 
 
 func index_of(x: int, y: int) -> int:
-	return y * width + x
+	return (y - Levels.STEP if y >= Levels.STEP else y) * width + x
 
 
 func set_tile(x: int, y: int, tile_id: String) -> void:
@@ -94,6 +122,13 @@ func is_walkable(x: int, y: int) -> bool:
 
 ## Whether the ground itself (ignoring objects) can be walked on.
 func is_ground_walkable(x: int, y: int) -> bool:
+	if y >= Levels.STEP and not floors.has(Vector2i(x, y)):
+		return false  # upstairs there is only floor to stand on
+	return terrain_walkable(x, y)
+
+
+## Whether the earth under this tile (or under the floor above it) is solid enough to build on.
+func terrain_walkable(x: int, y: int) -> bool:
 	var tile_id := get_tile_id(x, y)
 	if tile_id == "":
 		return false
@@ -104,6 +139,95 @@ func is_ground_walkable(x: int, y: int) -> bool:
 
 func object_at(tile: Vector2i) -> PlacedObject:
 	return _object_at_tile.get(tile)
+
+
+func add_caravan(caravan: Caravan) -> Caravan:
+	caravan.id = _next_caravan_id
+	_next_caravan_id += 1
+	caravans.append(caravan)
+	return caravan
+
+
+func get_caravan(id: int) -> Caravan:
+	for caravan in caravans:
+		if caravan.id == id:
+			return caravan
+	return null
+
+
+func roof_at(tile: Vector2i) -> String:
+	return str(roofs.get(tile, ""))
+
+
+## Puts a roof on a tile (or takes it off with ""). Returns false if nothing changed.
+func set_roof(tile: Vector2i, roof_id: String) -> bool:
+	if roof_id == "":
+		var had := roofs.erase(tile)
+		if had:
+			roofs_changed.emit()
+		return had
+	if str(roofs.get(tile, "")) == roof_id:
+		return false
+	roofs[tile] = roof_id
+	roofs_changed.emit()
+	return true
+
+
+func add_site(site: BuildSite) -> BuildSite:
+	site.id = _next_site_id
+	_next_site_id += 1
+	sites.append(site)
+	_site_by_id[site.id] = site
+	return site
+
+
+func remove_site(id: int) -> void:
+	var site: BuildSite = _site_by_id.get(id)
+	if site != null:
+		sites.erase(site)
+		_site_by_id.erase(id)
+		tile_changed.emit(site.tile)
+
+
+func get_site(id: int) -> BuildSite:
+	return _site_by_id.get(id)
+
+
+## The plan of one kind ("object", "floor", "roof") on a tile, or null.
+func site_at(tile: Vector2i, kind: String) -> BuildSite:
+	for site in sites:
+		if site.tile == tile and site.kind == kind:
+			return site
+	return null
+
+
+## Puts an animal in the world and gives it an id.
+func add_animal(animal: Animal) -> Animal:
+	animal.id = _next_animal_id
+	_next_animal_id += 1
+	animals.append(animal)
+	_animal_by_id[animal.id] = animal
+	return animal
+
+
+func remove_animal(id: int) -> void:
+	var animal: Animal = _animal_by_id.get(id)
+	if animal != null:
+		animals.erase(animal)
+		_animal_by_id.erase(id)
+
+
+func get_animal(id: int) -> Animal:
+	return _animal_by_id.get(id)
+
+
+## The animals standing on (or stepping onto) a tile.
+func animals_at(tile: Vector2i) -> Array[Animal]:
+	var found: Array[Animal] = []
+	for animal in animals:
+		if animal.tile == tile or (animal.is_moving() and animal.step_to == tile):
+			found.append(animal)
+	return found
 
 
 func get_object(id: int) -> PlacedObject:
@@ -129,6 +253,11 @@ func add_object(def_id: String, tile: Vector2i) -> PlacedObject:
 	_object_at_tile[tile] = placed
 	_object_by_id[placed.id] = placed
 	tile_changed.emit(tile)
+	if def_id == "stairs" and Levels.of(tile) == 0:  # the way up comes out on a landing
+		var top := Levels.lift(tile, 1)
+		if not floors.has(top):
+			floors[top] = "planks"
+		add_object("stairs_top", top)
 	return placed
 
 
@@ -142,6 +271,10 @@ func remove_object(id: int) -> bool:
 	_object_at_tile.erase(placed.tile)
 	_object_by_id.erase(id)
 	tile_changed.emit(placed.tile)
+	if placed.def_id == "stairs":  # and the landing at the top
+		var landing := _object_at_tile.get(Levels.lift(placed.tile, 1)) as PlacedObject
+		if landing != null and landing.def_id == "stairs_top":
+			remove_object(landing.id)
 	return true
 
 
@@ -172,12 +305,22 @@ func connection_mask(tile: Vector2i, group: String) -> int:
 	return mask
 
 
+## The tiles on the ground with stairs on them.
+func stairs_tiles() -> Array[Vector2i]:
+	var found: Array[Vector2i] = []
+	for placed in objects:
+		if placed.def_id == "stairs":
+			found.append(placed.tile)
+	return found
+
+
 func in_lot(tile: Vector2i) -> bool:
-	return lot.has_point(tile)
+	return lot.has_point(Levels.ground(tile))
 
 
 ## Whether the player may build on this tile: the home lot or any other lot they hold.
 func can_build_at(tile: Vector2i) -> bool:
+	tile = Levels.ground(tile)
 	if lot.has_point(tile):
 		return not home_lost
 	var here := lot_at(tile)
@@ -204,6 +347,7 @@ func lot_area(lot_id: String) -> int:
 ## The lot a tile belongs to: { "id", "public", ... }, or empty if it is open land. The player's
 ## own lot is { "id": "home", "public": false }.
 func lot_at(tile: Vector2i) -> Dictionary:
+	tile = Levels.ground(tile)
 	if lot.has_point(tile):
 		return { "id": HOME_LOT, "kind": "home", "name": "Your lot", "public": false, "rect": lot }
 	for entry in lots:
@@ -214,6 +358,7 @@ func lot_at(tile: Vector2i) -> Dictionary:
 
 ## The settlement a tile is in (inside its lots and streets, with a margin), or empty in open country.
 func town_at(tile: Vector2i, margin: int = 6) -> Dictionary:
+	tile = Levels.ground(tile)
 	for entry in towns:
 		if (entry["rect"] as Rect2i).grow(margin).has_point(tile):
 			return entry
@@ -273,7 +418,7 @@ func set_floor(tile: Vector2i, floor_id: String) -> bool:
 		floors.erase(tile)
 		tile_changed.emit(tile)
 		return true
-	if not DataRegistry.has_def("floors", floor_id) or not is_ground_walkable(tile.x, tile.y) or floors.get(tile, "") == floor_id:
+	if not DataRegistry.has_def("floors", floor_id) or not terrain_walkable(tile.x, tile.y) or floors.get(tile, "") == floor_id:
 		return false
 	floors[tile] = floor_id
 	tile_changed.emit(tile)
@@ -358,6 +503,16 @@ func to_dict() -> Dictionary:
 		"lifespan": lifespan,
 		"spirits": spirits.duplicate(true),
 		"fires": fires.keys().map(func(tile: Vector2i) -> Array: return [tile.x, tile.y, int(fires[tile]["since"]), int(fires[tile]["fuel"])]),
+		"roofs": roofs.keys().map(func(cell: Vector2i) -> Array: return [cell.x, cell.y, roofs[cell]]),
+		"sites": sites.map(func(site: BuildSite) -> Dictionary: return site.to_dict()),
+		"reserved": reserved.duplicate(),
+		"next_site_id": _next_site_id,
+		"chronicle": chronicle.duplicate(true),
+		"caravans": caravans.map(func(caravan: Caravan) -> Dictionary: return caravan.to_dict()),
+		"next_caravan_id": _next_caravan_id,
+		"animals": animals.map(func(animal: Animal) -> Dictionary: return animal.to_dict()),
+		"next_animal_id": _next_animal_id,
+		"fauna_seeded": fauna_seeded,
 	}
 
 
@@ -416,6 +571,38 @@ static func from_dict(data: Dictionary) -> WorldState:
 	for saved in data.get("fires", []):
 		if saved is Array and saved.size() >= 4:
 			world.fires[Vector2i(int(saved[0]), int(saved[1]))] = { "since": int(saved[2]), "fuel": int(saved[3]) }
+	world.needs_roofing = not data.has("roofs")  # an older save: its buildings get roofs when it is loaded
+	for saved in data.get("roofs", []):
+		if saved is Array and saved.size() >= 3 and DataRegistry.has_def("roofs", str(saved[2])):
+			world.roofs[Vector2i(int(saved[0]), int(saved[1]))] = str(saved[2])
+	for saved in data.get("sites", []):
+		if saved is Dictionary:
+			var site := BuildSite.from_dict(saved)
+			world.sites.append(site)
+			world._site_by_id[site.id] = site
+			world._next_site_id = maxi(world._next_site_id, site.id + 1)
+	for saved in data.get("chronicle", []):
+		if saved is Dictionary and saved.has("text"):
+			world.chronicle.append({ "day": int(saved.get("day", 0)), "text": str(saved["text"]) })
+	var saved_reserved: Variant = data.get("reserved", {})
+	if saved_reserved is Dictionary:
+		for resource_id in saved_reserved:
+			world.reserved[str(resource_id)] = int(saved_reserved[resource_id])
+	for saved in data.get("caravans", []):
+		if saved is Dictionary:
+			var caravan := Caravan.from_dict(saved)
+			world.caravans.append(caravan)
+			world._next_caravan_id = maxi(world._next_caravan_id, caravan.id + 1)
+	world._next_caravan_id = maxi(world._next_caravan_id, int(data.get("next_caravan_id", 1)))
+	for saved in data.get("animals", []):
+		if saved is Dictionary:
+			var animal := Animal.from_dict(saved)
+			if DataRegistry.has_def("animals", animal.kind):
+				world.animals.append(animal)
+				world._animal_by_id[animal.id] = animal
+				world._next_animal_id = maxi(world._next_animal_id, animal.id + 1)
+	world._next_animal_id = maxi(world._next_animal_id, int(data.get("next_animal_id", 1)))
+	world.fauna_seeded = bool(data.get("fauna_seeded", false))
 	var saved_lifespan := str(data.get("lifespan", "calendar"))
 	world.lifespan = saved_lifespan if DataRegistry.has_def("lifespans", saved_lifespan) else "calendar"
 	for saved in data.get("spirits", []):

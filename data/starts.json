@@ -4,7 +4,7 @@
     "house": "", "tools": ["axe", "sickle", "fishing_rod", "hammer"] },
   { "id": "inherited", "name": "Inherited a house", "title": "freehold", "class": "gentry", "coins": 100,
     "text": "A relative left you a cottage and the family name. Landed gentry pay more tax and keep clear of menial work.",
-    "house": "cottage", "camp": [], "tools": ["axe", "sickle", "hammer", "healers_satchel"] },
+    "house": "cottage", "camp": [], "tools": ["axe", "sickle", "hammer", "healers_satchel", "bow"], "pets": ["dog"], "stock": { "grain": 6, "meat": 4 } },
   { "id": "arrived", "name": "Arrived with nothing", "title": "leasehold", "class": "peasant", "coins": 12,
     "text": "You came to town with a few pennies. The Crown lets you camp on a plot for rent. Find work quickly.",
     "house": "", "camp": ["cooking_pot", "hearth"], "tools": ["axe"] }

@@ -1,0 +1,28 @@
+[
+  { "id": "caravan",
+    "max_active": 2,
+    "first_day": 1,
+    "spawn_chance_per_day": 0.45,
+    "stay_days": 2,
+    "move_ticks": 3.0,
+    "fare": 12,
+    "max_passengers": 3,
+    "leave_after_boarding_minutes": 60,
+    "wares_count": 3,
+    "wares": [
+      { "good": "cloth", "qty": [4, 10], "weight": 3 },
+      { "good": "salt",  "qty": [4, 10], "weight": 3 },
+      { "good": "wine",  "qty": [3, 8],  "weight": 2 },
+      { "good": "spice", "qty": [2, 6],  "weight": 2 },
+      { "good": "iron",  "qty": [1, 3],  "weight": 1 },
+      { "good": "leather", "qty": [2, 5], "weight": 1 }
+    ],
+    "sells_markup": 1.1,
+    "buys_markup": 0.85,
+    "wanted_bonus": 1.6,
+    "wants_count": 3,
+    "wanted_pool": ["flour", "bread", "ale", "iron", "leather", "meat", "hide", "fish", "grain", "stone", "wood", "herbs"],
+    "wanted_demand": 12,
+    "other_demand": 4,
+    "names": ["Merchants of {town}", "The {town} Company", "{town} Traders", "Carriers of {town}"] }
+]

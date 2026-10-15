@@ -42,6 +42,10 @@ static func generate(world_seed: int, width: int = 0, height: int = 0) -> WorldS
 	_join_towns(world, rng)
 	SiteGenerator.place_all(world, rng)
 	SiteGenerator.verify(world, PathFinder.new(world))
+	var fauna_rng := RandomNumberGenerator.new()
+	fauna_rng.seed = world_seed * 6151 + 29
+	Fauna.populate(world, fauna_rng)
+	Fauna.give_pets(world, fauna_rng)
 	return world
 
 

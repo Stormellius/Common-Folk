@@ -98,6 +98,11 @@ func _on_clock_ticked(tick: int) -> void:
 		_update_season_look()
 
 
+## Painted trees (see TreeLayer) stand in for the shader's own when this is on.
+func set_painted_trees(on: bool) -> void:
+	_material.set_shader_parameter("painted_trees", 1.0 if on else 0.0)
+
+
 ## Foliage color and snow follow the calendar. A season looks exactly like itself for its
 ## first two thirds, then eases toward the next one, so snow builds up and melts gradually
 ## and the next season has already arrived by the time it starts.

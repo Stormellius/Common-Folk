@@ -1,0 +1,17 @@
+[
+  { "id": "day", "name": "Morning on the green", "mode": "ionian", "root": 50, "bpm": 104, "bars": 16,
+    "progression": [0, 5, 3, 4], "melody": "lute", "bass": "lute", "pad": true, "drum": false,
+    "density": 0.75, "rest_chance": 0.08, "volume": 0.6 },
+  { "id": "evening", "name": "Lamps lit", "mode": "dorian", "root": 45, "bpm": 76, "bars": 16,
+    "progression": [0, 6, 3, 0], "melody": "flute", "bass": "lute", "pad": true, "drum": false,
+    "density": 0.55, "rest_chance": 0.18, "volume": 0.55 },
+  { "id": "night", "name": "The long dark", "mode": "aeolian", "root": 40, "bpm": 58, "bars": 16,
+    "progression": [0, 5, 6, 0], "melody": "harp", "bass": "pad", "pad": true, "drum": false,
+    "density": 0.4, "rest_chance": 0.3, "volume": 0.5 },
+  { "id": "festival", "name": "Jig for the fair", "mode": "mixolydian", "root": 55, "bpm": 140, "bars": 16,
+    "progression": [0, 6, 3, 0], "melody": "lute", "bass": "lute", "pad": false, "drum": true,
+    "density": 1.0, "rest_chance": 0.04, "volume": 0.7 },
+  { "id": "sorrow", "name": "For the departed", "mode": "phrygian", "root": 50, "bpm": 50, "bars": 8,
+    "progression": [0, 1, 0, 6], "melody": "flute", "bass": "pad", "pad": true, "drum": false,
+    "density": 0.3, "rest_chance": 0.2, "volume": 0.55 }
+]

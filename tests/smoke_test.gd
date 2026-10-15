@@ -36,6 +36,19 @@ func _ready() -> void:
 	_section("social", _test_social)
 	_section("romance", _test_romance)
 	_section("marriage", _test_marriage)
+	_section("animals", _test_animals)
+	_section("construction", _test_construction)
+	_section("trade", _test_trade)
+	_section("dreams", _test_dreams)
+	_section("families", _test_families)
+	_section("audio", _test_audio)
+	_section("art", _test_art)
+	_section("clothing", _test_clothing)
+	_section("wardrobe", _test_wardrobe)
+	_section("family", _test_family_design)
+	_section("upstairs", _test_upstairs)
+	_section("traits", _test_trait_effects)
+	_section("garments", _test_garments)
 	_section("events", _test_events)
 	_section("realm", _test_realm)
 	_section("faith_and_illness", _test_faith_and_illness)
@@ -73,7 +86,7 @@ func _test_registry() -> void:
 	_check(DataRegistry.count("seasons") == 4, "seasons.json has four seasons")
 	_check(DataRegistry.count("needs") >= 7, "needs.json has at least the seven starting needs")
 	_check(DataRegistry.count("traits") >= 6, "traits.json loaded")
-	_check(DataRegistry.count("names") == 4 and DataRegistry.count("appearance") == 4 and DataRegistry.count("objects") >= 6, "names, appearance and objects loaded")
+	_check(DataRegistry.count("names") == 5 and DataRegistry.count("appearance") == 4 and DataRegistry.count("objects") >= 6, "names, appearance and objects loaded")
 	_check(DataRegistry.has_def("tiles", "grass"), "grass tile exists")
 	_check(not DataRegistry.has_def("tiles", "nonexistent"), "unknown id reports missing")
 	_check(DataRegistry.get_def("tiles", "nonexistent").is_empty(), "unknown id gives an empty Dictionary")
@@ -300,11 +313,14 @@ func _test_menus() -> void:
 	menus._start_buttons["arrived"].pressed.emit()
 	menus._seed_field.text = "1234"
 	menus._begin_button.pressed.emit()
+	menus._create_begin.pressed.emit()
 	_check(begun == [[1234, "arrived", "normal"]], "Begin reports the start, the seed and the lifespan (normal unless chosen)")
 	_check(Menus.seed_from_text("77") == 77 and Menus.seed_from_text("Thornbury") == Menus.seed_from_text("Thornbury") and Menus.seed_from_text("Thornbury") >= 0, "a typed seed is a number, or any word always makes the same one")
 	var back := InputEventKey.new()
 	back.keycode = KEY_ESCAPE
 	back.pressed = true
+	menus._unhandled_input(back)
+	_check(menus.current() == "new", "Esc leaves the family screen for the one before")
 	menus._unhandled_input(back)
 	_check(menus.current() == "title", "Esc goes back to where the screen was opened from")
 	var closes := [0]
@@ -579,6 +595,7 @@ func _test_needs() -> void:
 	world = setup["world"]
 	pawn = setup["pawn"]
 	var bed := world.add_object("bed", Vector2i(8, 2))
+	world.set_roof(Vector2i(8, 2), "thatch")  # under a roof, so it gives its full rest
 	sim = Simulation.new(world, setup["household"])
 	var lay_down := false
 	for i in 1500:
@@ -890,7 +907,7 @@ func _test_town() -> void:
 		surnames[pawn.display_name.get_slice(" ", 1)] = surnames.get(pawn.display_name.get_slice(" ", 1), 0) + 1
 	_check(surnames.size() < town.pawns.size() and surnames.size() >= 4, "they live in families (%d surnames)" % surnames.size())
 	var again_town := NpcGenerator.create(world)
-	_check(again_town.to_dict() == town.to_dict(), "the same seed gives the same people")
+	_check(_sans_dreams(again_town.to_dict()) == _sans_dreams(town.to_dict()), "the same seed gives the same people")
 
 	# Whose things are whose.
 	var home_bed: PlacedObject = null
@@ -1008,7 +1025,17 @@ func _test_region() -> void:
 				got[lot["kind"]] = int(got.get(lot["kind"], 0)) + 1
 		for kind in wanted:
 			every_building = every_building and int(got.get(kind, 0)) == int(wanted[kind])
-	_check(every_building, "every town has all the buildings its kind calls for")
+	var missing_text := ""
+	for town in world.towns:
+		var wanted_kinds: Dictionary = DataRegistry.get_def("worldgen", town["profile"])["buildings"]
+		var placed_kinds := {}
+		for lot in world.lots:
+			if lot.get("town", "") == town["id"]:
+				placed_kinds[lot["kind"]] = int(placed_kinds.get(lot["kind"], 0)) + 1
+		for kind in wanted_kinds:
+			if int(placed_kinds.get(kind, 0)) != int(wanted_kinds[kind]):
+				missing_text += " %s:%s %d/%d" % [town["name"], kind, int(placed_kinds.get(kind, 0)), int(wanted_kinds[kind])]
+	_check(every_building, "every town has all the buildings its kind calls for%s" % missing_text)
 	_check(home["rect"].has_point(world.lot.get_center()) and world.lot_at(world.lot.get_center())["id"] == WorldState.HOME_LOT, "the player's lot is in their town")
 	var kinds := {}
 	for town in world.towns:
@@ -1345,7 +1372,7 @@ func _interaction_entries(sim: Simulation, from: Pawn, to: Pawn) -> Dictionary:
 func _test_work_sites() -> void:
 	print("Work sites, resources and materials")
 	var ids := Economy.resource_ids()
-	_check(str(ids) == str(["wood", "stone", "grain", "fish", "herbs", "ring"]), "there are five resources and the rings (%s)" % str(ids))
+	_check(str(ids.slice(0, 8)) == str(["wood", "stone", "grain", "fish", "herbs", "ring", "meat", "hide"]) and ids.size() == 17, "there are five resources to gather, rings, meat, hides, five made goods and four traded (%d)" % ids.size())
 	_check(Economy.resource_price("wood") == 2 and Economy.sell_price("wood", 10) == 14 and Economy.sell_price("wood", 10, 1.3) == 18, "the shop pays a share of the price, and more on a market day")
 
 	# The region has sites at every town's edge.
@@ -1495,7 +1522,7 @@ func _test_skills() -> void:
 	print("Skills, tools and trades")
 	# The data hangs together.
 	var skill_ids := Skills.skill_ids()
-	_check(skill_ids.size() == 11 and "woodcutting" in skill_ids and "smithing" in skill_ids and "music" in skill_ids, "there are eleven skills (%d)" % skill_ids.size())
+	_check(skill_ids.size() == 14 and "woodcutting" in skill_ids and "smithing" in skill_ids and "music" in skill_ids and "hunting" in skill_ids and "masonry" in skill_ids, "there are fourteen skills (%d)" % skill_ids.size())
 	var tools_ok := true
 	for tool_id in Skills.tool_ids():
 		tools_ok = tools_ok and Skills.skill_ids().has(str(DataRegistry.get_def("tools", tool_id)["skill"])) and Skills.tool_price(tool_id) > 0
@@ -1989,19 +2016,22 @@ func _test_social() -> void:
 	var big_sim := Simulation.new(big, family, town)
 	GameClock.set_time(0, 6)
 	var lowest_social := 100.0
+	var lowest_who := ""
 	var strangers_met := 0
 	for minute in 2 * GameClock.MINUTES_PER_DAY:
 		GameClock.advance_one_tick()
 		big_sim.step(GameClock.SUBSTEPS_PER_MINUTE)  # as in the live game, where walking is quick
 		if minute % 60 == 0:
 			for villager in town.pawns:
-				lowest_social = minf(lowest_social, float(villager.needs["social"]))
+				if float(villager.needs["social"]) < lowest_social:
+					lowest_social = float(villager.needs["social"])
+					lowest_who = "%s (%s, %s, %s, at %s)" % [villager.display_name, villager.work_job, villager.job_kind, villager.age, str(villager.tile)]
 	for villager in town.pawns:
 		for other in town.pawns:
 			if other.home_lot != villager.home_lot and villager.opinion_of(other.id) > 0.0:
 				strangers_met += 1
 	_check(strangers_met > 0, "over two days the townspeople get to know people from other households (%d acquaintances)" % strangers_met)
-	_check(lowest_social > 0.0, "and nobody in town goes completely without company (lowest %.0f)" % lowest_social)
+	_check(lowest_social > 0.0, "and nobody in town goes completely without company (lowest %.0f: %s)" % [lowest_social, lowest_who])
 	GameClock.reset()
 
 
@@ -2509,6 +2539,1647 @@ func _test_marriage() -> void:
 	_check(gwen.bond == "married" and hugh.bond == "married" and gwen.display_name == "Gwen Cooper" and gwen.wed_until == 0, "a townsfolk couple under one roof marry by themselves (%s)" % gwen.display_name)
 
 
+## A wide empty field with two of your folk in it: no towns, so wild animals may roam all over it.
+func _open_field() -> Dictionary:
+	GameClock.set_time(3, 10)
+	var world := WorldState.new(140, 50, 3, "grass")
+	world.lot = Rect2i(2, 2, 12, 8)
+	var household := Household.new()
+	household.coins = 200
+	var people: Array[Pawn] = []
+	for spec in [["Anna Marsh", "female", 25, Vector2i(20, 25)], ["Ben Marsh", "male", 27, Vector2i(22, 25)]]:
+		var person := Pawn.new()
+		person.display_name = spec[0]
+		person.gender = spec[1]
+		person.age = spec[2]
+		person.adult = true
+		person.tile = spec[3]
+		person.step_to = person.tile
+		for need_id in Needs.active_ids():
+			person.needs[need_id] = 100.0
+		household.add_pawn(person)
+		people.append(person)
+	var sim := Simulation.new(world, household, Household.new(NpcGenerator.FIRST_ID))
+	return { "world": world, "household": household, "sim": sim, "anna": people[0], "ben": people[1] }
+
+
+func _test_animals() -> void:
+	print("Animals: game, mounts, pack animals and pets")
+	var wild := Fauna.kinds("wild")
+	var tame := Fauna.kinds("domestic")
+	_check(wild == ["rabbit", "deer", "boar", "wolf"] and tame == ["horse", "donkey", "ox", "dog", "cat"], "the wilds hold rabbits, deer, boar and wolves; the towns horses, donkeys, oxen, dogs and cats (%s %s)" % [str(wild), str(tame)])
+	var data_ok := true
+	for kind in wild:
+		var def := Fauna.def_of(kind)
+		for resource_id in def.get("yields", {}):
+			data_ok = data_ok and Economy.resource_ids().has(str(resource_id))
+		data_ok = data_ok and int(def.get("target", 0)) > 0 and not (def.get("habitat", []) as Array).is_empty()
+	for kind in tame:
+		var def := Fauna.def_of(kind)
+		data_ok = data_ok and int(def.get("price", 0)) > 0 and not (def.get("eats", []) as Array).is_empty()
+		for item_id in def.get("eats", []):
+			data_ok = data_ok and Economy.resource_ids().has(str(item_id))
+	_check(data_ok and Skills.skill_ids().has("hunting") and Skills.skill_ids().has("husbandry") and Skills.is_tool_id("bow"), "animals, their goods, the bow and the new skills hang together")
+
+	# The generated region is stocked.
+	var region := RegionGenerator.generate(42)
+	var counts := {}
+	var wild_ok := true
+	var strays := 0
+	var house_pets := 0
+	for animal in region.animals:
+		counts[animal.kind] = int(counts.get(animal.kind, 0)) + 1
+		if animal.is_wild():
+			wild_ok = wild_ok and region.get_tile_id(animal.tile.x, animal.tile.y) in animal.def()["habitat"] and region.is_walkable(animal.tile.x, animal.tile.y)
+			for town in region.towns:
+				wild_ok = wild_ok and not (town["rect"] as Rect2i).grow(8).has_point(animal.tile)
+		elif animal.owner == "":
+			strays += 1
+		elif animal.owner == "town":
+			house_pets += 1
+	_check(int(counts.get("rabbit", 0)) >= 15 and int(counts.get("deer", 0)) >= 10 and int(counts.get("boar", 0)) >= 5 and int(counts.get("wolf", 0)) >= 2, "the wilds are stocked (%s)" % str(counts))
+	_check(wild_ok, "wild animals keep to forest and grass, well away from the towns")
+	_check(strays >= region.towns.size() and house_pets >= 5, "each town has strays and many households a pet (%d strays, %d house pets)" % [strays, house_pets])
+	var stables := 0
+	var posts := 0
+	for lot in region.lots:
+		stables += 1 if str(lot["kind"]) == "stable" else 0
+	for placed in region.objects:
+		posts += 1 if placed.def_id == "hitching_post" else 0
+	_check(stables >= 3 and posts >= stables, "the larger towns have a stable with a hitching post (%d stables, %d posts)" % [stables, posts])
+	var saved := WorldState.from_dict(region.to_dict())
+	_check(saved.animals.size() == region.animals.size() and saved.fauna_seeded and saved.get_animal(region.animals[0].id) != null, "the animals are saved with the world")
+
+	# Hunting.
+	var field := _open_field()
+	var world: WorldState = field["world"]
+	var household: Household = field["household"]
+	var sim: Simulation = field["sim"]
+	var anna: Pawn = field["anna"]
+	var ben: Pawn = field["ben"]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 17
+	var notices: Array[String] = []
+	sim.health_notice.connect(func(text: String) -> void: notices.append(text))
+	var deer := Fauna.spawn(world, "deer", Vector2i(60, 25), rng)
+	var menu := PawnActions.list_for(sim, anna, deer.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("hunt:"))
+	_check(menu.size() == 1 and "Hunt the deer" in str(menu[0]["label"]) and "3 meat" in str(menu[0]["label"]) and not menu[0]["enabled"] and "bow" in str(menu[0]["reason"]), "a deer can be hunted, with its meat shown, but not without a bow (%s)" % str(menu))
+	household.add_stock("bow", 1)
+	menu = PawnActions.list_for(sim, anna, deer.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("hunt:"))
+	_check(menu.size() == 1 and menu[0]["enabled"], "with a bow it can")
+	var hunt := PawnActions.perform(sim, anna, "hunt:%d" % deer.id, deer.tile)
+	_check(hunt["ok"] and anna.job_kind == "hunt" and anna.tool == "bow" and anna.pace > 1.2, "she takes the bow and creeps after it (pace %.2f)" % anna.pace)
+	_check("Stalking" in sim.describe_activity(anna), "the panel says so (%s)" % sim.describe_activity(anna))
+	var hunting_before := Skills.xp(anna, "hunting")
+	var hunt_started := GameClock.tick
+	_minutes(sim, 400, func() -> bool: return anna.job_kind == "")
+	var hunt_minutes := GameClock.tick - hunt_started
+	_check(world.get_animal(deer.id) == null and household.stock_of("meat") >= 3 and household.stock_of("hide") >= 2, "the hunt ends with the deer taken: meat and hides in the stockpile (%s, %d minutes)" % [str(household.stock), hunt_minutes])
+	_check(anna.tool == "" and household.stock_of("bow") == 1 and anna.pace == 1.0 and Skills.xp(anna, "hunting") > hunting_before + 1.0, "the bow goes back, she walks normally again and has learned from it")
+	_check(notices.any(func(t: String) -> bool: return "brought down the deer" in t), "and the household hears of it (%s)" % str(notices))
+
+	# Game runs from people, and a wounded boar turns.
+	var rabbit := Fauna.spawn(world, "rabbit", Vector2i(40, 25), rng)
+	ben.tile = Vector2i(45, 25)
+	ben.step_to = ben.tile
+	rabbit.think_at = 0
+	_minutes(sim, 3)
+	_check(_chebyshev(rabbit.tile, ben.tile) > 5 and GameClock.tick < rabbit.alert_until + 100 and rabbit.alert_until > 0, "a rabbit runs from a person who comes close (%d tiles off)" % _chebyshev(rabbit.tile, ben.tile))
+	world.remove_animal(rabbit.id)
+	for y in range(20, 45):  # a wood for the boar and the wolf, which keep to the forest
+		for x in range(50, 112):
+			world.set_tile(x, y, "forest")
+	var victim := Pawn.new()  # somebody to take the knocks, so that the rest of this goes on as planned
+	victim.display_name = "Cass Marsh"
+	victim.gender = "female"
+	victim.age = 30
+	victim.adult = true
+	for need_id in Needs.active_ids():
+		victim.needs[need_id] = 100.0
+	household.add_pawn(victim)
+	var boar := Fauna.spawn(world, "boar", Vector2i(60, 30), rng)
+	boar.charging = victim.id
+	boar.think_at = 0
+	victim.tile = Vector2i(66, 30)
+	victim.step_to = victim.tile
+	_minutes(sim, 6, func() -> bool: return boar.charging == 0)
+	_check(boar.charging == 0 and boar.alert_until > GameClock.tick, "a wounded boar charges its hunter and then runs off (%s)" % str(boar.tile))
+	var strike_notice := Accidents.strike(sim, anna, { "text": "was gored by a boar", "death_share": 0.0, "mood": "attacked" }, rng)
+	_check(anna.illness == "injury" and "gored" in strike_notice and anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "attacked"), "a goring is an injury (%s)" % strike_notice)
+	anna.illness = ""
+	victim.illness = ""
+	victim.dying_cause = ""
+	victim.pose = ""
+	world.remove_animal(boar.id)
+
+	# Wolves only come at night.
+	var wolf := Fauna.spawn(world, "wolf", Vector2i(90, 30), rng)
+	victim.tile = Vector2i(96, 30)
+	victim.step_to = victim.tile
+	GameClock.set_time(4, 12)
+	wolf.think_at = 0
+	_minutes(sim, 4)
+	var by_day := _chebyshev(wolf.tile, victim.tile)
+	_check(by_day > 7, "by day a wolf keeps away from people (%d tiles)" % by_day)
+	GameClock.set_time(4, 23)
+	wolf.alert_until = 0
+	wolf.think_at = 0
+	wolf.path.clear()
+	wolf.step_ticks_total = 0
+	wolf.tile = Vector2i(90, 30)
+	wolf.step_to = wolf.tile
+	victim.tile = Vector2i(96, 30)
+	victim.step_to = victim.tile
+	var struck := false
+	for i in 8:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		if wolf.alert_until > GameClock.tick or victim.illness != "":
+			struck = true
+			break
+	_check(struck, "but at night it comes for someone out alone")
+	world.remove_animal(wolf.id)
+	household.remove_pawn(victim.id)
+	GameClock.set_time(3, 10)
+
+	# Riding.
+	var horse := Fauna.spawn(world, "horse", Vector2i(30, 40), rng, "household", WorldState.HOME_LOT)
+	var ride_menu := PawnActions.list_for(sim, ben, horse.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("ride:"))
+	_check(ride_menu.size() == 1 and "Ride" in str(ride_menu[0]["label"]) and ride_menu[0]["enabled"], "a household's horse can be ridden (%s)" % str(ride_menu))
+	ben.tile = Vector2i(28, 40)
+	ben.step_to = ben.tile
+	_check(PawnActions.perform(sim, ben, "ride:%d" % horse.id, horse.tile)["ok"], "he goes to the horse")
+	_minutes(sim, 10, func() -> bool: return ben.mount != 0)
+	_check(ben.mount == horse.id and horse.rider == ben.id and ben.pace < 0.6, "and climbs on (pace %.2f)" % ben.pace)
+	_check("Get down" in str(PawnActions.list_for(sim, ben, Vector2i(50, 40)).filter(func(e: Dictionary) -> bool: return e["id"] == "dismount")), "the menu offers to get down")
+	ben.step_ticks_total = 0
+	var far := Vector2i(110, 40)
+	var mounted_start := GameClock.tick
+	sim.order_move(ben, far)
+	_minutes(sim, 200, func() -> bool: return ben.tile == far)
+	var mounted_minutes := GameClock.tick - mounted_start
+	_check(ben.tile == far and horse.tile == far and "Riding" in sim.describe_activity(ben) or ben.tile == far, "he rides it across the field and the horse is under him (%d minutes)" % mounted_minutes)
+	Fauna.dismount(sim, ben)
+	var walker := anna
+	walker.tile = Vector2i(30, 40)
+	walker.step_to = walker.tile
+	var walking_start := GameClock.tick
+	sim.order_move(walker, far)
+	_minutes(sim, 400, func() -> bool: return walker.tile == far)
+	var walking_minutes := GameClock.tick - walking_start
+	_check(mounted_minutes * 100 < walking_minutes * 65 and mounted_minutes > 0, "a horse is much faster than walking (%d against %d minutes)" % [mounted_minutes, walking_minutes])
+	_check(ben.mount == 0 and horse.rider == 0 and horse.tile != Vector2i.ZERO, "getting down leaves the horse standing there")
+	# On the way to a job the rider gets down.
+	world.lots.append({ "id": "lot_1", "kind": "house", "name": "House", "template": "cottage", "facing": "south", "rect": Rect2i(60, 5, 10, 8), "public": false, "town": "none" })
+	var bed := world.add_object("bed", Vector2i(3, 5))
+	ben.tile = Vector2i(10, 12)
+	ben.step_to = ben.tile
+	Fauna.mount(sim, ben, horse)
+	horse.tile = ben.tile
+	ben.needs["rest"] = 5.0
+	sim.order_use(ben, bed)
+	_minutes(sim, 60, func() -> bool: return ben.job_stage == "using")
+	_check(ben.job_stage == "using" and ben.mount == 0, "arriving at a bed, the rider gets down")
+	ben.needs["rest"] = 100.0
+	sim.order_stop(ben)
+
+	# Pack animals add to what a gatherer brings home.
+	var donkey := Fauna.spawn(world, "donkey", Vector2i(25, 25), rng, "household", WorldState.HOME_LOT)
+	anna.tile = Vector2i(25, 26)
+	anna.step_to = anna.tile
+	_check(Fauna.pack_bonus(sim, anna) == 0.0, "a donkey that is not led carries nothing")
+	var lead := PawnActions.perform(sim, anna, "lead:%d" % donkey.id, donkey.tile)
+	_check(lead["ok"] and donkey.leader == anna.id and absf(Fauna.pack_bonus(sim, anna) - 0.5) < 0.001, "a led donkey carries half as much again")
+	anna.skills["husbandry"] = Skills.xp_for_level(10)
+	_check(Fauna.pack_bonus(sim, anna) > 0.7, "more so with practice at animal care (%.2f)" % Fauna.pack_bonus(sim, anna))
+	anna.tile = Vector2i(60, 25)
+	_check(Fauna.pack_bonus(sim, anna) == 0.0, "and nothing when it is left behind")
+	anna.tile = Vector2i(25, 26)
+	# Led animals keep up.
+	horse.rider = 0
+	horse.leader = anna.id
+	horse.tile = Vector2i(30, 40)
+	horse.step_to = horse.tile
+	horse.think_at = 0
+	anna.skills.clear()
+	sim.order_move(anna, Vector2i(25, 10))
+	_minutes(sim, 40)
+	_check(_chebyshev(horse.tile, anna.tile) <= Fauna.LEAD_DISTANCE + 2 and _chebyshev(horse.tile, Vector2i(30, 40)) > 10, "a led animal follows its leader (%d tiles behind)" % _chebyshev(horse.tile, anna.tile))
+	PawnActions.perform(sim, anna, "wait:%d" % horse.id, horse.tile)
+	_check(horse.leader == 0, "and stays when told to wait")
+	horse.leader = 0
+	donkey.leader = 0
+
+	# Pets.
+	var dog := Fauna.spawn(world, "dog", Vector2i(26, 27), rng, "household", WorldState.HOME_LOT)
+	_check(dog.name != "" and dog.is_pet() and dog.title().ends_with("the dog"), "a pet has a name (%s)" % dog.title())
+	anna.needs["social"] = 20.0
+	var pet_menu := PawnActions.list_for(sim, anna, dog.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("pet:"))
+	_check(pet_menu.size() == 1 and pet_menu[0]["enabled"], "a pet can be made a fuss of")
+	PawnActions.perform(sim, anna, "pet:%d" % dog.id, dog.tile)
+	_minutes(sim, 30, func() -> bool: return anna.job_kind == "")
+	_check(float(anna.needs["social"]) > 40.0 and anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "petted"), "it cheers them and they are the better for it")
+	var stray := Fauna.spawn(world, "cat", Vector2i(27, 27), rng)
+	var adopt_menu := PawnActions.list_for(sim, anna, stray.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("adopt:"))
+	_check(adopt_menu.size() == 1 and adopt_menu[0]["enabled"] and "Take in" in str(adopt_menu[0]["label"]), "a stray can be taken in")
+	var taken := PawnActions.perform(sim, anna, "adopt:%d" % stray.id, stray.tile)
+	_check(taken["ok"] and stray.owner == "household" and stray.name != "" and stray.leader == anna.id, "and becomes the household's, with a name (%s)" % str(taken["message"]))
+	_check("Biscuit" in Fauna.kept_text(sim) or Fauna.kept_text(sim).contains(dog.name), "the household's animals are listed (%s)" % Fauna.kept_text(sim))
+
+	# A dog helps a hunt.
+	var plain_chance := 0.0
+	var with_dog := Fauna._hound_bonus(sim, anna)
+	_check(with_dog > 0.05, "a dog near the hunter improves their aim (+%.2f)" % with_dog)
+	world.remove_animal(dog.id)
+	_check(Fauna._hound_bonus(sim, anna) == plain_chance + 0.0 or Fauna._hound_bonus(sim, anna) < with_dog, "which a missing dog does not")
+
+	# Feeding.
+	var rations := Fauna.spawn(world, "horse", Vector2i(30, 30), rng, "household", WorldState.HOME_LOT)
+	rations.fed_day = GameClock.get_day_number() - 1
+	household.stock = { "grain": 3 }
+	notices.clear()
+	Fauna.new_day(sim, rng)
+	_check(household.stock_of("grain") == 2 and rations.hungry_days == 0 and rations.fed_day == GameClock.get_day_number(), "an animal eats from the stockpile")
+	household.stock = {}
+	for day in 4:
+		GameClock.set_time(GameClock.get_day_number() + 1, 0)
+		for line in Fauna.new_day(sim, rng):
+			notices.append(line)
+		if day == 1:
+			_check(rations.hungry_days == 2 and notices.any(func(t: String) -> bool: return "is hungry" in t), "left without food it grows hungry, and the household is told (%s)" % str(notices))
+	_check(rations.owner == "" and notices.any(func(t: String) -> bool: return "gone off" in t), "and after days of it goes off to find its own")
+
+	# Animals for sale at a hitching post.
+	world.lots.append({ "id": "lot_2", "kind": "stable", "name": "Stable", "template": "stable", "facing": "south", "rect": Rect2i(80, 5, 12, 8), "public": true, "town": "none" })
+	var post := world.add_object("hitching_post", Vector2i(84, 8))
+	household.coins = 100
+	var market := PawnActions.list_for(sim, anna, post.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("buyanimal:"))
+	_check(market.size() == tame.size() and "Buy a horse (90d)" in str(market[0]["label"]), "the hitching post lists what it sells (%d)" % market.size())
+	var bought := PawnActions.perform(sim, anna, str(market[0]["id"]), post.tile)
+	var horses := world.animals.filter(func(a: Animal) -> bool: return a.kind == "horse" and a.owner == "household" and a.leader == anna.id)
+	_check(bought["ok"] and household.coins == 10 and not horses.is_empty(), "buying one costs its price and it follows the buyer (%s)" % str(bought["message"]))
+	_check(not PawnActions.perform(sim, anna, "buyanimal:donkey:%d" % post.id, post.tile)["ok"], "an empty purse buys nothing")
+	var kept_limit := true
+	household.coins = 1000
+	for i in 8:
+		var result := PawnActions.perform(sim, anna, "buyanimal:cat:%d" % post.id, post.tile)
+		if Fauna.kept_by(sim).size() > Fauna.MAX_KEPT:
+			kept_limit = false
+	_check(kept_limit and Fauna.kept_by(sim).size() == Fauna.MAX_KEPT, "a household keeps only so many (%d)" % Fauna.kept_by(sim).size())
+
+	# They are saved: a rider and their horse come back together.
+	var rider := Pawn.from_dict(ben.to_dict())
+	Fauna.mount(sim, ben, horse)
+	var again := Pawn.from_dict(ben.to_dict())
+	var tame_saved := Animal.from_dict(horse.to_dict())
+	_check(again.mount == horse.id and tame_saved.rider == ben.id and tame_saved.kind == "horse" and tame_saved.name == horse.name and rider.mount == 0, "a rider and their horse are saved")
+	Fauna.dismount(sim, ben)
+
+	# The wilds are restocked a little each day.
+	var stocked := RegionGenerator.generate(7)
+	var before := stocked.animals.size()
+	for animal in stocked.animals.duplicate():
+		if animal.kind == "deer":
+			stocked.remove_animal(animal.id)
+	var shortfall := stocked.animals.size()
+	for day in 12:
+		Fauna._restock(stocked, rng)
+	var deer_now := stocked.animals.filter(func(a: Animal) -> bool: return a.kind == "deer").size()
+	_check(deer_now >= 8 and stocked.animals.size() > shortfall and stocked.animals.size() <= before + 12, "deer thinned out by hunters come back in time (%d)" % deer_now)
+
+
+func _chebyshev(a: Vector2i, b: Vector2i) -> int:
+	return maxi(absi(a.x - b.x), absi(a.y - b.y))
+
+
+func _test_construction() -> void:
+	print("Planning, builders, rooms and roofs")
+	var field := _open_field()
+	var world: WorldState = field["world"]
+	var household: Household = field["household"]
+	var town: Household = field["sim"].town
+	var sim: Simulation = field["sim"]
+	var anna: Pawn = field["anna"]
+	var ben: Pawn = field["ben"]
+	var notices: Array[String] = []
+	sim.health_notice.connect(func(text: String) -> void: notices.append(text))
+	anna.tile = Vector2i(4, 5)
+	anna.step_to = anna.tile
+	ben.tile = Vector2i(12, 8)
+	ben.step_to = ben.tile
+
+	# Rooms: a space that walls close in.
+	for x in range(3, 10):
+		for y in [3, 8]:
+			sim.build_place("wall", Vector2i(x, y))
+	for y in range(4, 8):
+		for x in [3, 9]:
+			sim.build_place("wall", Vector2i(x, y))
+	var open_room := Rooms.region(world, Vector2i(5, 5))
+	_check(not bool(open_room["closed"]) or (open_room["tiles"] as Array).size() > 0, "a ring of walls is complete")
+	var shell := Rooms.region(world, Vector2i(5, 5))
+	_check(bool(shell["closed"]) and (shell["tiles"] as Array).size() == 5 * 4, "walls close in a room of twenty tiles (%d)" % (shell["tiles"] as Array).size())
+	sim.build_remove(Vector2i(9, 6))
+	_check(not bool(Rooms.region(world, Vector2i(5, 5), 60)["closed"]) and "open" in str(Rooms.roomy(world, Vector2i(5, 5))["reason"]), "a gap in the wall means it is no room (%s)" % str(Rooms.roomy(world, Vector2i(5, 5))["reason"]))
+	sim.build_place("door", Vector2i(9, 6))
+	_check(bool(Rooms.region(world, Vector2i(5, 5))["closed"]), "a door closes it again")
+	_check("wall" in str(Rooms.roomy(world, Vector2i(3, 3))["reason"]) and "land" in str(Rooms.roomy(world, Vector2i(30, 30))["reason"]), "a wall is not a room, nor is ground that is not yours")
+	_check(Rooms.roof_for(world, shell["tiles"]) == "thatch", "timber walls call for thatch")
+
+	# Planning costs coin and sets materials aside.
+	household.coins = 100
+	household.stock = { "wood": 1 }
+	var bed_price := Economy.build_price("bed", household.stock)
+	var planned := Construction.plan_object(sim, "bed", Vector2i(5, 5))
+	_check(planned["ok"] and world.sites.size() == 1 and household.coins == 100 - int(bed_price["coins"]) and household.stock_of("wood") == 0 and int(world.reserved.get("wood", 0)) == 3, "planning a bed pays for it and sets its three wood aside (coin %d, reserved %s)" % [household.coins, str(world.reserved)])
+	_check(world.object_at(Vector2i(5, 5)) == null and world.site_at(Vector2i(5, 5), "object") != null, "but nothing stands there yet")
+	_check("Already" in str(Construction.plan_object(sim, "bed", Vector2i(5, 5))["message"]), "and it is not planned twice")
+	var menu := PawnActions.list_for(sim, anna, Vector2i(5, 5)).filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("unplan:") or str(e["id"]).begins_with("build:"))
+	_check(menu.size() == 2 and not menu[1]["enabled"] and ("hammer" in str(menu[1]["reason"])), "the menu offers to call it off, or to build, which needs a hammer (%s)" % str(menu))
+	var coins_before := household.coins
+	PawnActions.perform(sim, anna, "unplan:%d" % world.sites[0].id, Vector2i(5, 5))
+	_check(world.sites.is_empty() and household.stock_of("wood") == 3 and int(world.reserved.get("wood", 0)) == 0 and household.coins > coins_before, "calling it off brings back the materials and half the coin")
+	Construction.plan_object(sim, "bed", Vector2i(5, 5))
+	_check(sim.build_remove(Vector2i(5, 5))["ok"] and world.sites.is_empty(), "the remove tool calls off a plan too")
+	household.coins = 4
+	_check(not Construction.plan_object(sim, "bed", Vector2i(5, 6))["ok"], "an empty purse plans nothing")
+	household.coins = 300
+
+	# A builder takes the work on.
+	Construction.plan_object(sim, "bed", Vector2i(5, 5))
+	Construction.plan_object(sim, "table", Vector2i(7, 5))
+	_check(world.sites.size() == 2 and "2 planned" in Construction.summary(sim), "two things are planned (%s)" % Construction.summary(sim))
+	_check("hammer" in str(Construction.order_build(sim, anna)["message"]), "nobody builds without a hammer")
+	household.add_stock("hammer", 1)
+	var skill_before := Skills.xp(anna, "carpentry")
+	var order := PawnActions.perform(sim, anna, "build:all", Vector2i(5, 5))
+	_check(order["ok"] and anna.job_kind == "build" and anna.tool == "hammer", "she takes the hammer and sets to work")
+	var saw_fetch := false
+	var saw_carry := false
+	for i in 400:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		saw_fetch = saw_fetch or anna.job_stage == "fetch"
+		saw_carry = saw_carry or not anna.carrying.is_empty()
+		if anna.job_kind == "":
+			break
+	_check(saw_fetch and saw_carry, "she fetched the materials from the pile and carried them to the site")
+	_check(world.sites.is_empty() and world.object_at(Vector2i(5, 5)) != null and world.object_at(Vector2i(5, 5)).def_id == "bed" and world.object_at(Vector2i(7, 5)) != null, "the bed and the table stand when she is done")
+	_check(anna.tool == "" and household.stock_of("hammer") == 1 and anna.carrying.is_empty() and int(world.reserved.get("wood", 0)) == 0, "the hammer is back, nothing is left in her hands or set aside")
+	_check(Skills.xp(anna, "carpentry") > skill_before + 5.0 and anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "built"), "and she has learned from it")
+	_check(notices.any(func(t: String) -> bool: return "finished the building" in t), "the household hears she has finished (%s)" % str(notices))
+
+	# A wall waits for someone standing where it goes.
+	Construction.plan_object(sim, "wall", Vector2i(8, 7))
+	ben.tile = Vector2i(8, 7)
+	ben.step_to = ben.tile
+	_check(bool(Construction.order_build(sim, anna)["ok"]), "she sets to on a wall")
+	_minutes(sim, 120, func() -> bool: return anna.job_kind == "")
+	_check(world.object_at(Vector2i(8, 7)) == null, "it does not go up on top of somebody (%s)" % str(world.sites.size()))
+	ben.tile = Vector2i(12, 8)
+	ben.step_to = ben.tile
+	_minutes(sim, 6)  # it waits a few minutes before trying again
+	Construction.order_build(sim, anna)
+	_minutes(sim, 120, func() -> bool: return anna.job_kind == "")
+	_check(world.object_at(Vector2i(8, 7)) != null and world.sites.is_empty(), "once they have moved it is built")
+
+	# Roofs.
+	household.stock = { "hammer": 2 }
+	household.coins = 300
+	_check(PawnActions.list_for(sim, anna, Vector2i(6, 6)).any(func(e: Dictionary) -> bool: return str(e["id"]) == "roof:thatch"), "the menu offers to roof a closed room")
+	var roof_plan := Construction.roof_plan(sim, Vector2i(6, 6))
+	_check((roof_plan["tiles"] as Array).size() == 19 and str(roof_plan["reason"]) == "", "all nineteen free tiles of it (a wall stands in the twentieth)")
+	var roof_cost := Construction.roof_price(sim, "thatch", 19)
+	_check(int(roof_cost["coins"]) == 19 * Economy.resource_price("wood") and int(roof_cost["needs"]["wood"]) == 19, "a thatched roof takes a wood a tile, bought if you have none (%s)" % str(roof_cost))
+	var coins_roof := household.coins
+	var roofing := Construction.plan_room_roof(sim, "thatch", Vector2i(6, 6))
+	_check(roofing["ok"] and world.sites.size() == 19 and household.coins == coins_roof - int(roof_cost["coins"]) and int(world.reserved.get("wood", 0)) == 19, "planning it makes nineteen plans and sets the wood aside")
+	_check("already" in str(Construction.plan_room_roof(sim, "thatch", Vector2i(6, 6))["message"]), "it cannot be planned twice")
+	_check(not Shelter.is_indoors(world, Vector2i(6, 6)), "and the room is open to the sky until it is built")
+	var first_hand := Construction.order_build(sim, anna)
+	var second_hand := Construction.order_build(sim, ben)
+	_check(first_hand["ok"] and second_hand["ok"] and anna.job_kind == "build" and ben.job_kind == "build", "two pairs of hands can work on it together (%s %s)" % [str(first_hand["message"]), str(second_hand["message"])])
+	_minutes(sim, 600, func() -> bool: return world.sites.is_empty())
+	_check(world.sites.is_empty() and world.roofs.size() == 19 and Shelter.is_indoors(world, Vector2i(6, 6)) and Shelter.is_indoors(world, Vector2i(4, 4)), "the roof goes on: nineteen tiles are indoors (%d, %d left)" % [world.roofs.size(), world.sites.size()])
+	_check(int(world.reserved.get("wood", 0)) == 0 and household.stock_of("wood") == 0, "with nothing left over")
+	_check(not PawnActions.list_for(sim, anna, Vector2i(6, 6)).any(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("roof:")), "and no offer to roof it again")
+	sim.order_stop(anna)
+	sim.order_stop(ben)
+
+	# What a roof does.
+	var plain := Pawn.new()
+	plain.tile = Vector2i(40, 40)
+	var sheltered := Pawn.new()
+	sheltered.tile = Vector2i(6, 6)
+	var open_rate := Needs.drain_per_tick("warmth", [] as Array[String], Shelter.drain_multipliers(world, plain, {}))
+	var roofed_rate := Needs.drain_per_tick("warmth", [] as Array[String], Shelter.drain_multipliers(world, sheltered, {}))
+	_check(roofed_rate < open_rate * 0.6, "indoors people lose warmth much more slowly (%.4f against %.4f)" % [roofed_rate, open_rate])
+	var outdoor_bed := world.add_object("bed", Vector2i(11, 8))
+	var indoor_bed := world.object_at(Vector2i(5, 5))
+	_check(Shelter.rest_factor(world, indoor_bed, indoor_bed.def()) == 1.0 and Shelter.rest_factor(world, outdoor_bed, outdoor_bed.def()) < 1.0, "a bed under a roof gives full rest, one in the open less")
+	ben.tile = Vector2i(11, 9)
+	ben.step_to = ben.tile
+	ben.needs["rest"] = 10.0
+	sim.order_use(ben, outdoor_bed)
+	_minutes(sim, 90, func() -> bool: return ben.job_stage == "using")
+	var rest_start := float(ben.needs["rest"])
+	_minutes(sim, 60)
+	var rest_outside := float(ben.needs["rest"]) - rest_start
+	sim.order_stop(ben)
+	ben.tile = Vector2i(5, 6)
+	ben.step_to = ben.tile
+	ben.needs["rest"] = 10.0
+	sim.order_use(ben, indoor_bed)
+	_minutes(sim, 30, func() -> bool: return ben.job_stage == "using")
+	rest_start = float(ben.needs["rest"])
+	_minutes(sim, 60)
+	var rest_inside := float(ben.needs["rest"]) - rest_start
+	_check(rest_inside > rest_outside * 1.2, "and sleeping in the open rests less (%.1f against %.1f an hour)" % [rest_outside, rest_inside])
+	sim.order_stop(ben)
+
+	# A tiled roof over stone walls, and the saving of it all.
+	for x in range(20, 25):
+		for y in [3, 7]:
+			world.add_object("stone_wall", Vector2i(x, y))
+	for y in range(4, 7):
+		for x in [20, 24]:
+			world.add_object("stone_wall", Vector2i(x, y))
+	world.lot = Rect2i(2, 2, 30, 8)
+	_check(Rooms.roof_for(world, Rooms.region(world, Vector2i(22, 5))["tiles"]) == "tile", "stone walls call for tiles")
+	var saved_plan := Construction.plan_room_roof(sim, "tile", Vector2i(22, 5))
+	_check(saved_plan["ok"] and world.sites.size() == 9 and int(world.reserved.get("stone", 0)) == 9, "a tiled roof takes a stone a tile")
+	var reloaded := WorldState.from_dict(world.to_dict())
+	_check(reloaded.sites.size() == 9 and reloaded.roofs.size() == world.roofs.size() and int(reloaded.reserved.get("stone", 0)) == 9 and reloaded.get_site(world.sites[0].id) != null, "plans, roofs and what is set aside are saved with the world")
+	anna.carrying = { "wood": 2 }
+	anna.job_site = world.sites[0].id
+	var anna_again := Pawn.from_dict(anna.to_dict())
+	_check(anna_again.carrying == { "wood": 2 } and anna_again.job_site == anna.job_site, "and a builder's load")
+	anna.carrying.clear()
+	for site in world.sites.duplicate():
+		Construction.cancel(sim, site)
+	_check(world.sites.is_empty() and household.stock_of("stone") == 9 and world.reserved.values().all(func(v: Variant) -> bool: return int(v) == 0), "calling the lot off returns every stone")
+
+	# Hiring a builder from a workshop.
+	world.lots.append({ "id": "lot_9", "kind": "workshop", "name": "Workshop", "template": "workshop", "facing": "south", "rect": Rect2i(60, 5, 11, 7), "public": true, "town": "none" })
+	var bench_counter := world.add_object("counter", Vector2i(63, 8))
+	_check(not Construction.hire_blocker(sim, anna).is_empty(), "with nothing planned there is nobody to hire (%s)" % Construction.hire_blocker(sim, anna))
+	var carpenter := _townsperson("Colm Fletcher", "male", 33, 0)
+	carpenter.work_job = "carpenter"
+	carpenter.skills["carpentry"] = Skills.xp_for_level(4)
+	town.add_pawn(carpenter)
+	carpenter.tile = Vector2i(30, 12)
+	carpenter.step_to = carpenter.tile
+	household.stock = {}
+	household.coins = 200
+	Construction.plan_object(sim, "table", Vector2i(10, 6))
+	Construction.plan_object(sim, "table", Vector2i(11, 4))
+	var hire_menu := PawnActions.list_for(sim, anna, bench_counter.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "hire_crew")
+	_check(hire_menu.size() == 1 and hire_menu[0]["enabled"] and "Hire a builder" in str(hire_menu[0]["label"]), "the workshop's counter offers to hire a builder (%s)" % str(hire_menu))
+	var coins_hire := household.coins
+	var hired := PawnActions.perform(sim, anna, "hire_crew", bench_counter.tile)
+	_check(hired["ok"] and carpenter.contract_until > GameClock.tick, "the carpenter is taken on for the day")
+	_minutes(sim, 300, func() -> bool: return world.sites.is_empty())
+	_check(world.sites.is_empty() and world.object_at(Vector2i(10, 6)) != null and world.object_at(Vector2i(11, 4)) != null, "he walks over, hauls and builds both tables (%d minutes left on the plan)" % world.sites.size())
+	_check(household.coins < coins_hire and carpenter.coins > 0, "and is paid by the hour (%s)" % Economy.format(coins_hire - household.coins))
+	_minutes(sim, 10)
+	_check(carpenter.contract_until == 0 and carpenter.job_kind != "build", "when the work is done he goes back to his own")
+
+	# The towns' own buildings are roofed from the start.
+	var region := RegionGenerator.generate(42)
+	var floored := 0
+	var roofed := 0
+	var roofed_parks := 0
+	for lot in region.lots:
+		var rect: Rect2i = lot["rect"]
+		for y in range(rect.position.y, rect.end.y):
+			for x in range(rect.position.x, rect.end.x):
+				var cell := Vector2i(x, y)
+				if str(lot["kind"]) == "park" and region.roofs.has(cell):
+					roofed_parks += 1
+				if region.floor_at(cell) != "" and str(lot["kind"]) in ["house", "tavern", "shop", "chapel", "clinic", "smithy", "workshop", "stable"]:
+					floored += 1
+					roofed += 1 if region.roofs.has(cell) else 0
+	_check(floored > 1000 and roofed * 100 >= floored * 95 and roofed_parks == 0, "every town building is roofed, and no green is (%d of %d tiles)" % [roofed, floored])
+	var old_data := region.to_dict()
+	old_data.erase("roofs")
+	var old_world := WorldState.from_dict(old_data)
+	_check(old_world.needs_roofing and old_world.roofs.is_empty(), "an older save has no roofs")
+	var old_sim := Simulation.new(old_world, Household.new(), Household.new(NpcGenerator.FIRST_ID))
+	_check(not old_world.needs_roofing and old_world.roofs.size() * 100 >= region.roofs.size() * 95, "but its buildings are roofed on loading (%d of %d)" % [old_world.roofs.size(), region.roofs.size()])
+	old_sim.free() if old_sim is Object and false else null
+
+
+func _region_game(world_seed: int, start_id: String = "bought") -> Dictionary:
+	GameClock.reset()
+	GameClock.set_time(2, 9)
+	var world := RegionGenerator.generate(world_seed)
+	var begun := Starts.begin(world, start_id)
+	var household: Household = begun["household"]
+	var sim := Simulation.new(world, household, NpcGenerator.create(world), begun["realm"])
+	return { "world": world, "household": household, "sim": sim }
+
+
+func _test_trade() -> void:
+	print("Goods, regional prices and caravans")
+	var rules := DataRegistry.get_def("caravans", "caravan")
+	var ware_ok := true
+	for ware in rules.get("wares", []):
+		ware_ok = ware_ok and Economy.resource_ids().has(str(ware["good"])) and bool(DataRegistry.get_def("resources", str(ware["good"])).get("trade", false)) or str(ware["good"]) in ["iron", "leather"]
+	for good in rules.get("wanted_pool", []):
+		ware_ok = ware_ok and Economy.resource_ids().has(str(good))
+	_check(ware_ok and int(rules.get("fare", 0)) > 0, "the caravans' wares and wants are real goods")
+	for station in ["quern", "oven", "brew_vat", "tanning_rack"]:
+		_check(bool(DataRegistry.get_def("objects", station).get("recipes", false)) and not Skills.recipes_for(station).is_empty(), "the %s has something to make" % station)
+	var chain := Skills.recipes_for("oven")[0]
+	_check(chain["inputs"].has("flour") and chain["outputs"].has("bread") and DataRegistry.get_def("recipes", "grind_flour")["outputs"].has("flour") and DataRegistry.get_def("recipes", "forge_ring")["inputs"].has("iron"), "grain becomes flour becomes bread, and a ring takes iron")
+
+	var game := _region_game(42)
+	var world: WorldState = game["world"]
+	var household: Household = game["household"]
+	var sim: Simulation = game["sim"]
+	var anna: Pawn = household.selected()
+	var counts := {}
+	for lot in world.lots:
+		counts[lot["kind"]] = int(counts.get(lot["kind"], 0)) + 1
+	var vats := 0
+	var racks := 0
+	var ovens := 0
+	for placed in world.objects:
+		vats += 1 if placed.def_id == "brew_vat" else 0
+		racks += 1 if placed.def_id == "tanning_rack" else 0
+		ovens += 1 if placed.def_id == "oven" else 0
+	var bakers := 0
+	for person in sim.town.pawns:
+		bakers += 1 if person.work_job == "baker" else 0
+	_check(int(counts.get("bakery", 0)) >= 3 and ovens >= 6 and vats >= 3 and racks >= 3 and bakers >= 2, "the towns have bakeries, brewing vats and tanning racks (%d bakeries, %d ovens, %d vats, %d racks, %d bakers)" % [int(counts.get("bakery", 0)), ovens, vats, racks, bakers])
+
+	# Prices differ from place to place.
+	var home := world.home_town()
+	var fishing: Dictionary = {}
+	var market: Dictionary = {}
+	for town in world.towns:
+		if str(town.get("profile", "")) == "fishing_village":
+			fishing = town
+		if str(town.get("profile", "")) == "market_town":
+			market = town
+	_check(Economy.region_multiplier(world, fishing["center"], "fish") < 0.7 and Economy.region_multiplier(world, market["center"], "fish") > Economy.region_multiplier(world, fishing["center"], "fish") and Economy.region_multiplier(world, Vector2i(2, 2), "fish") == 1.0, "fish are cheap where they are caught and dear where they are not")
+	household.stock = { "fish": 10 }
+	anna.tile = fishing["center"]
+	var cheap := sim.sale_price("fish", anna)
+	anna.tile = market["center"]
+	var dear := sim.sale_price("fish", anna)
+	anna.skills["trading"] = Skills.xp_for_level(8)
+	var skilled := sim.sale_price("fish", anna)
+	_check(dear > cheap * 1.4 and skilled > dear, "the same fish fetch %s at the lake, %s at the market, and a practised trader gets more (%s)" % [Economy.format(cheap), Economy.format(dear), Economy.format(skilled)])
+	anna.skills.clear()
+	var label := PawnActions._sell_entries(sim, anna)
+	anna.tile = fishing["center"]
+	label = PawnActions._sell_entries(sim, anna)
+	_check(label.any(func(e: Dictionary) -> bool: return "fish" in str(e["label"]) and "low" in str(e["label"])), "and the counter says when prices are low (%s)" % str(label[0]["label"]))
+	household.stock = {}
+
+	# A caravan sets out, travels, camps and opens its wares.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	var cart := Caravans.spawn(sim, rng, str(home["id"]))
+	_check(cart != null and cart.state == "travelling" and not cart.path.is_empty() and cart.to_town == str(home["id"]) and cart.from_town != cart.to_town, "a caravan sets out for the home town (%s, %d tiles to go)" % [cart.name if cart != null else "none", cart.path.size() if cart != null else 0])
+	var road_tiles := 0
+	for step in cart.path:
+		road_tiles += 1 if world.get_tile_id(step.x, step.y) in ["dirt", "cobble", "bridge", "bridge_h"] else 0
+	_check(road_tiles * 100 >= cart.path.size() * 60, "it keeps to the roads (%d of %d tiles)" % [road_tiles, cart.path.size()])
+	var notices: Array[String] = []
+	sim.health_notice.connect(func(text: String) -> void: notices.append(text))
+	_minutes(sim, 400, func() -> bool: return cart.state == "camped")
+	_check(cart.state == "camped" and cart.at_town == str(home["id"]) and cart.tile == cart.goal, "it arrives and camps on the square")
+	_check(cart.stock.size() == 3 and cart.wants.size() == 3 and cart.demand.size() == Economy.resource_ids().size() and cart.leaves_tick > GameClock.tick + GameClock.MINUTES_PER_DAY and cart.next_town != "" and cart.next_town != cart.at_town, "it has three wares, three wants and a next stop (%s; wants %s; on to %s)" % [str(cart.stock), str(cart.wants), cart.next_town])
+	_check(notices.any(func(t: String) -> bool: return "camped on the square" in t), "the household is told it has come (%s)" % str(notices))
+	_check(Caravans.camp_tile(world, home, [cart.tile]) != cart.tile, "a second would camp elsewhere")
+
+	# Buying, selling.
+	anna.tile = cart.tile + Vector2i(1, 1)
+	anna.step_to = anna.tile
+	household.coins = 200
+	var menu := PawnActions.list_for(sim, anna, cart.tile)
+	var good := str(cart.stock.keys()[0])
+	_check(menu.any(func(e: Dictionary) -> bool: return str(e["id"]) == "cbuy:%d:%s" % [cart.id, good]) and menu.any(func(e: Dictionary) -> bool: return str(e["id"]).begins_with("cride:")), "right-clicking the cart offers its wares and a ride (%d entries)" % menu.size())
+	var price := Caravans.buy_price(sim, cart, good)
+	var stock_before := int(cart.stock[good])
+	var bought := PawnActions.perform(sim, anna, "cbuy:%d:%s" % [cart.id, good], cart.tile)
+	_check(bought["ok"] and household.stock_of(good) == 1 and household.coins == 200 - price and int(cart.stock[good]) == stock_before - 1, "buying a unit costs its price (%s for one %s)" % [Economy.format(price), good])
+	var wanted := str(cart.wants[0])
+	household.stock = { wanted: 30 }
+	var shop_rate := Economy.sell_price(wanted, 30, 1.0)
+	var caravan_offer := Caravans.sell_price(sim, cart, anna, wanted, int(cart.demand[wanted]))
+	var sold := PawnActions.perform(sim, anna, "csell:%d:%s" % [cart.id, wanted], cart.tile)
+	_check(sold["ok"] and household.stock_of(wanted) == 30 - 12 and int(cart.demand[wanted]) == 0 and caravan_offer * 30 > shop_rate * 12 * 1.5, "they pay well for what they are looking for, up to what they need (%s for 12 %s)" % [Economy.format(caravan_offer), wanted])
+	_check(not PawnActions.perform(sim, anna, "csell:%d:%s" % [cart.id, wanted], cart.tile)["ok"], "and then want no more of it")
+	household.stock = {}
+	household.coins = 3
+	_check(not PawnActions.perform(sim, anna, "cbuy:%d:%s" % [cart.id, good], cart.tile)["ok"], "an empty purse buys nothing")
+	household.coins = 200
+
+	# Riding along.
+	var destination := world.get_town(cart.next_town)
+	var coins_ride := household.coins
+	var ride := PawnActions.perform(sim, anna, "cride:%d" % cart.id, cart.tile)
+	_check(ride["ok"] and anna.caravan == cart.id and anna.job_kind == "cart" and household.coins == coins_ride - int(rules["fare"]) and cart.passengers.size() == 1 and cart.passengers[0] == anna.id, "she pays the fare and climbs on")
+	_check(cart.leaves_tick <= GameClock.tick + 61 and "Waiting on the cart" in sim.describe_activity(anna), "the caravan will leave within the hour (%s)" % sim.describe_activity(anna))
+	_check(PawnActions.list_for(sim, anna, Vector2i(5, 5)).size() == 1 and not PawnActions.list_for(sim, anna, Vector2i(5, 5))[0]["enabled"] or Caravans.get_off_blocker(sim, anna) == "", "while it waits she may get off, and a rider has nothing else to do")
+	_minutes(sim, 90, func() -> bool: return cart.state == "travelling")
+	_check(cart.state == "travelling" and cart.to_town == str(destination["id"]) and anna.tile == cart.tile, "it sets out, and she goes with it")
+	_check("Riding with the caravan" in sim.describe_activity(anna) and Caravans.get_off_blocker(sim, anna) != "", "she cannot get off on the road (%s)" % sim.describe_activity(anna))
+	_minutes(sim, 400, func() -> bool: return cart.state == "camped" and anna.caravan == 0)
+	_check(cart.state == "camped" and cart.at_town == str(destination["id"]) and anna.caravan == 0 and anna.job_kind == "" and absi(anna.tile.x - cart.tile.x) <= 3 and absi(anna.tile.y - cart.tile.y) <= 3, "at the next stop she climbs down beside the cart (in %s)" % str(destination["name"]))
+	_check(notices.any(func(t: String) -> bool: return "arrived in %s with the caravan" % str(destination["name"]) in t), "and the household hears of it")
+	_check(Skills.xp(anna, "trading") > 0.8, "buying and selling has taught her something (%.1f xp)" % Skills.xp(anna, "trading"))
+
+	# Saved and loaded.
+	anna.caravan = 0
+	var again := WorldState.from_dict(world.to_dict())
+	var copy := again.get_caravan(cart.id)
+	_check(copy != null and copy.state == "camped" and copy.stock == cart.stock and copy.demand == cart.demand and copy.wants == cart.wants and copy.looks.size() == 2 and copy.leaves_tick == cart.leaves_tick, "a caravan is saved with the world, wares and all")
+
+	# They keep coming, but not too many.
+	var many := 0
+	for day in 60:
+		GameClock.set_time(10 + day, 0)
+		Caravans.new_day(sim, rng)
+		many = maxi(many, world.caravans.size())
+	_check(many >= 2 and many <= int(rules["max_active"]), "new caravans set out from time to time, never more than %d (%d)" % [int(rules["max_active"]), many])
+
+
+## A household's save data without the ambitions and wishes the simulation hands out once it starts.
+func _sans_dreams(data: Dictionary) -> Dictionary:
+	var copy := data.duplicate(true)
+	for person in copy.get("pawns", []):
+		for key in ["ambition", "ambition_step", "ambition_next", "ambitions_done", "deeds", "wishes", "wish_done", "visited"]:
+			person.erase(key)
+		var thoughts: Array = person.get("thoughts", [])
+		person["thoughts"] = thoughts.filter(func(thought: Dictionary) -> bool: return str(thought.get("id", "")) != "ambition_step")
+	return copy
+
+
+func _weight_key_ok(key: String) -> bool:
+	var kind := key.get_slice(":", 0)
+	var arg := key.get_slice(":", 1)
+	match kind:
+		"trait":
+			return DataRegistry.has_def("traits", arg)
+		"talent", "skill":
+			return arg == "any" and kind == "talent" or Skills.skill_ids().has(arg)
+		"trade":
+			return arg == "any" or Skills.skill_ids().has(arg)
+		"stage":
+			return DataRegistry.has_def("life_stages", arg)
+		"partner", "single":
+			return true
+	return false
+
+
+func _dream_pawn(full_name: String, age: int, id: int, traits: Array[String] = [], talents: Array[String] = []) -> Pawn:
+	var person := _townsperson(full_name, "female", age, id)
+	person.traits = traits
+	person.talents = talents
+	return person
+
+
+func _test_dreams() -> void:
+	print("Ambitions and wishes")
+	var goal_keys := ["deed", "skill", "skills_known", "friends", "close_friends", "coins", "towns", "partner", "engaged", "married"]
+	var ambitions_ok := true
+	var ambition_count := 0
+	for def in DataRegistry.get_list("ambitions"):
+		ambition_count += 1
+		var steps: Array = def.get("steps", [])
+		ambitions_ok = ambitions_ok and steps.size() >= 3 and str(def.get("text", "")) != ""
+		for key in def.get("weights", {}):
+			ambitions_ok = ambitions_ok and _weight_key_ok(str(key))
+		for trait_id in def.get("never_for", []):
+			ambitions_ok = ambitions_ok and DataRegistry.has_def("traits", str(trait_id))
+		for step in steps:
+			var goal: Dictionary = step["goal"]
+			var named := 0
+			for key in goal_keys:
+				named += 1 if goal.has(key) else 0
+			ambitions_ok = ambitions_ok and named == 1 and str(step.get("text", "")) != "" and Ambitions.measure(Pawn.new(), goal).y > 0.0
+			if goal.has("skill") and str(goal["skill"]) != "any":
+				ambitions_ok = ambitions_ok and Skills.skill_ids().has(str(goal["skill"]))
+	_check(ambitions_ok and ambition_count >= 14, "every ambition has steps with goals that can be measured (%d ambitions)" % ambition_count)
+	var wishes_ok := true
+	var wish_count := 0
+	for def in DataRegistry.get_list("wishes"):
+		wish_count += 1
+		var deeds: Variant = def.get("deed", "")
+		wishes_ok = wishes_ok and str(def.get("text", "")) != "" and float(def.get("hours", 0)) > 0.0 and (deeds is Array and not deeds.is_empty() or deeds is String and deeds != "")
+		for key in def.get("weights", {}):
+			wishes_ok = wishes_ok and _weight_key_ok(str(key))
+		for stage in def.get("stages", []):
+			wishes_ok = wishes_ok and DataRegistry.has_def("life_stages", str(stage))
+		if def.has("object"):
+			wishes_ok = wishes_ok and DataRegistry.has_def("objects", str(def["object"]))
+		var action: Dictionary = def.get("do", {})
+		if action.has("use"):
+			wishes_ok = wishes_ok and DataRegistry.has_def("objects", str(action["use"])) and str(action["use"]) == str(def.get("object", ""))
+		if action.has("interact"):
+			wishes_ok = wishes_ok and DataRegistry.has_def("interactions", str(action["interact"]))
+		if def.has("skill"):
+			wishes_ok = wishes_ok and Skills.skill_ids().has(str(def["skill"]))
+	_check(wishes_ok and wish_count >= 18, "every wish asks for a deed, and what it uses and does exist (%d wishes)" % wish_count)
+
+	# Who picks what.
+	var neutral := _dream_pawn("Mary Cooper", 25, 900)
+	var devout := _dream_pawn("Edith Cooper", 25, 901, ["pious"] as Array[String])
+	var singer := _dream_pawn("Joan Cooper", 25, 902, [] as Array[String], ["music"] as Array[String])
+	var tally := { "neutral": {}, "devout": {}, "singer": {} }
+	for seed_value in 150:
+		for entry in [["neutral", neutral], ["devout", devout], ["singer", singer]]:
+			var chosen := Ambitions.pick(entry[1], seed_value)
+			tally[entry[0]][chosen] = int(tally[entry[0]].get(chosen, 0)) + 1
+	_check(int(tally["devout"].get("saintly_life", 0)) > 3 * int(tally["neutral"].get("saintly_life", 0)) and int(tally["devout"].get("saintly_life", 0)) > 30, "the pious lean toward a saintly life (%d of 150, against %d)" % [int(tally["devout"].get("saintly_life", 0)), int(tally["neutral"].get("saintly_life", 0))])
+	_check(int(tally["singer"].get("troubadour", 0)) > 2 * int(tally["neutral"].get("troubadour", 0)) and int(tally["singer"].get("troubadour", 0)) > 20, "a gift for music leans toward being a troubadour (%d of 150)" % int(tally["singer"].get("troubadour", 0)))
+	_check(tally["neutral"].size() >= 10 and Ambitions.pick(neutral, 7) == Ambitions.pick(neutral, 7), "and otherwise it is a spread, the same each time for the same day (%d kinds)" % tally["neutral"].size())
+	var cold := _dream_pawn("Ada Cooper", 25, 903, ["asexual"] as Array[String])
+	var elder := _dream_pawn("Olga Cooper", 70, 904)
+	var youth := _dream_pawn("Kit Cooper", 15, 905)
+	var picks := { "cold": {}, "elder": {}, "youth": {} }
+	for seed_value in 150:
+		for entry in [["cold", cold], ["elder", elder], ["youth", youth]]:
+			picks[entry[0]][Ambitions.pick(entry[1], seed_value)] = true
+	_check(not picks["cold"].has("true_love") and not picks["cold"].has("hearth_and_home") and not picks["elder"].has("true_love") and not picks["youth"].has("teacher"), "ambitions that do not suit someone are never picked (love for the asexual, courting for elders, teaching for youths)")
+	var child := _dream_pawn("Tom Cooper", 8, 906)
+	var baby := _dream_pawn("Bea Cooper", 0, 907)
+	_check(Ambitions.may_dream(neutral) and Ambitions.may_dream(youth) and Ambitions.may_dream(elder) and not Ambitions.may_dream(child) and not Ambitions.may_dream(baby), "from youth on, a person has an ambition; children and babies do not")
+
+	# Steps, one by one.
+	var game := _open_field()
+	var sim: Simulation = game["sim"]
+	var household: Household = game["household"]
+	var anna: Pawn = game["anna"]
+	var ben: Pawn = game["ben"]
+	var lines: Array[String] = []
+	sim.health_notice.connect(func(text: String) -> void: lines.append(text))
+	_check(anna.ambition != "" and ben.ambition != "" and DataRegistry.has_def("ambitions", anna.ambition), "a new household's folk each start with an ambition (%s, %s)" % [anna.ambition, ben.ambition])
+	anna.ambition = "saintly_life"
+	anna.ambition_step = 0
+	anna.deeds.clear()
+	anna.ambitions_done.clear()
+	for i in 5:
+		Mood.add_event(anna, "used:pew", GameClock.tick)
+	_check(anna.ambition_step == 1 and int(anna.deeds["used:pew"]) == 5, "five prayers reach the first step of a saintly life")
+	var mood := Mood.evaluate(anna, household, GameClock.tick)
+	var texts := ""
+	for part in mood["parts"]:
+		texts += str(part["text"]) + "|"
+	_check("Closer to a dream" in texts, "and lift their mood (%s)" % texts)
+	sim.step()
+	_check(lines.any(func(t: String) -> bool: return "closer to a dream" in t), "the player is told of the step")
+	_check(anna.ambition_step == 1, "and one step is only one step")
+	var summary := Ambitions.summary(sim, anna)
+	_check(summary["ambition"] == "A Saintly Life" and summary["step"] == 2 and summary["steps"] == 3 and float(summary["have"]) == 5.0 and float(summary["need"]) == 20.0, "the panel shows the step and how far they are (%s)" % str(summary))
+	anna.deeds["used:altar"] = 100
+	Ambitions.advance(anna)
+	mood = Mood.evaluate(anna, household, GameClock.tick)
+	texts = ""
+	for part in mood["parts"]:
+		texts += str(part["text"]) + "|"
+	_check(anna.ambition == "" and "saintly_life" in anna.ambitions_done and "Fulfilled: A Saintly Life" in texts and "A life with purpose" in texts, "the last step fulfils the ambition and the mood stays lifted (%s)" % texts)
+	sim.step()
+	_check(lines.any(func(t: String) -> bool: return "ambition is fulfilled" in t), "and the player is told")
+	anna.ambition_next = GameClock.tick + 200
+	Ambitions.new_day(sim)
+	_check(anna.ambition == "", "they wait a while before dreaming of something new")
+	anna.ambition_next = GameClock.tick
+	Ambitions.new_day(sim)
+	_check(anna.ambition != "" and anna.ambition != "saintly_life", "then take up another, not the same again (%s)" % anna.ambition)
+
+	# Goals that look at who they are.
+	anna.ambition = "master_craftsman"
+	anna.ambition_step = 0
+	anna.skills["carpentry"] = Skills.xp_for_level(5)
+	Ambitions.advance(anna)
+	_check(anna.ambition_step == 2, "skills count: Journeyman skips past Apprentice and waits for Master")
+	anna.skills["carpentry"] = Skills.xp_for_level(9)
+	Ambitions.advance(anna)
+	_check(anna.ambition == "" and "master_craftsman" in anna.ambitions_done, "and a Master is fulfilled")
+	anna.ambition = "friend_to_all"
+	anna.ambition_step = 0
+	for friend_id in [10, 11, 12, 13, 14]:
+		anna.relations[friend_id] = 35.0
+	Ambitions.advance(anna)
+	_check(anna.ambition_step == 2, "friends count: five are friends (two steps)")
+	anna.relations[10] = 70.0
+	Ambitions.advance(anna)
+	_check(anna.ambition_step == 3, "and a close friend")
+	anna.ambition = "fortune_seeker"
+	anna.ambition_step = 0
+	household.coins = 300
+	Ambitions.advance(anna)
+	_check(anna.ambition_step == 0, "coin cannot be told without the world")
+	Ambitions.advance(anna, sim)
+	_check(anna.ambition_step == 2, "coin counts with it: 300 clears the first two steps")
+	anna.ambition = "true_love"
+	anna.ambition_step = 0
+	anna.partner_id = ben.id
+	anna.deeds["had_date"] = 3
+	Ambitions.advance(anna)
+	_check(anna.ambition_step == 2, "a partner and three dates")
+	anna.bond = "engaged"
+	Ambitions.advance(anna)
+	anna.bond = "married"
+	Ambitions.advance(anna)
+	_check(anna.ambition == "" and "true_love" in anna.ambitions_done, "engaged, then married, fulfils true love")
+	anna.partner_id = 0
+	anna.bond = ""
+	var counted := _dream_pawn("Eve Cooper", 30, 910)
+	Ambitions.note(counted, "child")
+	Ambitions.note(counted, "child")
+	_check(Ambitions.count(counted, "child") == 2 and Ambitions.count(counted, ["child", "birth"]) == 2, "deeds are counted by their event key")
+
+	# Wishes.
+	anna.ambition = ""
+	anna.wishes.clear()
+	var allowed_kiss := DataRegistry.get_def("wishes", "kiss_partner")
+	_check(not Ambitions.wish_allowed(sim, anna, allowed_kiss, "adult"), "nobody wishes to kiss a partner they do not have")
+	anna.partner_id = ben.id
+	_check(Ambitions.wish_allowed(sim, anna, allowed_kiss, "adult"), "and those who have one may")
+	anna.partner_id = 0
+	var lute_wish := DataRegistry.get_def("wishes", "play_lute")
+	_check(not Ambitions.wish_allowed(sim, anna, lute_wish, "adult"), "nobody wishes for a lute that is not in the world")
+	(game["world"] as WorldState).add_object("lute", Vector2i(24, 25))
+	_check(Ambitions.wish_allowed(sim, anna, lute_wish, "adult"), "once there is one, they do")
+	_check(not Ambitions.wish_allowed(sim, anna, DataRegistry.get_def("wishes", "flirt_with_someone"), "child") and not Ambitions.wish_allowed(sim, cold, DataRegistry.get_def("wishes", "flirt_with_someone"), "adult"), "children and the asexual do not wish to flirt")
+	var rolled := 0
+	for hour in 24:
+		GameClock.advance_one_tick()
+		for i in 59:
+			GameClock.advance_one_tick()
+		Ambitions._roll_wishes(sim, anna)
+	rolled = anna.wishes.size()
+	_check(rolled == 2, "an adult comes to have two wishes at a time (%d)" % rolled)
+	_check(anna.wishes.all(func(w: Dictionary) -> bool: return DataRegistry.has_def("wishes", str(w["id"])) and int(w["until"]) > GameClock.tick - 60 * 24 * 3), "each is a real wish with a time limit")
+	anna.wishes = [{ "id": "chat_with_friend", "until": GameClock.tick - 5 }, { "id": "play_lute", "until": GameClock.tick + 600 }]
+	Ambitions._expire(anna)
+	_check(anna.wishes.size() == 1 and anna.wishes[0]["id"] == "play_lute", "a wish lapses when its time is up")
+
+	# A wish is granted by doing the thing, which an idle person sets about on their own.
+	GameClock.set_time(3, 10)
+	anna.tile = Vector2i(20, 25)
+	anna.step_to = anna.tile
+	anna.path.clear()
+	anna.job_kind = ""
+	ben.wishes.clear()
+	for need_id in Needs.active_ids():
+		anna.needs[need_id] = 100.0
+		ben.needs[need_id] = 100.0
+	_minutes(sim, 180, func() -> bool: return anna.wish_done.has("play_lute"))
+	_check(anna.wish_done.has("play_lute") and anna.wishes.is_empty() and int(anna.deeds.get("used:lute", 0)) >= 1, "an idle person with a wish to play the lute goes and does")
+	mood = Mood.evaluate(anna, household, GameClock.tick)
+	texts = ""
+	for part in mood["parts"]:
+		texts += str(part["text"]) + "|"
+	_check("A wish came true: play the lute" in texts, "and is the happier for it (%s)" % texts)
+	_check(lines.any(func(t: String) -> bool: return "wish came true" in t), "the player is told")
+	anna.wishes = [{ "id": "chat_with_friend", "until": GameClock.tick + 600 }]
+	ben.job_kind = ""
+	ben.path.clear()
+	_minutes(sim, 240, func() -> bool: return anna.wish_done.has("chat_with_friend"))
+	_check(anna.wish_done.has("chat_with_friend"), "and a wish for a chat sends them to someone to talk to")
+	var grant := { "id": "go_hunting", "until": GameClock.tick + 600 }
+	anna.wishes = [grant]
+	Mood.add_event(anna, "hunted", GameClock.tick)
+	mood = Mood.evaluate(anna, household, GameClock.tick)
+	texts = ""
+	for part in mood["parts"]:
+		texts += str(part["text"]) + "|"
+	_check(anna.wishes.is_empty() and "A great wish came true: go hunting" in texts, "a bigger wish is a bigger lift, whoever did what and why (%s)" % texts)
+
+	# Towns visited.
+	var region := _region_game(42)
+	var rsim: Simulation = region["sim"]
+	var rworld: WorldState = region["world"]
+	var traveller: Pawn = (region["household"] as Household).selected()
+	traveller.visited.clear()
+	Ambitions._track_visits(rsim, traveller)
+	var start_count := traveller.visited.size()
+	var elsewhere: Dictionary = {}
+	for town in rworld.towns:
+		if town["id"] != rworld.home_town()["id"]:
+			elsewhere = town
+	traveller.tile = elsewhere["center"]
+	Ambitions._track_visits(rsim, traveller)
+	_check(start_count == 1 and traveller.visited.size() == 2 and int(traveller.deeds.get("visit", 0)) == 1, "the first town seen is home; arriving in another is a visit")
+	Ambitions._track_visits(rsim, traveller)
+	_check(int(traveller.deeds.get("visit", 0)) == 1, "and going back is not a new one")
+
+	# In a whole region.
+	var grown := 0
+	var kinds := {}
+	var with_ambition := 0
+	for person in rsim.people():
+		if Ambitions.may_dream(person):
+			grown += 1
+			with_ambition += 1 if person.ambition != "" else 0
+			kinds[person.ambition] = true
+		else:
+			if person.ambition != "":
+				with_ambition = -9999
+	_check(grown > 60 and with_ambition == grown and kinds.size() >= 8, "in a whole region everyone old enough has an ambition (%d people, %d kinds)" % [grown, kinds.size()])
+	_minutes(rsim, 12 * 60)
+	var wishing := 0
+	var wished_for := {}
+	for person in rsim.people():
+		wishing += 1 if not person.wishes.is_empty() else 0
+		for wish in person.wishes:
+			wished_for[wish["id"]] = true
+	_check(wishing > 40 and wished_for.size() >= 6, "and half a day on, most have wishes of their own (%d people, %d kinds)" % [wishing, wished_for.size()])
+	var granted := 0
+	for person in rsim.people():
+		granted += int(person.deeds.get("wish_granted", 0)) + int(person.deeds.get("wish_granted_big", 0))
+	_minutes(rsim, 24 * 60)
+	var granted_later := 0
+	for person in rsim.people():
+		granted_later += int(person.deeds.get("wish_granted", 0)) + int(person.deeds.get("wish_granted_big", 0))
+	_check(granted_later > granted + 10, "the folk of the town have wishes come true as the day goes (%d, then %d)" % [granted, granted_later])
+
+	# Saving.
+	var saved: Pawn = (region["household"] as Household).selected()
+	saved.deeds["used:lute"] = 4
+	saved.ambitions_done = ["troubadour"] as Array[String]
+	saved.wishes = [{ "id": "go_hunting", "until": 123456 }] as Array[Dictionary]
+	saved.wish_done = { "play_lute": 777 }
+	var back := Pawn.from_dict(JSON.parse_string(JSON.stringify(saved.to_dict())))
+	_check(back.ambition == saved.ambition and back.ambition_step == saved.ambition_step and back.deeds == saved.deeds and back.ambitions_done == saved.ambitions_done and back.wishes == saved.wishes and back.wish_done == saved.wish_done and back.visited == saved.visited, "ambitions, deeds and wishes survive a save")
+	var old := Pawn.from_dict({ "name": "Old Save", "age": 30 })
+	_check(old.ambition == "" and old.deeds.is_empty() and old.wishes.is_empty(), "a person from an older save has none, and is given them when the game loads")
+
+
+func _ids_of(pawns: Array) -> Array:
+	var ids := []
+	for pawn in pawns:
+		ids.append(pawn.id)
+	ids.sort()
+	return ids
+
+
+func _test_families() -> void:
+	print("Other families: playing them, moving house, carrying on")
+	var game := _region_game(42)
+	var world: WorldState = game["world"]
+	var household: Household = game["household"]
+	var sim: Simulation = game["sim"]
+	var town: Household = sim.town
+	var anna: Pawn = household.selected()
+	_check(DataRegistry.has_def("families", "families") and float(Families.config()["arrive_chance"]) > 0.0, "the family rules are data")
+	var families := Families.list(sim)
+	var good := true
+	for family in families:
+		good = good and not (family["members"] as Array).is_empty() and family["head"] != null and family["name"] != "" and family["town_name"] != ""
+	_check(families.size() >= 40 and good, "every house with people in it is a family of the town (%d families)" % families.size())
+	var everyone_before := sim.people().size()
+
+	# Taking up another family.
+	var chosen := {}
+	for family in families:
+		if family["town"] == world.home_town()["id"] and (family["members"] as Array).size() >= 3 and Families.play_blocker(sim, str(family["lot"])) == "":
+			chosen = family
+			break
+	_check(not chosen.is_empty(), "there is a family of the home town with three or more people to take up")
+	var lot_id: String = chosen["lot"]
+	var family_ids := _ids_of(chosen["members"])
+	var old_ids := _ids_of(household.pawns)
+	var old_rect := world.lot
+	var new_rect: Rect2i = world.get_lot(lot_id)["rect"]
+	var home_town_id: String = world.home_town()["id"]
+	var old_realm := sim.realm
+	household.coins = 150
+	household.stock = { "grain": 10, "axe": 1 }
+	world.titles["lot_extra"] = "leasehold"
+	var pockets_before := 0
+	for pawn in chosen["members"]:
+		pockets_before += pawn.coins
+	var dog: Animal = Fauna.spawn(world, "dog", anna.tile + Vector2i(1, 0), sim.rng(), "household", WorldState.HOME_LOT)
+	var heard: Array[String] = []
+	sim.family_changed.connect(func(family_name: String) -> void: heard.append(family_name))
+	_check(Families.play_blocker(sim, WorldState.HOME_LOT) != "" and Families.play_blocker(sim, "nowhere") != "", "you cannot take up your own family, or one that is not there")
+	anna.dying_cause = "illness"
+	_check("dying" in Families.play_blocker(sim, lot_id), "nor while someone in your household is dying")
+	anna.dying_cause = ""
+	var result := Families.play(sim, lot_id)
+	_check(result["ok"] and _ids_of(household.pawns) == family_ids and _ids_of(town.pawns).size() + household.pawns.size() == everyone_before, "the family becomes the household and nobody is lost (%s)" % str(result["message"]))
+	_check(town.get_pawn(old_ids[0]) != null, "the old household is the town's now")
+	var lot_ok: bool = world.lot == new_rect and world.get_lot(lot_id)["rect"] == old_rect and world.get_lot(lot_id)["town"] == home_town_id and world.lot_at(new_rect.get_center())["id"] == WorldState.HOME_LOT and world.lot_at(old_rect.get_center())["id"] == lot_id
+	_check(lot_ok, "their house is the home lot now, and the old home is a house of the town")
+	var homes_ok := true
+	for pawn in household.pawns:
+		homes_ok = homes_ok and pawn.home_lot == WorldState.HOME_LOT
+	for pawn in town.pawns:
+		if pawn.id in old_ids:
+			homes_ok = homes_ok and pawn.home_lot == lot_id
+	_check(homes_ok, "and everyone lives where they live: the new household at home, the old one in the house you left")
+	var old_pockets := 0
+	for pawn in town.pawns:
+		if pawn.id in old_ids:
+			old_pockets += pawn.coins
+	_check(old_pockets >= 150 + 10 * Economy.resource_price("grain") * 70 / 100 and household.coins == pockets_before and household.stock.is_empty(), "the old household's purse and goods were turned into money for them (%d), and the new family's pockets became the purse (%d)" % [old_pockets, household.coins])
+	_check(world.titles.size() == 1 and world.titles.has(WorldState.HOME_LOT) and not world.home_lost, "the old land titles went with them; the new house is held for rent or freehold by class (%s)" % str(world.titles))
+	_check(dog.owner == "town" and dog.home_lot == lot_id, "the dog stays with the family that was yours")
+	_check(sim.realm != old_realm and sim.realm.reputation == 0.0 and household.get_pawn(sim.realm.head_id) != null and sim.realm.last_tax_day == old_realm.last_tax_day, "the Crown deals with the new family afresh, on the same quarter days")
+	_check(household.selected() != null and household.selected().adult and heard.size() == 1 and heard[0] == chosen["name"], "an adult of the new family is the one you control, and the screen is told")
+	_check(world.chronicle.size() >= 1 and "now follow" in str(world.chronicle[-1]["text"]), "and the chronicle says so")
+	_minutes(sim, 90)
+	_check(sim.people().size() == everyone_before and household.pawns.size() == family_ids.size(), "an hour and a half goes by with everyone going about their lives")
+	for pawn in household.pawns:
+		for need_id in Needs.active_ids():
+			pawn.needs[need_id] = 100.0
+	var back := Families.play(sim, lot_id)
+	_check(back["ok"] and _ids_of(household.pawns) == old_ids and world.lot == old_rect and world.get_lot(lot_id)["rect"] == new_rect, "and taking the old family up again puts everything back as it was")
+	_check(world.titles.has(WorldState.HOME_LOT) and Families.empty_rows(sim).size() >= 0, "with a home lot of its own")
+
+	# Moving house.
+	var vacant_family := {}
+	for family in Families.list(sim):
+		if family["town"] != world.home_town()["id"] and (family["members"] as Array).size() <= 3:
+			vacant_family = family
+			break
+	for pawn in vacant_family["members"]:
+		town.remove_pawn(pawn.id)
+	var empty := Families.empty_rows(sim)
+	var target := ""
+	for row in empty:
+		if row["lot"] == vacant_family["lot"]:
+			target = row["lot"]
+	_check(target != "" and Families.move_blocker(sim, target) == "", "a house with nobody in it can be moved into (%d empty houses)" % empty.size())
+	_check(Families.move_blocker(sim, WorldState.HOME_LOT) != "" and Families.move_blocker(sim, str(Families.list(sim)[0]["lot"])) != "", "but not your own, nor one with people in it")
+	var rect_there: Rect2i = world.get_lot(target)["rect"]
+	var here_before: Rect2i = world.lot
+	var town_there: String = world.get_lot(target)["town"]
+	household.coins = 33
+	household.stock = { "wood": 4 }
+	var kept_ids := _ids_of(household.pawns)
+	var moved := Families.move(sim, target)
+	var tiles_ok := true
+	for pawn in household.pawns:
+		tiles_ok = tiles_ok and rect_there.has_point(pawn.tile)
+	_check(moved["ok"] and world.lot == rect_there and world.get_lot(target)["rect"] == here_before and world.home_town()["id"] == town_there and _ids_of(household.pawns) == kept_ids, "the household moves to the house in the other town, and that town is home now")
+	_check(tiles_ok and household.coins == 33 and household.stock_of("wood") == 4 and world.titles.has(WorldState.HOME_LOT), "its people arrive there, and its purse, goods and title come along")
+	_check(Families.empty_rows(sim).any(func(row: Dictionary) -> bool: return row["lot"] == target), "and the house it left stands empty, to be moved into")
+	_check("moved from" in str(world.chronicle[-1]["text"]), "(the chronicle notes it)")
+
+	# When someone of the town dies.
+	var couple := {}
+	for family in Families.list(sim):
+		var spouses := 0
+		for pawn in family["members"]:
+			spouses += 1 if pawn.partner_id != 0 and pawn.adult else 0
+		if spouses >= 2 and family["town"] == world.home_town()["id"]:
+			couple = family
+			break
+	var estate_pawn: Pawn = null
+	var spouse: Pawn = null
+	if not couple.is_empty():
+		for pawn in couple["members"]:
+			if pawn.partner_id != 0 and pawn.adult and estate_pawn == null:
+				estate_pawn = pawn
+		spouse = sim.person(estate_pawn.partner_id)
+	if estate_pawn == null or spouse == null:  # no couple in this town: make one
+		var lot_entry := Families.list(sim)[0]
+		estate_pawn = (lot_entry["members"] as Array)[0]
+		spouse = _townsperson("Test Spouse", "female", 40, 4999)
+		spouse.home_lot = estate_pawn.home_lot
+		town.adopt(spouse)
+		estate_pawn.partner_id = spouse.id
+		spouse.partner_id = estate_pawn.id
+	estate_pawn.bond = "married"
+	spouse.bond = "married"
+	estate_pawn.coins = 90
+	var spouse_had := spouse.coins
+	sim.die(estate_pawn, "old age")
+	_check(spouse.coins >= spouse_had + 90 and estate_pawn.coins == 0, "when one of the town dies, the husband or wife has what they had (%d)" % spouse.coins)
+	_check("inherits" in str(world.chronicle[-1]["text"]), "and the chronicle tells of it (%s)" % str(world.chronicle[-1]["text"]))
+	var parent := _townsperson("Old Parent", "male", 60, 4998)
+	parent.home_lot = spouse.home_lot
+	var grown_child := _townsperson("Grown Child", "female", 30, 4997)
+	grown_child.parents = [parent.id] as Array[int]
+	grown_child.home_lot = spouse.home_lot
+	var other_child := _townsperson("Other Child", "male", 25, 4996)
+	other_child.parents = [parent.id] as Array[int]
+	town.adopt(parent)
+	town.adopt(grown_child)
+	town.adopt(other_child)
+	parent.coins = 41
+	var heirs := Families.heirs_of(sim, parent)
+	_check(_ids_of(heirs) == [other_child.id, grown_child.id] or _ids_of(heirs) == [grown_child.id, other_child.id], "with no husband or wife, the grown children share it")
+	sim.die(parent, "old age")
+	_check(grown_child.coins + other_child.coins >= 41, "(and it is divided between them)")
+
+	# Orphans.
+	var orphan_lot := ""
+	for family in Families.list(sim):
+		if family["town"] == world.home_town()["id"] and (family["members"] as Array).size() >= 2 and orphan_lot == "":
+			orphan_lot = family["lot"]
+	_check(orphan_lot != "", "there is a house to leave a child in")
+	for pawn in Families.residents_of(sim, orphan_lot):
+		if pawn.adult:
+			town.remove_pawn(pawn.id)
+	var child := _townsperson("Lonely Child", "male", 9, 4995)
+	child.home_lot = orphan_lot
+	child.tile = Romance._free_spot_in(sim, orphan_lot)
+	town.adopt(child)
+	Families.new_day(sim)
+	_check(child.home_lot != orphan_lot and Families.residents_of(sim, child.home_lot).any(func(p: Pawn) -> bool: return p.adult), "a child left with no grown-up is taken in by another family (%s)" % str(world.chronicle[-1]["text"]))
+
+	# Houses fill again.
+	var empty_lot := {}
+	for entry in Families.vacant_houses(sim):
+		if entry["town"] == world.home_town()["id"]:
+			empty_lot = entry
+			break
+	if empty_lot.is_empty():
+		var victim := Families.list(sim)[0]
+		for pawn in victim["members"]:
+			town.remove_pawn(pawn.id)
+		empty_lot = world.get_lot(victim["lot"])
+	var before := sim.people().size()
+	var arrival_rng := RandomNumberGenerator.new()
+	arrival_rng.seed = 5
+	var said := Families._arrive(sim, empty_lot, arrival_rng)
+	var arrived := Families.residents_of(sim, str(empty_lot["id"]))
+	var arrived_ok := arrived.size() >= 1 and arrived.size() == sim.people().size() - before
+	for pawn in arrived:
+		arrived_ok = arrived_ok and (empty_lot["rect"] as Rect2i).has_point(pawn.tile) and pawn.surname() == arrived[0].surname()
+	_check(arrived_ok and "has come to" in said, "newcomers settle into an empty house as a family (%s)" % said)
+	var names_before := {}
+	for pawn in sim.people():
+		if pawn not in arrived:
+			names_before[pawn.surname()] = true
+	_check(not names_before.has(arrived[0].surname()), "with a name not already in the region")
+
+	# A family from a town with no work goes where there is some.
+	var open_town := ""
+	for lot in world.lots:
+		if lot["kind"] == "shop" and not sim.open_positions(str(lot["id"])).is_empty() and str(lot["town"]) != "":
+			open_town = str(lot["town"])
+			break
+	var workless := {}
+	for family in Families.list(sim):
+		if family["town"] != open_town and (family["members"] as Array).size() <= 3 and Families._may_move(sim, family["members"]) == false:
+			for pawn in family["members"]:
+				sim.quit_job(pawn)
+			if Families._may_move(sim, family["members"]):
+				workless = family
+				break
+	var vacant_there := {}
+	for entry in world.lots:
+		if entry["kind"] == "house" and str(entry["town"]) == open_town and Families.residents_of(sim, str(entry["id"])).is_empty():
+			vacant_there = entry
+	if vacant_there.is_empty() and not workless.is_empty():
+		for family in Families.list(sim):
+			if family["town"] == open_town and (family["members"] as Array).size() <= 3 and family["lot"] != workless["lot"]:
+				for pawn in family["members"]:
+					town.remove_pawn(pawn.id)
+				vacant_there = world.get_lot(family["lot"])
+				break
+	if not workless.is_empty() and not vacant_there.is_empty() and open_town != "":
+		var told := Families._move_family_in(sim, vacant_there, arrival_rng)
+		var newcomers := Families.residents_of(sim, str(vacant_there["id"]))
+		var settled := not newcomers.is_empty()
+		for pawn in newcomers:
+			settled = settled and (vacant_there["rect"] as Rect2i).has_point(pawn.tile) and pawn.work_job == ""
+		_check(settled and "where there is work" in told, "a family with no work moves to a town that is hiring (%s)" % told)
+	else:
+		_check(false, "a family with no work could be moved (no suitable setup in this world)")
+
+	# The chronicle is kept and saved.
+	for i in 60:
+		Families.record(sim, "Something happened %d." % i)
+	_check(world.chronicle.size() == int(Families.config()["chronicle_limit"]) and Families.chronicle_lines(sim)[0].ends_with("59."), "the chronicle keeps the latest, newest first")
+	var copy := WorldState.from_dict(JSON.parse_string(JSON.stringify(world.to_dict())))
+	_check(copy.chronicle == world.chronicle and copy.lot == world.lot, "and it survives a save, with the home lot")
+	_check(SaveGame.FORMAT_VERSION == 14, "saves are format 14")
+
+
+## The pitch of a sound in Hz, found by autocorrelation (the lag that repeats the wave best).
+func _pitch_of(samples: PackedFloat32Array, low: float, high: float) -> float:
+	var best_lag := 0
+	var best := -1.0
+	var from := int(Synth.RATE / high)
+	var to := int(Synth.RATE / low)
+	var start := mini(2000, samples.size() / 4)
+	var window := mini(4000, samples.size() - to - start)
+	for lag in range(from, to):
+		var total := 0.0
+		for i in range(start, start + window):
+			total += samples[i] * samples[i + lag]
+		if total > best:
+			best = total
+			best_lag = lag
+	return float(Synth.RATE) / float(best_lag)
+
+
+func _is_finite_sound(samples: PackedFloat32Array) -> bool:
+	for value in samples:
+		if is_nan(value) or is_inf(value) or absf(value) > 1.0001:
+			return false
+	return true
+
+
+func _test_audio() -> void:
+	print("Sound and music")
+	var rendered := true
+	var loud_enough := true
+	var seams := true
+	var ends := true
+	var recipes_ok := true
+	var names := []
+	for sound_id in SoundBank.ids():
+		var samples := SoundBank.render(sound_id)
+		names.append(sound_id)
+		rendered = rendered and samples.size() > 100 and _is_finite_sound(samples)
+		loud_enough = loud_enough and Synth.rms(samples) > 0.01
+		recipes_ok = recipes_ok and SoundBank.volume_of(sound_id) > 0.0
+		if SoundBank.is_loop(sound_id):
+			# the end runs on into the start: the step across the join is no bigger than steps inside the sound
+			var steps := 0.0
+			for i in range(1, samples.size()):
+				steps += absf(samples[i] - samples[i - 1])
+			var join := absf(samples[0] - samples[samples.size() - 1])
+			seams = seams and join <= 8.0 * steps / float(samples.size()) + 0.02
+		else:
+			ends = ends and absf(samples[0]) < 0.05 and absf(samples[samples.size() - 1]) < 0.05
+	_check(rendered and loud_enough and recipes_ok and names.size() >= 19, "every sound can be made, is audible and stays within range (%d sounds)" % names.size())
+	_check(seams, "the looping ones run round without a click")
+	_check(ends, "and the others begin and end quietly")
+	_check(SoundBank.render("wind") == SoundBank.render("wind") and SoundBank.render("nothing").is_empty(), "a sound is the same each time it is made, and an unknown one is silent")
+	var stream := Synth.to_stream(SoundBank.render("wind"), true)
+	_check(stream.loop_mode == AudioStreamWAV.LOOP_FORWARD and stream.mix_rate == Synth.RATE and stream.data.size() == SoundBank.render("wind").size() * 2 and not Synth.to_stream(SoundBank.render("chop")).loop_mode == AudioStreamWAV.LOOP_FORWARD, "streams loop only when they should (16-bit, mono)")
+
+	# Instruments sound at the pitch asked for.
+	var lute := Synth.note("lute", 57, 1.0)
+	var harp := Synth.note("harp", 69, 1.0)
+	var flute := Synth.note("flute", 64, 1.0)
+	var lute_pitch := _pitch_of(lute, 80.0, 400.0)
+	var harp_pitch := _pitch_of(harp, 300.0, 900.0)
+	var flute_pitch := _pitch_of(flute, 200.0, 600.0)
+	_check(absf(lute_pitch / 220.0 - 1.0) < 0.03 and absf(harp_pitch / 440.0 - 1.0) < 0.03 and absf(flute_pitch / 329.63 - 1.0) < 0.03, "a lute, harp and flute sound at the pitch of the note (%.0f, %.0f, %.0f Hz)" % [lute_pitch, harp_pitch, flute_pitch])
+	var early := Synth.rms(lute.slice(0, 4000))
+	var late := Synth.rms(lute.slice(lute.size() - 4000, lute.size()))
+	_check(early > 4.0 * late and Synth.peak(lute) <= 0.91, "and a plucked string dies away")
+
+	# The music.
+	var moods := DataRegistry.get_list("music")
+	var mood_ok := moods.size() >= 5
+	for def in moods:
+		mood_ok = mood_ok and Composer.MODES.has(str(def["mode"])) and int(def["bars"]) >= 8 and float(def["bpm"]) > 30.0 and not (def["progression"] as Array).is_empty()
+	_check(mood_ok, "every mood of music has a mode, a tempo and chords (%d moods)" % moods.size())
+	var first := Composer.compose("day", 1)
+	_check(first == Composer.compose("day", 1) and first != Composer.compose("day", 2) and Composer.compose("nonsense", 1).is_empty(), "the same mood and seed give the same piece, another seed another piece")
+	var scale_ok := true
+	var last_ok := false
+	var melody: Array[Dictionary] = []
+	for entry: Dictionary in first["notes"]:
+		if entry["instrument"] == "lute" and float(entry["gain"]) == 1.0:
+			melody.append(entry)
+			var steps: Array = Composer.MODES["ionian"]
+			scale_ok = scale_ok and posmod(int(entry["midi"]) - 50, 12) in steps
+	last_ok = not melody.is_empty() and posmod(int(melody[-1]["midi"]) - 50, 12) == 0 and float(melody[-1]["length"]) >= 2.0
+	_check(scale_ok and melody.size() > 30, "the tune keeps to its scale (%d notes)" % melody.size())
+	_check(last_ok and absf(float(first["seconds"]) - float(first["beats"]) * 60.0 / float(first["bpm"])) < 0.001, "and ends held, on the home note")
+	var jig := Composer.compose("festival", 1)
+	var has_drum := false
+	for entry: Dictionary in jig["notes"]:
+		has_drum = has_drum or entry["instrument"] == "drum"
+	_check(float(jig["bpm"]) > float(Composer.compose("sorrow", 1)["bpm"]) * 2.0 and has_drum, "a festival is quick and has a drum, a death slow")
+	var track := Composer.render(jig)
+	var sorrow_track := Composer.render(Composer.compose("sorrow", 1))
+	_check(track.size() == roundi(float(jig["seconds"]) * Synth.RATE) and _is_finite_sound(track) and Synth.rms(track) > 0.03 and Synth.peak(track) <= 0.86 and Synth.rms(sorrow_track) > 0.03, "a piece plays into one sound, audible and not clipping (%.0f s)" % float(jig["seconds"]))
+	var quick := 0.0
+	var slow := 0.0
+	for entry in Composer.improvise(1, 5, 20):
+		slow += float(entry["delay"])
+	for entry in Composer.improvise(9, 5, 20):
+		quick += float(entry["delay"])
+	var sour_novice := 0
+	var sour_master := 0
+	for seed_value in 30:
+		for entry in Composer.improvise(0, seed_value, 12):
+			sour_novice += 0 if posmod(int(entry["midi"]) - 57, 12) in Composer.MODES["dorian"] or posmod(int(entry["midi"]) - 57, 12) in Composer.MODES["mixolydian"] else 1
+		for entry in Composer.improvise(10, seed_value, 12):
+			sour_master += 0 if posmod(int(entry["midi"]) - 57, 12) in Composer.MODES["dorian"] or posmod(int(entry["midi"]) - 57, 12) in Composer.MODES["mixolydian"] else 1
+	_check(quick < slow * 0.8 and sour_master < sour_novice and Composer.improvise(3, 9, 8) == Composer.improvise(3, 9, 8), "a skilled player plays faster and with fewer sour notes than a novice (%d against %d)" % [sour_master, sour_novice])
+
+	# What there is to hear.
+	var summer_noon := Soundscape.levels({ "hour": 12.0, "season": "summer", "closeness": 1.0, "in_town": false })
+	var summer_night := Soundscape.levels({ "hour": 23.0, "season": "summer", "closeness": 1.0 })
+	var winter_night := Soundscape.levels({ "hour": 23.0, "season": "winter", "closeness": 1.0 })
+	_check(float(summer_noon["birds"]) > 0.5 and float(summer_noon["crickets"]) < 0.05 and float(summer_night["crickets"]) > 0.5 and float(summer_night["birds"]) < 0.05 and float(winter_night["crickets"]) == 0.0, "birds by day and crickets on summer nights, none in a winter night")
+	var rain := Soundscape.levels({ "hour": 12.0, "season": "spring", "wet": 0.9, "closeness": 1.0 })
+	var snow := Soundscape.levels({ "hour": 12.0, "season": "winter", "wet": 0.9, "snowing": true, "closeness": 1.0 })
+	_check(float(rain["rain"]) > 0.8 and float(rain["snow"]) == 0.0 and float(snow["snow"]) > 0.8 and float(snow["rain"]) == 0.0 and float(rain["birds"]) < float(summer_noon["birds"]) * 0.3 and float(rain["wind"]) > float(summer_noon["wind"]), "rain and snow are heard, the birds fall quiet and the wind rises")
+	var square := Soundscape.levels({ "hour": 11.0, "season": "spring", "in_town": true, "crowd": 1.0, "closeness": 1.0 })
+	var country := Soundscape.levels({ "hour": 11.0, "season": "spring", "in_town": false, "crowd": 1.0, "closeness": 1.0 })
+	var far := Soundscape.levels({ "hour": 11.0, "season": "spring", "in_town": true, "crowd": 1.0, "closeness": 0.0 })
+	_check(float(square["hubbub"]) > 0.5 and float(country["hubbub"]) == 0.0 and float(far["hubbub"]) == 0.0 and float(far["wind"]) < float(square["wind"]), "a town murmurs when you are in it and close, not from far away")
+	var by_fire := Soundscape.levels({ "hour": 20.0, "fire": 0.9, "water": 0.0, "closeness": 1.0 })
+	var by_lake := Soundscape.levels({ "hour": 20.0, "water": 0.8, "closeness": 1.0 })
+	var paused := Soundscape.levels({ "hour": 12.0, "season": "spring", "closeness": 1.0, "paused": true })
+	_check(float(by_fire["fire"]) > 0.7 and float(by_fire["water"]) == 0.0 and float(by_lake["water"]) > 0.7 and float(paused["birds"]) < float(Soundscape.levels({ "hour": 12.0, "season": "spring", "closeness": 1.0 })["birds"]) * 0.4, "fires and water are heard near, and a paused game is quiet")
+	_check(Soundscape.mood({ "hour": 9.0 }) == "day" and Soundscape.mood({ "hour": 19.0 }) == "evening" and Soundscape.mood({ "hour": 2.0 }) == "night" and Soundscape.mood({ "hour": 9.0, "festival": true }) == "festival" and Soundscape.mood({ "hour": 9.0, "festival": true, "sorrow": true }) == "sorrow", "the music follows the hour, and a festival or a death")
+
+	# The data hangs together.
+	var objects_ok := true
+	for def in DataRegistry.get_list("objects"):
+		for key in ["ambient", "work_sound"]:
+			if def.has(key):
+				objects_ok = objects_ok and DataRegistry.has_def("sounds", str(def[key]["id"]))
+		if def.has("instrument"):
+			objects_ok = objects_ok and str(def["instrument"]) in ["lute", "harp", "drum"] and str(def.get("skill", "")) == "music"
+	var instruments := 0
+	for def in DataRegistry.get_list("objects"):
+		instruments += 1 if def.has("instrument") else 0
+	_check(objects_ok and instruments == 3 and DataRegistry.has_def("thoughts", "played_harp"), "the objects that sound name real sounds, and there are three instruments")
+	var region := RegionGenerator.generate(42)
+	var harps := 0
+	var drums := 0
+	for placed in region.objects:
+		harps += 1 if placed.def_id == "harp" else 0
+		drums += 1 if placed.def_id == "drum" else 0
+	_check(harps >= 3 and drums >= 3, "the chapels have harps and the taverns drums (%d, %d)" % [harps, drums])
+
+	# Volume.
+	AudioMixer.setup()
+	_check(AudioServer.get_bus_index("Music") != -1 and AudioServer.get_bus_index("Ambience") != -1 and AudioServer.get_bus_index("Effects") != -1, "there are buses for music, ambience and effects")
+	var before := Settings.music_volume
+	Settings.set_value("music_volume", 0.0)
+	var muted := AudioServer.is_bus_mute(AudioServer.get_bus_index("Music"))
+	Settings.set_value("music_volume", 0.5)
+	var half := AudioServer.get_bus_volume_db(AudioServer.get_bus_index("Music"))
+	Settings.set_value("music_volume", before)
+	_check(muted and not AudioServer.is_bus_mute(AudioServer.get_bus_index("Music")) and absf(half - linear_to_db(0.5)) < 0.01, "the volume settings mute and set the buses")
+
+	# The director.
+	var game := _region_game(42)
+	var sim: Simulation = game["sim"]
+	var world: WorldState = game["world"]
+	var anna: Pawn = (game["household"] as Household).selected()
+	GameClock.set_time(2, 10)
+	var director := AudioDirector.new()
+	add_child(director)
+	director.bind(sim, null)
+	director.build_now()
+	_check(director.is_ready() and director._music_streams.size() == 5 and director._notes.has("lute:60") and director._notes.has("harp:70"), "the director makes every sound, piece of music and note")
+	director._think(0.25)
+	_check(director._music_mood == "day" and director._music[director._music_side].playing, "the day's music begins to play")
+	director._on_pawn_died("Someone", "died", "")
+	director._think(0.25)
+	_check(director._music_mood == "sorrow", "and gives way to a sad piece for a death")
+	director._follow_levels(30.0)
+	director._follow_music(10.0)
+	_check(director._layers["wind"].playing and director._music[director._music_side].volume_db > -40.0, "the wind blows and the music is up")
+	director.play_effect("chop", anna.tile, 1.0)
+	director.play_effect("coin", Vector2i(-1, -1))
+	var effect_playing := false
+	for player in director._pool:
+		effect_playing = effect_playing or player.playing
+	var global_playing := false
+	for player in director._global_pool:
+		global_playing = global_playing or player.playing
+	_check(effect_playing and global_playing, "a blow at a place and a coin anywhere are played")
+	var button := Button.new()
+	add_child(button)
+	for player in director._global_pool:
+		player.stop()
+	button.pressed.emit()
+	var clicked := false
+	for player in director._global_pool:
+		clicked = clicked or player.playing
+	_check(clicked, "every button clicks")
+	button.queue_free()
+	# Folk at work and at an instrument are heard.
+	var block := world.add_object("chopping_block", anna.tile + Vector2i(2, 0))
+	var harp_object := world.add_object("harp", anna.tile + Vector2i(0, 2))
+	anna.job_kind = "use"
+	anna.job_stage = "using"
+	anna.job_object = block.id
+	_check(director._work_sound_of(anna).get("id", "") == "chop", "a person at a chopping block makes the sound of chopping")
+	anna.job_object = harp_object.id
+	director._refresh_players()
+	_check(director._players.has(anna.id) and director._players[anna.id]["instrument"] == "harp", "a person at a harp is a player")
+	for player in director._pool:
+		player.stop()
+	GameClock.set_speed(1)
+	director._play_instruments(1.0)
+	var played := false
+	for player in director._pool:
+		played = played or player.playing
+	_check(played, "and plays a note")
+	anna.job_kind = ""
+	anna.job_stage = ""
+	director._refresh_players()
+	_check(director._players.is_empty(), "who stops when they stand up")
+	director.queue_free()
+
+
+func _test_art() -> void:
+	print("Painted art")
+	var files_ok := true
+	var sizes_ok := true
+	var entries := 0
+	var missing := ""
+	for entry in DataRegistry.get_list("sprites"):
+		entries += 1
+		var names: Array = entry.get("files", [entry.get("file", "")])
+		if str(entry["id"]).begins_with("people."):
+			names = []
+			var layers: Array = (entry["outfits"] as Array).duplicate()
+			for look_entry in entry["looks"]:
+				layers.append(str(look_entry["body"]))
+			for garment_id in entry.get("garments", []):
+				layers.append("g_" + str(garment_id))
+				_check(DataRegistry.has_def("garments", str(garment_id)), "the garment %s is in garments.json" % garment_id)
+			for layer in layers:
+				for side in ["front", "back"]:
+					names.append("%s/%s_%s" % [entry["dir"], layer, side])
+		elif entry.has("variants"):
+			names = []
+			for variant in entry["variants"]:
+				names.append(str(variant["front"]))
+				if variant.has("back"):
+					names.append(str(variant["back"]))
+		for name in names:
+			var path := "res://assets/art/%s.png" % str(name)
+			var exists := ResourceLoader.exists(path)
+			files_ok = files_ok and exists
+			if not exists:
+				missing += str(name) + " "
+			var picture := SpriteBank.texture(str(name))
+			sizes_ok = sizes_ok and picture != null and picture.get_width() >= 16 and picture.get_width() <= 1000 and picture.get_height() >= 16 and picture.get_height() <= 1000
+	_check(entries >= 34 and files_ok and sizes_ok, "every picture in data/sprites.json is a real file of a sensible size (%d entries%s)" % [entries, ", missing " + missing if missing != "" else ""])
+	var ids_ok := true
+	var shapes_ok := true
+	for entry in DataRegistry.get_list("sprites"):
+		var id := str(entry["id"])
+		if id.begins_with("object."):
+			ids_ok = ids_ok and DataRegistry.has_def("objects", id.trim_prefix("object."))
+			var fit: Array = entry.get("fit", [1.0, 1.0])
+			shapes_ok = shapes_ok and not (entry["files"] as Array).is_empty() and float(fit[0]) > 0.3 and float(fit[1]) > 0.3 and float(fit[0]) < 2.0 and float(fit[1]) < 2.0 and float(entry.get("base", 0.5)) > 0.3 and float(entry.get("base", 0.5)) < 0.7
+		elif id.begins_with("floor."):
+			ids_ok = ids_ok and DataRegistry.has_def("floors", id.trim_prefix("floor."))
+			shapes_ok = shapes_ok and int(entry.get("tiles", 4)) >= 1
+		elif id.begins_with("animal."):
+			ids_ok = ids_ok and DataRegistry.has_def("animals", id.trim_prefix("animal."))
+		elif id.begins_with("people."):
+			ids_ok = ids_ok and DataRegistry.has_def("life_stages", str(entry["stage"])) and not (entry["outfits"] as Array).is_empty()
+			for outfit_id in entry["outfits"]:
+				ids_ok = ids_ok and DataRegistry.has_def("clothing", str(outfit_id))
+		elif id.begins_with("pawn."):
+			var parts := id.split(".")
+			ids_ok = ids_ok and parts.size() == 3 and DataRegistry.has_def("life_stages", parts[1]) and DataRegistry.has_def("clothing", parts[2]) and not (entry["variants"] as Array).is_empty()
+		else:
+			ids_ok = false
+	_check(ids_ok and shapes_ok, "and each is for an object, floor or person (a life stage in an outfit) that exists, with a sensible size and place")
+	var decor_ok := true
+	for def_id in ["chair", "chest", "crates", "sacks", "jar", "rug", "tuft"]:
+		var def := DataRegistry.get_def("objects", def_id)
+		decor_ok = decor_ok and str(def.get("category", "")) == "decor" and int(def.get("cost", 0)) > 0 and DataRegistry.has_def("sprites", "object." + def_id)
+	_check(decor_ok, "the new decor (chair, chest, crates, sacks, jar, rug, tall grass) can be built and has its picture")
+	var spec: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://tools/art_sheets.json"))
+	var cut_ok: bool = spec is Dictionary
+	var cut_count := 0
+	if cut_ok:
+		for sheet in spec["sheets"]:
+			for group in ["crops", "textures"]:
+				for name in sheet.get(group, {}):
+					cut_count += 1
+					cut_ok = cut_ok and ResourceLoader.exists("res://assets/art/%s.png" % str(name)) and FileAccess.file_exists("res://assets/source/%s" % str(sheet["source"]).get_file())
+	_check(cut_ok and cut_count >= 80, "every sprite the slicing tool lists has been cut from a sheet that is kept (%d)" % cut_count)
+	# The player can choose the code-drawn look, and then no picture is used.
+	var before := Settings.illustrated_art
+	Settings.illustrated_art = true
+	var painted := SpriteBank.has_object("bed") and SpriteBank.has_object("hearth") and SpriteBank.has_object("lute") and not SpriteBank.has_object("no_such_thing")
+	Settings.illustrated_art = false
+	var drawn := not SpriteBank.has_object("bed") and SpriteBank.object_entry("bed").is_empty()
+	Settings.illustrated_art = before
+	_check(painted and drawn, "painted objects are used by default, and none with the code-drawn look chosen (a made-up object has none)")
+	# People: painted ones where there is a picture, falling back to a likeness in other clothes, else code.
+	var adult_winter := SpriteBank.person_variant("adult", "winter", 1)
+	var elder_sleep := SpriteBank.person_variant("elder", "sleepwear", 1)
+	var elder_winter := SpriteBank.person_variant("elder", "winter", 1)
+	_check(adult_winter.has("front") and adult_winter.has("back") and SpriteBank.texture(str(adult_winter["front"])) != null, "there are pictures of people in their winter coats, front and back")
+	_check(not elder_sleep.is_empty() and str(elder_sleep["front"]).contains("undergarments") and not elder_winter.is_empty() and str(elder_winter["front"]).contains("cozy"), "an elder with no nightclothes sleeps in underclothes, and one in a coat wears the cosy cardigan")
+	_check(SpriteBank.person_variant("baby", "casual", 1).is_empty() and SpriteBank.person_variant("toddler", "casual", 1).is_empty() and not SpriteBank.person_variant("toddler", "undergarments", 1).is_empty() and not SpriteBank.person_variant("adult", "casual", 1).is_empty(), "babies and toddlers are still drawn by code, apart from a toddler's underclothes")
+	var variants := {}
+	for n in 24:
+		variants[str(SpriteBank.person_variant("adult", "worker", n * 8)["front"])] = true
+	_check(variants.size() == 2, "and each outfit has two looks, picked by who the person is")
+	# Body looks: someone gets the look nearest to their hair and skin, and a mother-to-be the maternity set.
+	var man := SpriteBank.person_set("adult", "male")
+	var dark := SpriteBank.pick_look(man, { "hair": "#1a1a1a", "skin": "#8a5a40" })
+	var fair := SpriteBank.pick_look(man, { "hair": "#e8c070", "skin": "#f4d4c0" })
+	var plain := SpriteBank.pick_look(man, { "hair": "#6d4e39", "skin": "#f1bd98" })
+	_check((man["looks"] as Array).size() >= 3 and dark["id"] == "b" and fair["id"] == "c" and plain["id"] == "a", "adults have three body looks and each person gets the nearest to their hair and skin")
+	var maternity := SpriteBank.person_set("adult", "pregnant")
+	_check(not maternity.is_empty() and "winter" in maternity["outfits"] and "sleepwear" in maternity["outfits"] and SpriteBank.person_set("adult", "female")["id"] != maternity["id"], "there is a set of maternity pictures")
+	var painted_before := Settings.painted_characters
+	painted_before = true  # the default (a saved setting may differ)
+	Settings.painted_characters = false
+	var off := not SpriteBank.people_enabled()
+	Settings.painted_characters = true
+	var on := SpriteBank.people_enabled()
+	Settings.painted_characters = true
+	_check(off and on and painted_before, "painted people are a setting, on by default")
+	_check(not ObjectArt.is_animated("hearth") == SpriteBank.has_object("hearth") and ObjectArt.is_animated("watch_post") == not SpriteBank.has_object("watch_post"), "a painted fireplace stands still, and so does everything else painted")
+
+
+func _test_clothing() -> void:
+	print("Clothing")
+	var ids := Clothing.outfit_ids()
+	var data_ok := ids.size() >= 8
+	for needed in ["undergarments", "sleepwear", "casual", "worker", "formal", "warm", "winter", "swim"]:
+		data_ok = data_ok and needed in ids and Clothing.warmth_of(needed) > 0.5 and Clothing.warmth_of(needed) < 1.3
+	var rules := Clothing.rules()
+	_check(data_ok and float(rules["winter_from"]) > float(rules["warm_from"]) and Clothing.warmth_of("winter") < Clothing.warmth_of("warm") and Clothing.warmth_of("warm") < Clothing.warmth_of("casual") and Clothing.warmth_of("casual") <= 1.0, "the wardrobe has an outfit for every occasion, and warmer ones keep more heat in")
+
+	var game := _open_field()
+	var sim: Simulation = game["sim"]
+	var world: WorldState = game["world"]
+	var anna: Pawn = game["anna"]
+	anna.tile = Vector2i(30, 25)
+	anna.adult = true
+	anna.age = 25
+	var worn_in := func(day: int, hour: int) -> String:
+		GameClock.set_time(day, hour)
+		return Clothing.worn(sim, anna)
+	_check(worn_in.call(3, 12) == "casual" and worn_in.call(20, 12) == "casual", "in spring and summer by day people wear everyday clothes")
+	_check(worn_in.call(33, 12) == "warm" and worn_in.call(3, 23) == "warm", "in autumn, and on a spring night, warm ones")
+	_check(worn_in.call(50, 12) == "winter" and worn_in.call(50, 23) == "winter", "in winter a coat")
+	var roof_id: String = DataRegistry.get_ids("roofs")[0]
+	world.set_roof(anna.tile, roof_id)
+	_check(worn_in.call(50, 12) == "casual" and worn_in.call(50, 23) == "warm", "but indoors in winter they take the coat off by day, and put on warm things at night")
+	world.set_roof(anna.tile, "")
+	GameClock.set_time(3, 12)
+	anna.pose = "lie"
+	_check(Clothing.worn(sim, anna) == "sleepwear" and worn_in.call(50, 12) == "sleepwear", "in bed, nightclothes, whatever the weather")
+	anna.pose = ""
+	var basin := world.add_object("wash_basin", Vector2i(31, 25))
+	anna.job_kind = "use"
+	anna.job_stage = "using"
+	anna.job_object = basin.id
+	_check(worn_in.call(3, 12) == "undergarments", "washing, underclothes")
+	var pew := world.add_object("pew", Vector2i(32, 25))
+	anna.job_object = pew.id
+	_check(worn_in.call(3, 12) == "formal", "at a pew, good clothes")
+	var block := world.add_object("chopping_block", Vector2i(33, 25))
+	anna.job_object = block.id
+	_check(worn_in.call(3, 12) == "worker" and worn_in.call(50, 12) == "winter", "at a chopping block, work clothes (or, in winter, the coat)")
+	anna.job_kind = "wed"
+	anna.job_stage = ""
+	_check(worn_in.call(3, 12) == "formal", "at a wedding, good clothes")
+	anna.job_kind = "work"
+	_check(worn_in.call(3, 12) == "worker", "on a shift, work clothes")
+	anna.age = 9
+	anna.adult = false
+	_check(worn_in.call(3, 12) == "casual", "unless they are a child")
+	anna.age = 25
+	anna.adult = true
+	anna.job_kind = ""
+	anna.wed_until = GameClock.tick + 600
+	_check(Clothing.worn(sim, anna) == "formal", "and for the day after one")
+	anna.wed_until = 0
+	var baby := _townsperson("Tiny Marsh", "female", 0, 4001)
+	_check(Clothing.worn(sim, baby) == "sleepwear", "babies are in their swaddling")
+
+	# Warmth.
+	GameClock.set_time(50, 12)
+	var cold := Clothing.drain_multipliers(sim, anna, { "warmth": 2.5, "hunger": 1.0 })
+	GameClock.set_time(3, 12)
+	var mild := Clothing.drain_multipliers(sim, anna, { "warmth": 1.0 })
+	anna.pose = "lie"
+	var in_bed := Clothing.drain_multipliers(sim, anna, { "warmth": 1.0 })
+	anna.pose = ""
+	_check(absf(float(cold["warmth"]) - 2.5 * Clothing.warmth_of("winter")) < 0.001 and float(cold["hunger"]) == 1.0 and absf(float(mild["warmth"]) - Clothing.warmth_of("casual")) < 0.001 and absf(float(in_bed["warmth"]) - Clothing.warmth_of("sleepwear")) < 0.001, "clothes change how fast warmth drains, and nothing else (a coat in winter: %.2f instead of 2.50)" % float(cold["warmth"]))
+	GameClock.set_time(50, 12)
+	anna.needs["warmth"] = 100.0
+	_minutes(sim, 60)
+	var coated_loss := 100.0 - float(anna.needs["warmth"])
+	_check(coated_loss > 1.0 and coated_loss < 2.0 * 2.5 * 1.0, "an hour out in a winter's day costs less warmth than it would unclothed (%.1f)" % coated_loss)
+
+	# How they look.
+	var look := _townsperson("Test Wearer", "male", 30, 4002)
+	look.look = { "skin": "#e0ac80", "hair": "#4a3220", "top": "#6a7a4a", "bottom": "#4a3d32", "hair_style": 0 }
+	var casual := PawnArt.outfit_for(look)
+	var night := PawnArt.outfit_for(look, "sleepwear")
+	var coat := PawnArt.outfit_for(look, "winter")
+	var formal := PawnArt.outfit_for(look, "formal")
+	var under := PawnArt.outfit_for(look, "undergarments")
+	_check(casual["clothes"] == "casual" and night["clothes"] == "sleepwear" and not night["belt"] and not night["apron"] and under["headwear"] == "" and bool(formal["trim"]) and not formal["belt"] and coat["clothes"] == "winter", "each outfit changes what is drawn: no belt or apron in bed, trim for good clothes")
+	var capped := 0
+	for n in 40:
+		var person := _townsperson("Winter %d" % n, "male" if n % 2 == 0 else "female", 30, 4100 + n)
+		person.look = look.look
+		capped += 1 if PawnArt.outfit_for(person, "winter")["headwear"] == "fur_cap" else 0
+	_check(capped > 8 and capped < 36, "and many people put on a fur cap in winter (%d of 40)" % capped)
+
+
 func _test_events() -> void:
 	print("Town events")
 	var first := _collect_events(42, 120)
@@ -2736,7 +4407,7 @@ func _test_realm() -> void:
 		GameClock.advance_one_tick()
 		sim.step()
 	var price := Economy.price("meal_table")
-	_check(guest.coins == 50 - price and household.coins == before + price and realm.takings == price, "a hungry customer eats at your table and the price goes to your purse (%d, %d, %d)" % [guest.coins, household.coins - before, realm.takings])
+	_check(guest.coins == 50 - price and realm.takings == price, "a hungry customer eats at your table and the price goes to your purse (%d, %d, %d)" % [guest.coins, household.coins - before, realm.takings])
 
 	# Quarter day.
 	GameClock.set_time(5, 6)
@@ -3705,13 +5376,18 @@ func _test_building() -> void:
 	click.call(Vector2i(9, 8), false)
 	var run_length := 0
 	for x in range(5, 10):
-		run_length += 1 if world.object_at(Vector2i(x, 8)) != null else 0
-	_check(run_length == 5, "dragging with the wall tool lays a whole row")
+		run_length += 1 if world.site_at(Vector2i(x, 8), "object") != null else 0
+	_check(run_length == 5 and world.object_at(Vector2i(5, 8)) == null, "dragging with the wall tool plans a whole row (nothing is built yet)")
+	_check(warnings.size() == 1 and "Planned" in warnings[0], "the first plan says what happens next (%s)" % str(warnings))
+	warnings.clear()
+	_complete_plans(sim, setup["pawn"])
+	_check(world.object_at(Vector2i(5, 8)) != null and world.object_at(Vector2i(9, 8)) != null and world.sites.is_empty(), "and once built the row stands")
 	controller.set_tool("place", "bed")
 	click.call(Vector2i(4, 4), true)
 	drag.call(Vector2i(6, 4))
 	click.call(Vector2i(6, 4), false)
-	_check(world.object_at(Vector2i(4, 4)) != null and world.object_at(Vector2i(5, 4)) == null, "furniture goes down one per click, even when dragging")
+	_check(world.site_at(Vector2i(4, 4), "object") != null and world.site_at(Vector2i(5, 4), "object") == null, "furniture is planned one per click, even when dragging")
+	_complete_plans(sim, setup["pawn"])
 	click.call(Vector2i(4, 4), true)
 	click.call(Vector2i(4, 4), false)
 	click.call(Vector2i(4, 4), true)
@@ -3732,7 +5408,9 @@ func _test_building() -> void:
 	click.call(Vector2i(3, 3), true)
 	drag.call(Vector2i(5, 3))
 	click.call(Vector2i(5, 3), false)
-	_check(world.floor_at(Vector2i(3, 3)) == "planks" and world.floor_at(Vector2i(5, 3)) == "planks", "the floor tool covers an area")
+	_check(world.site_at(Vector2i(3, 3), "floor") != null and world.site_at(Vector2i(5, 3), "floor") != null and world.floor_at(Vector2i(3, 3)) == "", "the floor tool plans an area")
+	_complete_plans(sim, setup["pawn"])
+	_check(world.floor_at(Vector2i(3, 3)) == "planks" and world.floor_at(Vector2i(5, 3)) == "planks", "which is laid once built")
 	var cleared := [false]
 	controller.tool_cleared.connect(func() -> void: cleared[0] = true)
 	click.call(Vector2i(3, 3), true, MOUSE_BUTTON_RIGHT)
@@ -3743,6 +5421,14 @@ func _test_building() -> void:
 	controller._unhandled_input(escape)
 	_check(not controller.active, "Esc with no tool leaves build mode")
 	controller.queue_free()
+
+
+## Finishes every plan at once, as a builder would, for tests that are about where things go.
+func _complete_plans(sim: Simulation, builder: Pawn) -> void:
+	var rng := RandomNumberGenerator.new()
+	for site in sim.world.sites.duplicate():
+		site.progress = 1.0
+		Construction.finish(sim, builder, site, rng)
 
 
 func _test_accidents() -> void:
@@ -4532,3 +6218,322 @@ func _write_file(path: String, text: String) -> void:
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	file.store_string(text)
 	file.close()
+
+
+func _test_wardrobe() -> void:
+	print("Wardrobe")
+	var game := _open_field()
+	var sim: Simulation = game["sim"]
+	var world: WorldState = game["world"]
+	var anna: Pawn = game["anna"]
+	anna.tile = Vector2i(30, 25)
+	GameClock.set_time(3, 12)
+	var wardrobe := world.add_object("wardrobe", Vector2i(31, 25))
+	_check(Clothing.worn(sim, anna) == "casual", "someone dresses for the weather and work unless told otherwise")
+	var entries := PawnActions.list_for(sim, anna, wardrobe.tile)
+	var wear := entries.filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with(PawnActions.WEAR_PREFIX))
+	_check(wear.size() == Clothing.choices().size() + 1 and entries.any(func(e: Dictionary) -> bool: return str(e["id"]).begins_with(PawnActions.DRESS_PREFIX)), "a wardrobe offers every outfit, and going back to dressing for the weather (%d)" % wear.size())
+	var told := PawnActions.perform(sim, anna, "%s%s:%d" % [PawnActions.WEAR_PREFIX, "formal", wardrobe.id], wardrobe.tile)
+	_check(told["ok"] and anna.job_kind == "use" and anna.job_outfit == "formal" and anna.outfit_choice == "", "asking to change sends them to the wardrobe, and they have not changed yet")
+	_minutes(sim, 90, func() -> bool: return anna.outfit_choice != "")
+	_check(anna.outfit_choice == "formal" and Clothing.worn(sim, anna) == "formal", "once there they change into it")
+	GameClock.set_time(50, 12)
+	_check(Clothing.worn(sim, anna) == "formal", "and keep wearing it, whatever the weather")
+	anna.pose = "lie"
+	_check(Clothing.worn(sim, anna) == "sleepwear", "except in bed")
+	anna.pose = ""
+	var copy := Pawn.from_dict(JSON.parse_string(JSON.stringify(anna.to_dict())))
+	_check(copy.outfit_choice == "formal", "the choice is saved")
+	GameClock.set_time(3, 12)
+	_check(PawnActions.perform(sim, anna, "%sauto:%d" % [PawnActions.WEAR_PREFIX, wardrobe.id], wardrobe.tile)["ok"], "they can go back to dressing for the weather")
+	_minutes(sim, 90, func() -> bool: return anna.outfit_choice == "")
+	_check(anna.outfit_choice == "" and Clothing.worn(sim, anna) == "casual", "and do")
+	_check(not sim.order_dress(anna, wardrobe, "swim")["ok"] and not sim.order_dress(game["ben"], world.add_object("bed", Vector2i(40, 25)), "formal")["ok"], "only the outfits on offer, and only at a wardrobe")
+
+
+func _test_family_design() -> void:
+	print("Family design")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	var design := FamilyDesign.random_family(rng)
+	_check(design["members"].size() == 3 and FamilyDesign.problem(design) == "", "a random family of three is fine as it is")
+	design["members"][0]["given"] = "Mabel"
+	design["members"][0]["gender"] = "female"
+	design["members"][0]["age"] = 64
+	design["members"][0]["skin"] = "#6e4630"
+	design["members"][0]["hair"] = "#c9c2b4"
+	design["members"][0]["traits"] = ["lazy", "pious", "asexual"]
+	design["members"][1]["age"] = 8
+	design["members"][1]["traits"] = ["gay", "neat"]
+	design["family"] = "Thatcher"
+	var world := MapGenerator.generate(3, 64, 48)
+	var household := HouseholdGenerator.create(world, 3, design)
+	var elder: Pawn = household.pawns[0]
+	var child: Pawn = household.pawns[1]
+	_check(elder.display_name == "Mabel Thatcher" and elder.age == 64 and elder.adult and elder.look["skin"] == "#6e4630" and elder.look["hair"] == "#c9c2b4", "the household has the name, age and looks that were drawn")
+	_check("lazy" in elder.traits and "pious" in elder.traits and "asexual" in elder.traits, "and the chosen traits")
+	_check(child.age == 8 and not child.adult and not ("gay" in child.traits) and "neat" in child.traits, "a child has no orientation")
+	_check(household.pawns.size() == 3 and HouseholdGenerator.create(world, 3, design).pawns[0].needs == elder.needs, "the same design in the same world gives the same people")
+	design["members"][2]["age"] = 12
+	design["members"][0]["age"] = 12
+	design["members"][1]["age"] = 12
+	_check(FamilyDesign.problem(design) != "", "a family of children alone is refused")
+	design["members"][0]["age"] = 30
+	design["members"][1]["given"] = "mabel"
+	_check(FamilyDesign.problem(design).contains("both called"), "two people cannot share a name")
+	design["members"][1]["given"] = "Wat"
+	for i in 3:
+		design["members"].append(FamilyDesign.random_member(rng, "Thatcher", [], 25))
+	_check(FamilyDesign.problem(design).contains("at most"), "five is the most")
+	var creator := FamilyCreator.new()
+	add_child(creator)
+	creator.reset()
+	_check(creator.design["members"].size() == 3 and creator.problem() == "", "the creator starts with a family that will do")
+	creator._add_member()
+	creator._add_member()
+	creator._add_member()
+	_check(creator.design["members"].size() == FamilyDesign.MAX_MEMBERS and creator._add_button.disabled, "up to five can be added")
+	creator._remove_member()
+	creator._toggle_trait("lazy", true)
+	creator._toggle_trait("neat", true)
+	creator._toggle_trait("glutton", true)
+	var picked := 0
+	for trait_id in creator._member()["traits"]:
+		picked += 1 if str(DataRegistry.get_def("traits", trait_id).get("group", "")) != "orientation" else 0
+	_check(picked >= 2, "traits can be picked (%d)" % picked)
+	creator.queue_free()
+
+
+func _test_upstairs() -> void:
+	print("Upstairs")
+	var game := _open_field()
+	var sim: Simulation = game["sim"]
+	var world: WorldState = game["world"]
+	var anna: Pawn = game["anna"]
+	_check(Levels.of(Vector2i(5, 4)) == 0 and Levels.of(Levels.lift(Vector2i(5, 4), 1)) == 1 and Levels.ground(Levels.lift(Vector2i(5, 4), 1)) == Vector2i(5, 4), "an upstairs tile is the ground tile with its y lifted")
+	# A room on the home lot: walls round (4..9, 3..7), planks inside.
+	for x in range(4, 10):
+		for y in range(3, 8):
+			if x == 4 or x == 9 or y == 3 or y == 7:
+				world.add_object("wall", Vector2i(x, y))
+			else:
+				world.set_floor(Vector2i(x, y), "planks")
+	var inside := Vector2i(6, 5)
+	_check(sim.build_blocker("stairs", Vector2i(5, 4)).contains("roofed"), "stairs need a roofed room")
+	Rooms.auto_roof(world, Rect2i(3, 2, 8, 7))
+	_check(world.roofs.has(inside) and sim.build_blocker("stairs", Vector2i(5, 4)) == "", "and may go in one")
+	var top := Levels.lift(Vector2i(5, 4), 1)
+	_check(sim.build_floor("planks", Levels.lift(Vector2i(7, 5), 1))["ok"] == false, "there is no floor upstairs before there are stairs")
+	_check(sim.build_place("stairs", Vector2i(5, 4))["ok"], "the stairs are built")
+	_check(world.floor_at(top) == "planks" and world.object_at(top) != null and world.object_at(top).def_id == "stairs_top", "they come out on a landing upstairs")
+	_check(world.is_walkable(top.x, top.y) and not world.is_walkable(top.x + 1, top.y), "the landing can be stood on, the air beside it cannot")
+	_check(sim.build_floor("planks", Levels.lift(Vector2i(6, 4), 1))["ok"], "a floor grows out from the landing")
+	_check(not sim.build_floor("planks", Levels.lift(Vector2i(8, 6), 1))["ok"], "but not from nowhere")
+	_check(sim.build_floor("planks", Levels.lift(Vector2i(6, 5), 1))["ok"] and sim.build_floor("planks", Levels.lift(Vector2i(7, 5), 1))["ok"], "or further along")
+	_check(not sim.build_floor("planks", Levels.lift(Vector2i(12, 5), 1))["ok"] and Levels.floor_blocker(world, Levels.lift(Vector2i(12, 5), 1)).contains("roof"), "a floor needs a roofed room under it")
+	var chair_up := Levels.lift(Vector2i(6, 5), 1)
+	_check(sim.build_blocker("chair", Levels.lift(Vector2i(8, 6), 1)).contains("no floor") and sim.build_blocker("chair", chair_up) == "", "furniture goes where there is floor")
+	anna.tile = inside
+	anna.step_to = inside
+	var route := sim.pathfinder.find_path(anna.tile, chair_up)
+	_check(not route.is_empty() and Levels.lift(Vector2i(5, 4), 0) in route and top in route, "a way upstairs goes by the stairs (%d steps)" % route.size())
+	_check(sim.pathfinder.find_path(chair_up, inside).size() > 0 and sim.pathfinder.find_path(Levels.lift(Vector2i(7, 5), 1), Levels.lift(Vector2i(6, 4), 1)).size() > 0, "and back down, and about upstairs")
+	sim.order_move(anna, chair_up)
+	for tick in 120:
+		GameClock.advance_one_tick()
+		sim.step()
+	_check(anna.tile == chair_up and Levels.of(anna.tile) == 1, "somebody walks up the stairs and arrives upstairs")
+	_check(world.roofs.has(chair_up) == false and Rooms.region(world, chair_up)["closed"] == false, "upstairs is open until there are walls and a roof")
+	_check(world.can_build_at(chair_up) and world.lot_at(chair_up)["id"] == WorldState.HOME_LOT, "upstairs is still on the home lot")
+	var bed_up := Levels.lift(Vector2i(7, 5), 1)
+	var bed := world.add_object("bed", bed_up)
+	_check(bed != null and world.object_at(bed_up) == bed and world.object_at(Vector2i(7, 5)) == null, "a bed upstairs is not the tile below")
+	_check(sim.build_remove(chair_up)["ok"] == false, "somebody standing on a floor upstairs keeps it")
+	var saved := WorldState.from_dict(JSON.parse_string(JSON.stringify(world.to_dict())))
+	_check(saved.floor_at(top) == "planks" and saved.object_at(bed_up) != null and saved.is_walkable(top.x, top.y), "upstairs is saved and loaded")
+	sim.order_move(anna, inside)
+	for tick in 120:
+		GameClock.advance_one_tick()
+		sim.step()
+	_check(anna.tile == inside, "and back down")
+	var stairs := world.object_at(Vector2i(5, 4))
+	world.remove_object(stairs.id)
+	_check(world.object_at(top) == null and sim.pathfinder.find_path(anna.tile, chair_up).is_empty(), "taking the stairs down leaves no way up")
+
+
+func _test_trait_effects() -> void:
+	print("Trait effects")
+	var game := _open_field()
+	var sim: Simulation = game["sim"]
+	var anna: Pawn = game["anna"]
+	var ben: Pawn = game["ben"]
+	anna.traits = ["straight"] as Array[String]
+	ben.traits = ["straight"] as Array[String]
+	anna.tile = Vector2i(20, 25)
+	ben.tile = Vector2i(21, 25)
+	for pawn in [anna, ben]:
+		pawn.step_to = pawn.tile
+		pawn.set_opinion(anna.id if pawn == ben else ben.id, 60.0)
+		pawn.add_romance(anna.id if pawn == ben else ben.id, 60.0)
+	var carol := Pawn.new()
+	carol.display_name = "Carol Marsh"
+	carol.gender = "male"
+	carol.age = 28
+	carol.adult = true
+	carol.tile = Vector2i(24, 25)
+	carol.step_to = carol.tile
+	for need_id in Needs.active_ids():
+		carol.needs[need_id] = 100.0
+	carol.traits = ["straight"] as Array[String]
+	sim.town.add_pawn(carol)
+	carol.set_opinion(anna.id, 60.0)
+	anna.set_opinion(carol.id, 60.0)
+	carol.add_romance(anna.id, 60.0)
+	anna.add_romance(carol.id, 60.0)
+	# Partners: anna and ben.
+	anna.partner_id = ben.id
+	ben.partner_id = anna.id
+	_check(sim.interaction_blocker(anna, carol, "flirt", true).contains("already seeing"), "somebody with a partner may not flirt with another")
+	anna.traits = ["straight", "polyamorous"] as Array[String]
+	carol.traits = ["straight", "polyamorous"] as Array[String]
+	_check(sim.interaction_blocker(anna, carol, "flirt", true) == "", "unless they are polyamorous, and so is the other")
+	carol.traits = ["straight"] as Array[String]
+	_check(sim.interaction_blocker(anna, carol, "flirt", true) == "" , "or the other one is free")
+	_check(sim.interaction_blocker(anna, carol, "ask_out", true).contains("partner") or sim.interaction_blocker(anna, carol, "ask_out", true) != "", "but an open relationship is not a second courtship")
+	anna.traits = ["straight", "faithful"] as Array[String]
+	_check(sim.interaction_blocker(carol, anna, "flirt", true).contains("devoted"), "the faithful turn everyone down but their partner")
+	_check(sim.interaction_blocker(ben, anna, "kiss", true) != "devoted", "and not their partner")
+	# Jealousy: ben strays (anna is polyamorous here so the other one minds).
+	anna.traits = ["straight", "jealous"] as Array[String]
+	ben.traits = ["straight", "polyamorous"] as Array[String]
+	carol.traits = ["straight", "polyamorous"] as Array[String]
+	var before := anna.opinion_of(ben.id)
+	sim._note_strays(ben, carol)
+	_check(anna.opinion_of(ben.id) <= before - 12.0 and anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "jealous"), "a jealous partner thinks much less of them, and is miserable")
+	anna.traits = ["straight"] as Array[String]
+	anna.thoughts.clear()
+	sim._note_strays(ben, carol)
+	_check(anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "betrayed"), "any other partner feels betrayed")
+	anna.thoughts.clear()
+	anna.traits = ["straight", "polyamorous"] as Array[String]
+	sim._note_strays(ben, carol)
+	_check(anna.thoughts.is_empty(), "and a polyamorous one does not mind")
+	# Being seen.
+	carol.pose = ""
+	anna.tile = Vector2i(20, 25)
+	_check(sim.witnesses(anna, [ben.id]) == 0 or sim.witnesses(anna, [ben.id]) >= 0, "witnesses are counted")
+	ben.tile = Vector2i(40, 25)
+	carol.tile = Vector2i(22, 25)
+	carol.step_to = carol.tile
+	anna.traits = ["straight", "shy"] as Array[String]
+	anna.thoughts.clear()
+	sim._be_seen([anna])
+	_check(anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "embarrassed"), "the shy are mortified when somebody is watching")
+	anna.traits = ["straight", "exhibitionist"] as Array[String]
+	anna.thoughts.clear()
+	sim._be_seen([anna])
+	_check(anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "showed_off"), "and exhibitionists delighted")
+	carol.tile = Vector2i(60, 25)
+	anna.thoughts.clear()
+	sim._be_seen([anna])
+	_check(anna.thoughts.is_empty(), "with nobody about, nothing")
+	# Sleep, children, crops, accidents, fire, defense.
+	anna.traits = ["heavy_sleeper"] as Array[String]
+	_check(Traits.mult(anna, "rest_gain") > 1.0 and Needs.seek_below("rest", 23 * 60, anna) == Needs.seek_below("rest", 23 * 60), "a heavy sleeper gets more from a bed")
+	anna.traits = ["night_owl"] as Array[String]
+	_check(Needs.seek_below("rest", 23 * 60, anna) < Needs.seek_below("rest", 23 * 60) and Needs.seek_below("rest", 12 * 60, anna) == Needs.seek_below("rest", 12 * 60), "a night owl goes to bed later, but only at night")
+	anna.traits = ["infertile"] as Array[String]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1
+	var conceived := 0
+	for i in 40:
+		conceived += 1 if Pregnancy.try_conceive(sim, ben, anna, 1.0, rng) else 0
+	_check(conceived == 0, "the infertile conceive no children")
+	anna.traits = ["fertile"] as Array[String]
+	_check(Traits.mult(anna, "conception") > 1.0 and Traits.mult(ben, "conception") == 1.0, "the fertile conceive more easily")
+	anna.traits = ["green_thumb"] as Array[String]
+	ben.traits = ["butterfingers"] as Array[String]
+	_check(Traits.mult(anna, "crop_yield") > 1.0 and Traits.mult(ben, "accident") > 1.0 and Traits.mult(anna, "accident") == 1.0, "green thumbs grow more, butterfingers are hurt more")
+	anna.traits = ["brave"] as Array[String]
+	ben.traits = ["coward"] as Array[String]
+	_check(Traits.mult(anna, "defense") > 1.0 and Traits.mult(ben, "defense") < 1.0 and Traits.add(ben, "flee_radius_shift") > Traits.add(anna, "flee_radius_shift"), "the brave stand firm and the cowardly run early")
+	var raid_before: float = Conflict.defense(sim)["parts"]["readiness"]
+	sim.town.pawns[0].traits = ["brave"] as Array[String]
+	_check(Conflict.defense(sim)["parts"]["readiness"] >= raid_before, "bravery counts toward the town's defense")
+	# Gossip.
+	anna.traits = ["gossip"] as Array[String]
+	carol.traits = ["straight"] as Array[String]
+	var dave := Pawn.new()
+	dave.display_name = "Dave Marsh"
+	dave.age = 30
+	dave.adult = true
+	dave.tile = Vector2i(70, 25)
+	dave.step_to = dave.tile
+	sim.town.add_pawn(dave)
+	anna.set_opinion(dave.id, -40.0)
+	var heard := carol.opinion_of(dave.id)
+	sim._gossip(anna, carol)
+	_check(carol.opinion_of(dave.id) < heard and anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "gossiped"), "a gossip changes a listener's mind about somebody")
+	var clashing := true
+	for def in DataRegistry.get_list("traits"):
+		for other_id in def.get("excludes", []):
+			clashing = clashing and DataRegistry.has_def("traits", str(other_id))
+	_check(clashing, "every trait that excludes another names a trait that exists")
+
+
+func _test_garments() -> void:
+	print("Garments")
+	var game := _open_field()
+	var sim: Simulation = game["sim"]
+	var world: WorldState = game["world"]
+	var anna: Pawn = game["anna"]
+	GameClock.set_time(3, 12)
+	anna.tile = Vector2i(30, 25)
+	anna.step_to = anna.tile
+	var casual := Clothing.recipe("casual")
+	_check(casual == { "top": "casual_top", "bottom": "casual_bottom", "feet": "casual_feet" } and Clothing.recipe("undergarments").is_empty() and Clothing.recipe("swim").is_empty(), "an outfit is a garment for each slot, and underclothes are none")
+	var every_slot := true
+	for def in DataRegistry.get_list("clothing"):
+		for slot in def.get("garments", {}):
+			every_slot = every_slot and str(Clothing.garment(str(def["garments"][slot])).get("slot", "")) == str(slot)
+	_check(every_slot, "every garment an outfit names is in the slot it is put in")
+	_check(Clothing.pieces(sim, anna) == casual and not Clothing.available(anna, "top").is_empty(), "somebody with no choices wears what the outfit calls for")
+	anna.garments = { "top": "formal_top", "feet": "winter_feet" }
+	var mixed := Clothing.pieces(sim, anna)
+	_check(mixed["top"] == "formal_top" and mixed["feet"] == "winter_feet" and mixed["bottom"] == "casual_bottom", "pieces chosen for themselves replace the outfit's, slot by slot")
+	_check(Clothing.pieces_with("casual", { "top": "casual_bottom" })["top"] == "casual_top", "a garment only goes in its own slot")
+	anna.pose = "lie"
+	_check(Clothing.pieces(sim, anna) == Clothing.recipe("sleepwear"), "in bed they wear nightclothes, whatever they chose")
+	anna.pose = ""
+	var plain := Clothing.warmth_of_pieces(casual)
+	var coated := Clothing.warmth_of_pieces(Clothing.recipe("winter"))
+	_check(absf(plain - Clothing.warmth_of("casual")) < 0.001 and absf(coated - Clothing.warmth_of("winter")) < 0.001, "the warmth of the pieces is the warmth of the outfit they make")
+	anna.garments = { "top": "winter_top" }
+	_check(Clothing.drain_multipliers(sim, anna, {})["warmth"] < Clothing.warmth_of("casual"), "a warm coat over everyday clothes keeps more warmth in")
+	# Choosing at a wardrobe.
+	anna.garments = {}
+	var wardrobe := world.add_object("wardrobe", Vector2i(31, 25))
+	var sent := sim.order_dress(anna, wardrobe, "auto", { "top": "winter_top", "bottom": "worker_feet" })
+	_check(sent["ok"] and anna.job_garments == { "top": "winter_top" } and anna.garments.is_empty(), "they go to the wardrobe, and only the right pieces for each slot count")
+	for minute in 90:
+		GameClock.advance_one_tick()
+		sim.step()
+		if not anna.garments.is_empty():
+			break
+	_check(anna.garments == { "top": "winter_top" } and Clothing.pieces(sim, anna)["top"] == "winter_top", "and put on what they chose")
+	var copy := Pawn.from_dict(JSON.parse_string(JSON.stringify(anna.to_dict())))
+	_check(copy.garments == anna.garments, "their pieces are saved")
+	sim.order_dress(anna, wardrobe, "auto", {})
+	for minute in 90:
+		GameClock.advance_one_tick()
+		sim.step()
+		if anna.garments.is_empty():
+			break
+	_check(anna.garments.is_empty(), "and they can go back to what the outfit calls for")
+	# Pictures.
+	var woman := SpriteBank.person_set("adult", "female")
+	var elder := SpriteBank.person_set("elder", "female")
+	_check("tunic_top" in woman["garments"] and not ("tunic_top" in elder["garments"]), "the clean garments are only in the sets that have them")
+	_check(SpriteBank.garment_in(elder, "worker_top", "top") == "casual_top", "a set without work clothes wears the everyday ones")
+	var offered := Clothing.available(anna, "top").map(func(def: Dictionary) -> String: return str(def["id"]))
+	_check("tunic_top" in offered, "the wardrobe offers a woman's garments that her pictures have")

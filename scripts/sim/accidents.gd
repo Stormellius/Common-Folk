@@ -16,7 +16,17 @@ static func roll(sim: Simulation, pawn: Pawn, object_def: Dictionary, rng: Rando
 	var skill_id := str(object_def.get("skill", ""))
 	if skill_id != "":
 		chance *= Skills.safety_multiplier(pawn, skill_id)  # the practised are hurt less often
+	chance *= Traits.mult(pawn, "accident")
 	if rng.randf() >= chance:
+		return ""
+	return strike(sim, pawn, risk, rng)
+
+
+## Whatever it was happens to `pawn`: now and then it kills them, otherwise they are hurt (an injury
+## that heals in time, with rest). `risk` says what to call it ("text", "death_cause", "death_share",
+## and the thought it leaves in "mood"). Returns a notice for the player, or "".
+static func strike(sim: Simulation, pawn: Pawn, risk: Dictionary, rng: RandomNumberGenerator) -> String:
+	if pawn.is_dying():
 		return ""
 	var mine := sim.household.get_pawn(pawn.id) != null
 	var name := pawn.display_name.get_slice(" ", 0)
@@ -27,5 +37,5 @@ static func roll(sim: Simulation, pawn: Pawn, object_def: Dictionary, rng: Rando
 		pawn.illness = "injury"
 		pawn.ill_since = GameClock.tick
 	sim.order_stop(pawn)
-	Mood.add_event(pawn, "hurt_at_work", GameClock.tick)
+	Mood.add_event(pawn, str(risk.get("mood", "hurt_at_work")), GameClock.tick)
 	return "%s %s and is hurt." % [name, str(risk.get("text", "had an accident"))] if mine else ""

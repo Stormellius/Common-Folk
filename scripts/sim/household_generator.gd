@@ -8,15 +8,24 @@ const SIZE := 3
 const SEARCH_RADIUS := 12
 
 
-static func create(world: WorldState, size: int = SIZE) -> Household:
+## `design` (see FamilyDesign) is the family the player drew up, when they did: their names, looks and traits are used.
+static func create(world: WorldState, size: int = SIZE, design: Dictionary = {}) -> Household:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = world.world_seed * 7919 + 17
 	var household := Household.new()
 	household.coins = Economy.start_coins()
 	var family := PersonFactory.pick_text(rng, "names", "family", "list", ["Smith"])
+	var members: Array = design.get("members", [])
+	if not members.is_empty():
+		family = str(design.get("family", family)).strip_edges()
+		size = members.size()
 	var used_names: Array[String] = []
+	var index := 0
 	for spot in _spawn_tiles(world, size):
 		var pawn := PersonFactory.make(rng, family, used_names)
+		if index < members.size():
+			FamilyDesign.apply(pawn, members[index], family)
+		index += 1
 		pawn.home_lot = WorldState.HOME_LOT
 		pawn.tile = spot
 		pawn.step_to = spot

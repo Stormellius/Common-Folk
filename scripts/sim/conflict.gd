@@ -27,10 +27,10 @@ static func defense(sim: Simulation) -> Dictionary:
 		if def.get("satisfies", {}).has("hunger"):
 			food += 1
 		posts += float(def.get("defense", 0.0))
-	var able := 0
+	var able := 0.0
 	for pawn in sim.town.pawns:
 		if pawn.adult and pawn.illness == "":
-			able += 1
+			able += Traits.mult(pawn, "defense")
 	var parts := {
 		"supplies": minf(float(food) * float(config.get("supplies_weight", 0.0)), float(config.get("supplies_cap", 99))),
 		"readiness": float(able) * float(config.get("readiness_weight", 0.0)),
