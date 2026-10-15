@@ -1,5 +1,5 @@
 {
- "note": "SpriteCook assets used by this project. asset_id is the stable id; use mcp list_recent_assets to recover links. api.spritecook.ai must be on the environment's allowed domains for downloads.",
+ "note": "SpriteCook assets used by this project. asset_id is the stable id; use mcp list_recent_assets to recover links. api.spritecook.ai must be on the environment's allowed domains for downloads. people layers: see tools/people_sets.json.",
  "assets": [
   {
    "asset_id": "f8d71633-9ec4-484a-bd93-b5d8cfb55096",

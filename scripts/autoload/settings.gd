@@ -26,7 +26,7 @@ var effects_volume := 0.8
 ## Painted pictures (assets/art) where there are some, or everything drawn by code (see SpriteBank).
 var illustrated_art := true
 ## People as painted pictures too (a preview: there are few of them yet), instead of drawn by code.
-var painted_characters := false
+var painted_characters := true
 
 
 func _ready() -> void:

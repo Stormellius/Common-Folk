@@ -113,6 +113,7 @@ static func outfit_for(pawn: Pawn, clothes: String = "casual") -> Dictionary:
 		outfit["belt"] = false  # the belt comes off as the belly grows
 	outfit["clothes"] = clothes
 	outfit["seed"] = seed
+	outfit["gender"] = pawn.gender
 	outfit["scarf"] = SCARF_COLORS[int(roll.call(13) * SCARF_COLORS.size()) % SCARF_COLORS.size()]
 	match clothes:
 		"undergarments", "sleepwear", "swim":
@@ -142,7 +143,7 @@ static func draw(ci: CanvasItem, look: Dictionary, facing: Vector2i, u: float, p
 	var bottom := Color(str(look.get("bottom", "#4a3d32")))
 	var style := int(look.get("hair_style", 0)) % HAIR_STYLES
 	var stage := str(outfit.get("stage", "adult"))
-	if SpriteBank.draw_person(ci, facing, u, phase, lying, outfit, breath):
+	if SpriteBank.draw_person(ci, look, facing, u, phase, lying, outfit, breath):
 		return
 	var clothes := str(outfit.get("clothes", "casual"))
 	match clothes:

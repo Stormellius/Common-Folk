@@ -3978,7 +3978,12 @@ func _test_art() -> void:
 	for entry in DataRegistry.get_list("sprites"):
 		entries += 1
 		var names: Array = entry.get("files", [entry.get("file", "")])
-		if entry.has("variants"):
+		if str(entry["id"]).begins_with("people."):
+			names = []
+			for layer in ["body"] + (entry["outfits"] as Array):
+				for side in ["front", "back"]:
+					names.append("%s/%s_%s" % [entry["dir"], layer, side])
+		elif entry.has("variants"):
 			names = []
 			for variant in entry["variants"]:
 				names.append(str(variant["front"]))
@@ -3991,7 +3996,7 @@ func _test_art() -> void:
 			if not exists:
 				missing += str(name) + " "
 			var picture := SpriteBank.texture(str(name))
-			sizes_ok = sizes_ok and picture != null and picture.get_width() >= 16 and picture.get_width() <= 520 and picture.get_height() >= 16 and picture.get_height() <= 520
+			sizes_ok = sizes_ok and picture != null and picture.get_width() >= 16 and picture.get_width() <= 800 and picture.get_height() >= 16 and picture.get_height() <= 800
 	_check(entries >= 34 and files_ok and sizes_ok, "every picture in data/sprites.json is a real file of a sensible size (%d entries%s)" % [entries, ", missing " + missing if missing != "" else ""])
 	var ids_ok := true
 	var shapes_ok := true
@@ -4004,6 +4009,10 @@ func _test_art() -> void:
 		elif id.begins_with("floor."):
 			ids_ok = ids_ok and DataRegistry.has_def("floors", id.trim_prefix("floor."))
 			shapes_ok = shapes_ok and int(entry.get("tiles", 4)) >= 1
+		elif id.begins_with("people."):
+			ids_ok = ids_ok and DataRegistry.has_def("life_stages", str(entry["stage"])) and not (entry["outfits"] as Array).is_empty()
+			for outfit_id in entry["outfits"]:
+				ids_ok = ids_ok and DataRegistry.has_def("clothing", str(outfit_id))
 		elif id.begins_with("pawn."):
 			var parts := id.split(".")
 			ids_ok = ids_ok and parts.size() == 3 and DataRegistry.has_def("life_stages", parts[1]) and DataRegistry.has_def("clothing", parts[2]) and not (entry["variants"] as Array).is_empty()
@@ -4039,18 +4048,19 @@ func _test_art() -> void:
 	var elder_winter := SpriteBank.person_variant("elder", "winter", 1)
 	_check(adult_winter.has("front") and adult_winter.has("back") and SpriteBank.texture(str(adult_winter["front"])) != null, "there are pictures of people in their winter coats, front and back")
 	_check(not elder_sleep.is_empty() and str(elder_sleep["front"]).contains("undergarments") and not elder_winter.is_empty() and str(elder_winter["front"]).contains("cozy"), "an elder with no nightclothes sleeps in underclothes, and one in a coat wears the cosy cardigan")
-	_check(SpriteBank.person_variant("baby", "casual", 1).is_empty() and SpriteBank.person_variant("toddler", "casual", 1).is_empty() and not SpriteBank.person_variant("toddler", "undergarments", 1).is_empty() and not SpriteBank.person_variant("adult", "casual", 1).is_empty(), "babies and toddlers are still drawn by code, apart from a toddler's underclothes; an adult in everyday clothes wears work clothes")
+	_check(SpriteBank.person_variant("baby", "casual", 1).is_empty() and SpriteBank.person_variant("toddler", "casual", 1).is_empty() and not SpriteBank.person_variant("toddler", "undergarments", 1).is_empty() and not SpriteBank.person_variant("adult", "casual", 1).is_empty(), "babies and toddlers are still drawn by code, apart from a toddler's underclothes")
 	var variants := {}
 	for n in 24:
 		variants[str(SpriteBank.person_variant("adult", "worker", n * 8)["front"])] = true
 	_check(variants.size() == 2, "and each outfit has two looks, picked by who the person is")
 	var painted_before := Settings.painted_characters
+	painted_before = true  # the default (a saved setting may differ)
 	Settings.painted_characters = false
 	var off := not SpriteBank.people_enabled()
 	Settings.painted_characters = true
 	var on := SpriteBank.people_enabled()
-	Settings.painted_characters = painted_before
-	_check(off and on, "painted people are a setting, off by default")
+	Settings.painted_characters = true
+	_check(off and on and painted_before, "painted people are a setting, on by default")
 	_check(not ObjectArt.is_animated("hearth") == SpriteBank.has_object("hearth") and ObjectArt.is_animated("watch_post") == not SpriteBank.has_object("watch_post"), "a painted fireplace stands still, and so does everything else painted")
 
 

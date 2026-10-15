@@ -68,5 +68,11 @@
   {"id": "object.herb_bed", "files": ["props/herb_bed"], "fit": [1.1, 0.8], "base": 0.5},
   {"id": "object.quarry_face", "files": ["props/quarry_face"], "fit": [1.15, 1.15], "base": 0.5},
   {"id": "object.fishing_spot", "files": ["props/jetty"], "fit": [1.0, 1.0], "base": 0.5, "shadow": false},
-  {"id": "object.field_plot", "files": ["props/field_stubble"], "fit": [1.15, 0.95], "base": 0.5, "shadow": false, "stages": ["props/field_stubble", "props/field_seedlings", "props/field_growing", "props/field_ripe", "props/field_stubble"]}
+  {"id": "object.field_plot", "files": ["props/field_stubble"], "fit": [1.15, 0.95], "base": 0.5, "shadow": false, "stages": ["props/field_stubble", "props/field_seedlings", "props/field_growing", "props/field_ripe", "props/field_stubble"]},
+  {"id": "people.adult_male", "stage": "adult", "gender": "male", "dir": "people/adult_male", "outfits": ["casual", "formal", "sleepwear", "winter", "worker"], "skin": "#f0b890"},
+  {"id": "people.adult_female", "stage": "adult", "gender": "female", "dir": "people/adult_female", "outfits": ["casual", "formal", "sleepwear", "winter", "worker"], "skin": "#f0b890"},
+  {"id": "people.elder_male", "stage": "elder", "gender": "male", "dir": "people/elder_male", "outfits": ["casual", "formal", "sleepwear", "winter"], "skin": "#f0b890"},
+  {"id": "people.elder_female", "stage": "elder", "gender": "female", "dir": "people/elder_female", "outfits": ["casual", "formal", "sleepwear", "winter"], "skin": "#f0b890"},
+  {"id": "people.youth", "stage": "youth", "gender": "any", "dir": "people/youth", "outfits": ["casual", "formal", "sleepwear", "winter", "worker"], "skin": "#f0b890"},
+  {"id": "people.child", "stage": "child", "gender": "any", "dir": "people/child", "outfits": ["casual", "formal", "sleepwear", "winter"], "skin": "#f0b890"}
 ]
