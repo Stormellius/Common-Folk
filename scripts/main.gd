@@ -28,6 +28,7 @@ var _loaded_view: Dictionary = {}  # the camera of the save just loaded
 @onready var object_layer: ObjectLayer = $ObjectLayer
 @onready var site_layer: SiteLayer = $SiteLayer
 @onready var roof_layer: RoofLayer = $RoofLayer
+@onready var tree_layer: TreeLayer = $TreeLayer
 @onready var build: BuildController = $BuildController
 @onready var pawn_layer: PawnLayer = $PawnLayer
 @onready var tile_cursor: TileCursor = $TileCursor
@@ -609,6 +610,7 @@ func _show_world(new_world: WorldState, household: Household, town: Household = 
 	town_labels.bind(world)
 	build.bind(sim)
 	audio.bind(sim, camera)
+	tree_layer.bind(world, camera, map_view)
 	hud.close_action_menu()
 	hud.set_household(household)
 	camera.set_world_size(Vector2(world.width, world.height) * MapView.TILE_SIZE)

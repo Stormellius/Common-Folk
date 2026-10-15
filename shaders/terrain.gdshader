@@ -16,6 +16,7 @@ uniform sampler2D tile_data : filter_nearest, repeat_disable;
 uniform sampler2D palette : filter_nearest, repeat_disable;
 uniform ivec2 map_size = ivec2(1, 1);
 uniform float tile_px = 32.0;
+uniform float painted_trees = 0.0;       // 1 when painted trees are drawn over the forest instead
 uniform vec3 foliage_tint = vec3(1.0);   // season color applied to grass, forest and leaves
 uniform float snow : hint_range(0.0, 1.0) = 0.0;
 uniform float detail : hint_range(0.0, 1.0) = 1.0;  // fades fine texture when zoomed out
@@ -328,7 +329,7 @@ void fragment() {
 	for (int dy = -1; dy <= 1; dy++) {
 		for (int dx = -1; dx <= 1; dx++) {
 			ivec2 nc = pc + ivec2(dx, dy);
-			if (tile_style(tile_index(nc)) != 5) {
+			if (tile_style(tile_index(nc)) != 5 || painted_trees > 0.5) {
 				continue;
 			}
 			vec2 c;
@@ -344,7 +345,7 @@ void fragment() {
 		for (int dx = -1; dx <= 1; dx++) {
 			ivec2 nc = pc + ivec2(dx, dy);
 			int nidx = tile_index(nc);
-			if (tile_style(nidx) != 5) {
+			if (tile_style(nidx) != 5 || painted_trees > 0.5) {
 				continue;
 			}
 			vec2 c;

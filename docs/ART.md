@@ -91,3 +91,6 @@ would be the next step up.
   once a woman's bump shows (earlier months use the normal set, with the code-drawn bump when painted people are off).
 * **Wardrobe**: a buildable object; right-click it to send someone there to change into an outfit (or back to dressing for the weather).
   Their outfit stays until they change again, except in bed, and their body look is never touched.
+* **Trees**: `TreeLayer` draws painted pines, oaks and birches over forest tiles when the camera is zoomed in (zoom >= 0.75); the terrain
+  shader's own trees take over when zoomed out. Oaks and birches turn autumn orange and bare in winter.
+* **Goods icons**: the stockpile in the HUD shows a painted icon and count for each good with `goods/<id>` art; tools stay as words.

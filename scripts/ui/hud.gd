@@ -72,6 +72,8 @@ var _purse_label: Label
 var _realm_label: Label
 var _place_label: Label
 var _stock_label: Label
+var _goods_row: HFlowContainer
+var _goods_shown := {}
 var _animals_label: Label
 var _building_label: Label
 var _mood_bar: ProgressBar
@@ -130,8 +132,51 @@ func set_place(text: String) -> void:
 ## The household's purse, shown under the clock, and what it has gathered.
 func set_purse(coins: int, stock: Dictionary = {}) -> void:
 	_purse_label.text = "Purse  %s" % Economy.format(coins)
-	var held := Economy.goods_text(stock)
-	_stock_label.text = held if held != "" else "Nothing stockpiled"
+	_show_goods(stock)
+
+
+## The stockpile: a painted icon and a count for each good that has an icon, and words for the tools and the rest.
+func _show_goods(stock: Dictionary) -> void:
+	var painted := Settings.illustrated_art
+	var key := {}
+	for item_id in stock:
+		key[item_id] = stock[item_id]
+	key["_painted"] = painted
+	if key == _goods_shown:
+		return
+	_goods_shown = key
+	for child in _goods_row.get_children():
+		child.queue_free()
+	var words: Array[String] = []
+	for item_id in Economy.resource_ids():
+		var count := int(stock.get(item_id, 0))
+		if count <= 0:
+			continue
+		var icon := SpriteBank.texture("goods/" + str(item_id)) if painted else null
+		if icon == null:
+			words.append("%d %s" % [count, Economy.resource_name(item_id).to_lower()])
+			continue
+		var cell := HBoxContainer.new()
+		cell.add_theme_constant_override("separation", 2)
+		cell.tooltip_text = Economy.resource_name(item_id)
+		var picture := TextureRect.new()
+		picture.texture = icon
+		picture.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		picture.custom_minimum_size = Vector2(24, 24)
+		picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		picture.mouse_filter = Control.MOUSE_FILTER_PASS
+		cell.add_child(picture)
+		var number := _make_label(str(count), "")
+		number.add_theme_font_size_override("font_size", 13)
+		number.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cell.add_child(number)
+		_goods_row.add_child(cell)
+	for tool_id in Skills.tool_ids():
+		if int(stock.get(tool_id, 0)) > 0:
+			words.append("%d %s" % [int(stock[tool_id]), Skills.tool_name(tool_id).to_lower()])
+	_stock_label.text = ", ".join(words) if not words.is_empty() else ("" if _goods_row.get_child_count() > 0 else "Nothing stockpiled")
+	_stock_label.visible = _stock_label.text != ""
 
 
 ## The animals the household keeps, under the stockpile (nothing shown when there are none).
@@ -482,6 +527,11 @@ func _build_clock_panel() -> void:
 	_stock_label.add_theme_font_size_override("font_size", 12)
 	_stock_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_stock_label.custom_minimum_size = Vector2(214, 0)
+	_goods_row = HFlowContainer.new()
+	_goods_row.add_theme_constant_override("h_separation", 8)
+	_goods_row.add_theme_constant_override("v_separation", 2)
+	_goods_row.custom_minimum_size = Vector2(214, 0)
+	box.add_child(_goods_row)
 	box.add_child(_stock_label)
 	_animals_label = _make_label("", "DimLabel")
 	_animals_label.add_theme_font_size_override("font_size", 12)

@@ -1,4 +1,4 @@
-[gd_scene load_steps=23 format=3]
+[gd_scene load_steps=24 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/view/map_view.gd" id="2_map"]
@@ -21,6 +21,7 @@
 [ext_resource type="Script" path="res://scripts/view/site_layer.gd" id="19_sites"]
 [ext_resource type="Script" path="res://scripts/view/roof_layer.gd" id="20_roofs"]
 [ext_resource type="Script" path="res://scripts/audio/audio_director.gd" id="21_audio"]
+[ext_resource type="Script" path="res://scripts/view/tree_layer.gd" id="22_trees"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
@@ -48,6 +49,9 @@ script = ExtResource("7_pawns")
 
 [node name="FireLayer" type="Node2D" parent="."]
 script = ExtResource("18_fire")
+
+[node name="TreeLayer" type="Node2D" parent="."]
+script = ExtResource("22_trees")
 
 [node name="RoofLayer" type="Node2D" parent="."]
 script = ExtResource("20_roofs")
