@@ -279,12 +279,12 @@ func _update_baby_chip(baby: Pawn) -> void:
 
 
 ## Shows the selected person's name, what they are doing and their need bars (hidden if null).
-func show_pawn(pawn: Pawn, activity: String, job: String = "", relations: Array[Dictionary] = [], dreams: Dictionary = {}) -> void:
+func show_pawn(pawn: Pawn, activity: String, job: String = "", relations: Array[Dictionary] = [], dreams: Dictionary = {}, worn: String = "") -> void:
 	_needs_panel.visible = pawn != null
 	if pawn == null:
 		return
 	_needs_name.text = pawn.display_name
-	_needs_age.text = Life.describe_age(pawn) + (", née %s" % pawn.maiden_name.get_slice(" ", 1) if pawn.maiden_name != "" and pawn.maiden_name != pawn.display_name else "")
+	_needs_age.text = Life.describe_age(pawn) + (", née %s" % pawn.maiden_name.get_slice(" ", 1) if pawn.maiden_name != "" and pawn.maiden_name != pawn.display_name else "") + (", in %s" % Clothing.name_of(worn).to_lower() if worn != "" else "")
 	var trait_names: Array[String] = []
 	for trait_id in pawn.traits:
 		trait_names.append(str(DataRegistry.get_def("traits", trait_id).get("name", trait_id)))

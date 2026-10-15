@@ -172,7 +172,7 @@ func step(motion_steps: int = 1) -> void:
 	for pawn in everyone:
 		if pawn.is_infant() or pawn.is_dying():
 			continue  # carried by the household, or lying still until Death comes
-		var cause := _drain_needs(pawn, Shelter.drain_multipliers(world, pawn, Life.drain_multipliers(pawn, Pregnancy.drain_multipliers(pawn, Illness.drain_multipliers(pawn, season_multipliers)))))
+		var cause := _drain_needs(pawn, Clothing.drain_multipliers(self, pawn, Shelter.drain_multipliers(world, pawn, Life.drain_multipliers(pawn, Pregnancy.drain_multipliers(pawn, Illness.drain_multipliers(pawn, season_multipliers))))))
 		if cause != "":
 			Mortality.fall(self, pawn, cause)
 			continue

@@ -158,7 +158,8 @@ func _unhandled_input(event: InputEvent) -> void:
 ## ghost = 1: a townsperson has died, and their ghost walks tonight,
 ## screen = a menu to open at the start: pause, save, load, settings, new, name, families or game_over,
 ## fire = 1: the nearest thing that can burn to the selected person catches alight,
-## dreams = 1: the selected person is partway up an ambition and has two wishes.
+## dreams = 1: the selected person is partway up an ambition and has two wishes,
+## painted = 1: people drawn as painted pictures (a preview), code_art = 1: everything drawn by code, for this run.
 ## Handy for screenshots and testing.
 func _launch_option(name: String) -> String:
 	var prefix := "--%s=" % name
@@ -240,6 +241,10 @@ func _apply_launch_options() -> void:
 		_start_demo_caravan()
 	if _launch_option("plans") != "" and sim != null:
 		_start_demo_plans(int(_launch_option("plans")))
+	if _launch_option("painted") != "":
+		Settings.painted_characters = _launch_option("painted") == "1"  # for this run only
+	if _launch_option("code_art") != "":
+		Settings.illustrated_art = _launch_option("code_art") != "1"
 	if _launch_option("dreams") != "" and sim != null and sim.household.selected() != null:
 		_start_demo_dreams(sim.household.selected())
 	if _launch_option("wedding") != "" and sim != null and sim.household.selected() != null:
@@ -615,7 +620,7 @@ func _process(_delta: float) -> void:
 	if sim != null and _in_game:
 		hud.update_household_status(sim.household)
 		var chosen := sim.household.selected()
-		hud.show_pawn(chosen, sim.describe_activity(chosen) if chosen != null else "", sim.job_text(chosen) if chosen != null else "", sim.relationship_lines(chosen) if chosen != null else [], Ambitions.summary(sim, chosen) if chosen != null else {})
+		hud.show_pawn(chosen, sim.describe_activity(chosen) if chosen != null else "", sim.job_text(chosen) if chosen != null else "", sim.relationship_lines(chosen) if chosen != null else [], Ambitions.summary(sim, chosen) if chosen != null else {}, Clothing.worn(sim, chosen) if chosen != null else "")
 		hud.set_events(sim.events.names())
 		hud.set_purse(sim.household.coins, sim.household.stock)
 		hud.set_animals(Fauna.kept_text(sim))

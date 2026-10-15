@@ -521,6 +521,314 @@
      ]
     }
    }
+  },
+  {
+   "source": "assets/source/sheet_life_stages_1.webp",
+   "out": "assets/art",
+   "pad": 2,
+   "crops": {
+    "pawns/toddler_undergarments_a_front": [
+     162,
+     68,
+     234,
+     182
+    ],
+    "pawns/toddler_undergarments_a_back": [
+     234,
+     74,
+     296,
+     182
+    ],
+    "pawns/child_undergarments_a_front": [
+     312,
+     58,
+     394,
+     184
+    ],
+    "pawns/child_undergarments_a_back": [
+     396,
+     56,
+     460,
+     184
+    ],
+    "pawns/youth_undergarments_a_front": [
+     472,
+     40,
+     552,
+     186
+    ],
+    "pawns/youth_undergarments_a_back": [
+     552,
+     40,
+     628,
+     186
+    ],
+    "pawns/adult_undergarments_a_front": [
+     640,
+     34,
+     728,
+     188
+    ],
+    "pawns/adult_undergarments_b_front": [
+     728,
+     34,
+     812,
+     188
+    ],
+    "pawns/elder_undergarments_a_front": [
+     822,
+     54,
+     910,
+     188
+    ],
+    "pawns/infant_sleepwear_a_front": [
+     12,
+     692,
+     88,
+     792
+    ],
+    "pawns/infant_sleepwear_a_back": [
+     100,
+     692,
+     164,
+     792
+    ],
+    "pawns/infant_sleepwear_b_front": [
+     12,
+     804,
+     92,
+     908
+    ],
+    "pawns/infant_sleepwear_b_back": [
+     96,
+     804,
+     168,
+     904
+    ],
+    "pawns/child_casual_a_front": [
+     0,
+     344,
+     90,
+     454
+    ],
+    "pawns/child_casual_a_back": [
+     90,
+     344,
+     180,
+     454
+    ],
+    "pawns/child_casual_b_front": [
+     0,
+     454,
+     90,
+     564
+    ],
+    "pawns/child_casual_b_back": [
+     90,
+     454,
+     180,
+     564
+    ],
+    "pawns/youth_casual_a_front": [
+     196,
+     332,
+     292,
+     448
+    ],
+    "pawns/youth_casual_a_back": [
+     292,
+     332,
+     388,
+     448
+    ],
+    "pawns/youth_casual_b_front": [
+     196,
+     448,
+     292,
+     564
+    ],
+    "pawns/youth_casual_b_back": [
+     292,
+     448,
+     388,
+     564
+    ],
+    "pawns/adult_worker_a_front": [
+     404,
+     324,
+     498,
+     444
+    ],
+    "pawns/adult_worker_a_back": [
+     498,
+     324,
+     592,
+     444
+    ],
+    "pawns/adult_worker_b_front": [
+     404,
+     444,
+     498,
+     564
+    ],
+    "pawns/adult_worker_b_back": [
+     498,
+     444,
+     592,
+     564
+    ],
+    "pawns/adult_winter_a_front": [
+     608,
+     320,
+     704,
+     442
+    ],
+    "pawns/adult_winter_a_back": [
+     704,
+     320,
+     800,
+     442
+    ],
+    "pawns/adult_winter_b_front": [
+     608,
+     442,
+     704,
+     564
+    ],
+    "pawns/adult_winter_b_back": [
+     704,
+     442,
+     800,
+     564
+    ],
+    "pawns/elder_cozy_a_front": [
+     812,
+     324,
+     904,
+     444
+    ],
+    "pawns/elder_cozy_a_back": [
+     904,
+     324,
+     996,
+     444
+    ],
+    "pawns/elder_cozy_b_front": [
+     812,
+     444,
+     904,
+     564
+    ],
+    "pawns/elder_cozy_b_back": [
+     904,
+     444,
+     996,
+     564
+    ],
+    "pawns/youth_sleepwear_a_front": [
+     200,
+     680,
+     292,
+     794
+    ],
+    "pawns/youth_sleepwear_a_back": [
+     292,
+     680,
+     384,
+     794
+    ],
+    "pawns/youth_sleepwear_b_front": [
+     200,
+     794,
+     292,
+     908
+    ],
+    "pawns/youth_sleepwear_b_back": [
+     292,
+     794,
+     384,
+     908
+    ],
+    "pawns/adult_formal_a_front": [
+     408,
+     664,
+     500,
+     786
+    ],
+    "pawns/adult_formal_a_back": [
+     500,
+     664,
+     592,
+     786
+    ],
+    "pawns/adult_formal_b_front": [
+     408,
+     786,
+     500,
+     908
+    ],
+    "pawns/adult_formal_b_back": [
+     500,
+     786,
+     592,
+     908
+    ],
+    "pawns/adult_warm_a_front": [
+     612,
+     664,
+     706,
+     786
+    ],
+    "pawns/adult_warm_a_back": [
+     706,
+     664,
+     800,
+     786
+    ],
+    "pawns/adult_warm_b_front": [
+     612,
+     786,
+     706,
+     908
+    ],
+    "pawns/adult_warm_b_back": [
+     706,
+     786,
+     800,
+     908
+    ],
+    "pawns/elder_traditional_a_front": [
+     812,
+     668,
+     904,
+     788
+    ],
+    "pawns/elder_traditional_a_back": [
+     904,
+     668,
+     996,
+     788
+    ],
+    "pawns/elder_traditional_b_front": [
+     812,
+     788,
+     904,
+     908
+    ],
+    "pawns/elder_traditional_b_back": [
+     904,
+     788,
+     996,
+     908
+    ],
+    "pawns/elder_undergarments_a_back": [
+     910,
+     54,
+     996,
+     188
+    ]
+   },
+   "clean": true
   }
  ]
 }

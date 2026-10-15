@@ -136,6 +136,12 @@ Folk are born, grow up, grow old and die, as in the Sims, with a medieval face o
 - **One-shots**: the chapel bell for a service, a toll for a death, a baby's cry, coins, a chime for a granted wish or a step toward an ambition, thunder in a heavy rain, a click on every button
 - **Settings**: volume, music, wind and town, work and effects, each a slider, kept between runs. Audio buses: Music, Ambience, Effects under Master
 
+## Painted art and clothing (done, and growing)
+
+- **Painted pictures** (see [docs/ART.md](docs/ART.md)): sheets made with SpriteCook are kept in `assets/source`, cut into sprites by `tools/build_art.py` and used wherever `data/sprites.json` names one: beds, hearths, ovens, wells, barrels, tables, crates, bushes, plank and flagstone floors, and seven new decor objects (chair, chest, crates, sacks, clay jar, rug, tall grass). Everything else, and everything with the code-drawn look chosen in Settings, is still drawn by code
+- **Painted people (preview)**: every life stage in underclothes and the sheet's outfits, front and back; off by default until there are more looks
+- **Clothing** (`data/clothing.json`, `data/wardrobe.json`): eight outfits chosen by what a person is doing and how cold it is (nightclothes in bed, underclothes washing, good clothes for a wedding or church, a winter coat or warm clothes in the cold, work clothes at a job); each keeps a share of their warmth. The code-drawn people change to match, and the panel says what they wear. Swimwear is ready for when there is swimming
+
 ## Later
 
-- Sprites drawn by hand to replace the code-drawn art, one piece at a time
+- More painted art, one sheet at a time: everything in the "What is missing" table of [docs/ART.md](docs/ART.md), and a full set of people (both sexes, several looks, side views, a walk cycle)

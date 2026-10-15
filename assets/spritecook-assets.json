@@ -1,0 +1,25 @@
+{
+ "note": "SpriteCook assets used by this project. asset_id is the stable id; use mcp list_recent_assets to recover links. api.spritecook.ai must be on the environment's allowed domains for downloads.",
+ "assets": [
+  {
+   "asset_id": "f8d71633-9ec4-484a-bd93-b5d8cfb55096",
+   "label": "Asset pack: villagers, furniture, props, floor textures (the style reference for everything else)",
+   "file": "assets/source/pack_props_1.webp",
+   "sha12": "2aea690b0e74"
+  },
+  {
+   "asset_id": "f2bdc37a-c0db-49fb-9328-8951cfad10d5",
+   "label": "Life stages in undergarments and outfits, front and back",
+   "file": "assets/source/sheet_life_stages_1.webp",
+   "sha12": "df88a85f6bc1"
+  },
+  {
+   "asset_id": "81f96e3b-e0a8-4465-8daa-b321813c38a4",
+   "label": "Concept art the pack was made from (a game screenshot, 1600x900)"
+  },
+  {
+   "asset_id": "0d04a5f0-22cb-471c-89f2-09b2e67559dc",
+   "label": "Test: a cooking pot on a tripod over a fire (generated with the pack as the style reference; not downloaded yet)"
+  }
+ ]
+}

@@ -43,6 +43,7 @@ func _ready() -> void:
 	_section("families", _test_families)
 	_section("audio", _test_audio)
 	_section("art", _test_art)
+	_section("clothing", _test_clothing)
 	_section("events", _test_events)
 	_section("realm", _test_realm)
 	_section("faith_and_illness", _test_faith_and_illness)
@@ -3977,6 +3978,12 @@ func _test_art() -> void:
 	for entry in DataRegistry.get_list("sprites"):
 		entries += 1
 		var names: Array = entry.get("files", [entry.get("file", "")])
+		if entry.has("variants"):
+			names = []
+			for variant in entry["variants"]:
+				names.append(str(variant["front"]))
+				if variant.has("back"):
+					names.append(str(variant["back"]))
 		for name in names:
 			var path := "res://assets/art/%s.png" % str(name)
 			var exists := ResourceLoader.exists(path)
@@ -3985,7 +3992,7 @@ func _test_art() -> void:
 				missing += str(name) + " "
 			var picture := SpriteBank.texture(str(name))
 			sizes_ok = sizes_ok and picture != null and picture.get_width() >= 16 and picture.get_width() <= 400 and picture.get_height() >= 16 and picture.get_height() <= 400
-	_check(entries >= 18 and files_ok and sizes_ok, "every picture in data/sprites.json is a real file of a sensible size (%d entries%s)" % [entries, ", missing " + missing if missing != "" else ""])
+	_check(entries >= 34 and files_ok and sizes_ok, "every picture in data/sprites.json is a real file of a sensible size (%d entries%s)" % [entries, ", missing " + missing if missing != "" else ""])
 	var ids_ok := true
 	var shapes_ok := true
 	for entry in DataRegistry.get_list("sprites"):
@@ -3997,9 +4004,12 @@ func _test_art() -> void:
 		elif id.begins_with("floor."):
 			ids_ok = ids_ok and DataRegistry.has_def("floors", id.trim_prefix("floor."))
 			shapes_ok = shapes_ok and int(entry.get("tiles", 4)) >= 1
+		elif id.begins_with("pawn."):
+			var parts := id.split(".")
+			ids_ok = ids_ok and parts.size() == 3 and DataRegistry.has_def("life_stages", parts[1]) and DataRegistry.has_def("clothing", parts[2]) and not (entry["variants"] as Array).is_empty()
 		else:
 			ids_ok = false
-	_check(ids_ok and shapes_ok, "and each is for an object or floor that exists, with a sensible size and place")
+	_check(ids_ok and shapes_ok, "and each is for an object, floor or person (a life stage in an outfit) that exists, with a sensible size and place")
 	var decor_ok := true
 	for def_id in ["chair", "chest", "crates", "sacks", "jar", "rug", "tuft"]:
 		var def := DataRegistry.get_def("objects", def_id)
@@ -4023,7 +4033,115 @@ func _test_art() -> void:
 	var drawn := not SpriteBank.has_object("bed") and SpriteBank.object_entry("bed").is_empty()
 	Settings.illustrated_art = before
 	_check(painted and drawn, "painted objects are used by default, and none with the code-drawn look chosen (a lute has no picture)")
+	# People: painted ones where there is a picture, falling back to a likeness in other clothes, else code.
+	var adult_winter := SpriteBank.person_variant("adult", "winter", 1)
+	var elder_sleep := SpriteBank.person_variant("elder", "sleepwear", 1)
+	var elder_winter := SpriteBank.person_variant("elder", "winter", 1)
+	_check(adult_winter.has("front") and adult_winter.has("back") and SpriteBank.texture(str(adult_winter["front"])) != null, "there are pictures of people in their winter coats, front and back")
+	_check(not elder_sleep.is_empty() and str(elder_sleep["front"]).contains("undergarments") and not elder_winter.is_empty() and str(elder_winter["front"]).contains("cozy"), "an elder with no nightclothes sleeps in underclothes, and one in a coat wears the cosy cardigan")
+	_check(SpriteBank.person_variant("baby", "casual", 1).is_empty() and SpriteBank.person_variant("toddler", "casual", 1).is_empty() and not SpriteBank.person_variant("toddler", "undergarments", 1).is_empty() and not SpriteBank.person_variant("adult", "casual", 1).is_empty(), "babies and toddlers are still drawn by code, apart from a toddler's underclothes; an adult in everyday clothes wears work clothes")
+	var variants := {}
+	for n in 24:
+		variants[str(SpriteBank.person_variant("adult", "worker", n * 8)["front"])] = true
+	_check(variants.size() == 2, "and each outfit has two looks, picked by who the person is")
+	var painted_before := Settings.painted_characters
+	Settings.painted_characters = false
+	var off := not SpriteBank.people_enabled()
+	Settings.painted_characters = true
+	var on := SpriteBank.people_enabled()
+	Settings.painted_characters = painted_before
+	_check(off and on, "painted people are a setting, off by default")
 	_check(not ObjectArt.is_animated("hearth") == SpriteBank.has_object("hearth") and ObjectArt.is_animated("cooking_pot"), "a painted fireplace stands still, while the pot over a fire is still animated")
+
+
+func _test_clothing() -> void:
+	print("Clothing")
+	var ids := Clothing.outfit_ids()
+	var data_ok := ids.size() >= 8
+	for needed in ["undergarments", "sleepwear", "casual", "worker", "formal", "warm", "winter", "swim"]:
+		data_ok = data_ok and needed in ids and Clothing.warmth_of(needed) > 0.5 and Clothing.warmth_of(needed) < 1.3
+	var rules := Clothing.rules()
+	_check(data_ok and float(rules["winter_from"]) > float(rules["warm_from"]) and Clothing.warmth_of("winter") < Clothing.warmth_of("warm") and Clothing.warmth_of("warm") < Clothing.warmth_of("casual") and Clothing.warmth_of("casual") <= 1.0, "the wardrobe has an outfit for every occasion, and warmer ones keep more heat in")
+
+	var game := _open_field()
+	var sim: Simulation = game["sim"]
+	var world: WorldState = game["world"]
+	var anna: Pawn = game["anna"]
+	anna.tile = Vector2i(30, 25)
+	anna.adult = true
+	anna.age = 25
+	var worn_in := func(day: int, hour: int) -> String:
+		GameClock.set_time(day, hour)
+		return Clothing.worn(sim, anna)
+	_check(worn_in.call(3, 12) == "casual" and worn_in.call(20, 12) == "casual", "in spring and summer by day people wear everyday clothes")
+	_check(worn_in.call(33, 12) == "warm" and worn_in.call(3, 23) == "warm", "in autumn, and on a spring night, warm ones")
+	_check(worn_in.call(50, 12) == "winter" and worn_in.call(50, 23) == "winter", "in winter a coat")
+	var roof_id: String = DataRegistry.get_ids("roofs")[0]
+	world.set_roof(anna.tile, roof_id)
+	_check(worn_in.call(50, 12) == "casual" and worn_in.call(50, 23) == "warm", "but indoors in winter they take the coat off by day, and put on warm things at night")
+	world.set_roof(anna.tile, "")
+	GameClock.set_time(3, 12)
+	anna.pose = "lie"
+	_check(Clothing.worn(sim, anna) == "sleepwear" and worn_in.call(50, 12) == "sleepwear", "in bed, nightclothes, whatever the weather")
+	anna.pose = ""
+	var basin := world.add_object("wash_basin", Vector2i(31, 25))
+	anna.job_kind = "use"
+	anna.job_stage = "using"
+	anna.job_object = basin.id
+	_check(worn_in.call(3, 12) == "undergarments", "washing, underclothes")
+	var pew := world.add_object("pew", Vector2i(32, 25))
+	anna.job_object = pew.id
+	_check(worn_in.call(3, 12) == "formal", "at a pew, good clothes")
+	var block := world.add_object("chopping_block", Vector2i(33, 25))
+	anna.job_object = block.id
+	_check(worn_in.call(3, 12) == "worker" and worn_in.call(50, 12) == "winter", "at a chopping block, work clothes (or, in winter, the coat)")
+	anna.job_kind = "wed"
+	anna.job_stage = ""
+	_check(worn_in.call(3, 12) == "formal", "at a wedding, good clothes")
+	anna.job_kind = "work"
+	_check(worn_in.call(3, 12) == "worker", "on a shift, work clothes")
+	anna.age = 9
+	anna.adult = false
+	_check(worn_in.call(3, 12) == "casual", "unless they are a child")
+	anna.age = 25
+	anna.adult = true
+	anna.job_kind = ""
+	anna.wed_until = GameClock.tick + 600
+	_check(Clothing.worn(sim, anna) == "formal", "and for the day after one")
+	anna.wed_until = 0
+	var baby := _townsperson("Tiny Marsh", "female", 0, 4001)
+	_check(Clothing.worn(sim, baby) == "sleepwear", "babies are in their swaddling")
+
+	# Warmth.
+	GameClock.set_time(50, 12)
+	var cold := Clothing.drain_multipliers(sim, anna, { "warmth": 2.5, "hunger": 1.0 })
+	GameClock.set_time(3, 12)
+	var mild := Clothing.drain_multipliers(sim, anna, { "warmth": 1.0 })
+	anna.pose = "lie"
+	var in_bed := Clothing.drain_multipliers(sim, anna, { "warmth": 1.0 })
+	anna.pose = ""
+	_check(absf(float(cold["warmth"]) - 2.5 * Clothing.warmth_of("winter")) < 0.001 and float(cold["hunger"]) == 1.0 and absf(float(mild["warmth"]) - Clothing.warmth_of("casual")) < 0.001 and absf(float(in_bed["warmth"]) - Clothing.warmth_of("sleepwear")) < 0.001, "clothes change how fast warmth drains, and nothing else (a coat in winter: %.2f instead of 2.50)" % float(cold["warmth"]))
+	GameClock.set_time(50, 12)
+	anna.needs["warmth"] = 100.0
+	_minutes(sim, 60)
+	var coated_loss := 100.0 - float(anna.needs["warmth"])
+	_check(coated_loss > 1.0 and coated_loss < 2.0 * 2.5 * 1.0, "an hour out in a winter's day costs less warmth than it would unclothed (%.1f)" % coated_loss)
+
+	# How they look.
+	var look := _townsperson("Test Wearer", "male", 30, 4002)
+	look.look = { "skin": "#e0ac80", "hair": "#4a3220", "top": "#6a7a4a", "bottom": "#4a3d32", "hair_style": 0 }
+	var casual := PawnArt.outfit_for(look)
+	var night := PawnArt.outfit_for(look, "sleepwear")
+	var coat := PawnArt.outfit_for(look, "winter")
+	var formal := PawnArt.outfit_for(look, "formal")
+	var under := PawnArt.outfit_for(look, "undergarments")
+	_check(casual["clothes"] == "casual" and night["clothes"] == "sleepwear" and not night["belt"] and not night["apron"] and under["headwear"] == "" and bool(formal["trim"]) and not formal["belt"] and coat["clothes"] == "winter", "each outfit changes what is drawn: no belt or apron in bed, trim for good clothes")
+	var capped := 0
+	for n in 40:
+		var person := _townsperson("Winter %d" % n, "male" if n % 2 == 0 else "female", 30, 4100 + n)
+		person.look = look.look
+		capped += 1 if PawnArt.outfit_for(person, "winter")["headwear"] == "fur_cap" else 0
+	_check(capped > 8 and capped < 36, "and many people put on a fur cap in winter (%d of 40)" % capped)
 
 
 func _test_events() -> void:

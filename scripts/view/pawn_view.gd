@@ -34,6 +34,9 @@ var label_drop := 0.0:
 			label_drop = value
 			queue_redraw()
 
+## What they are wearing (an outfit id; the layer sets it each frame from Clothing).
+var clothes := "casual"
+
 var _phase := 0.0
 ## Townspeople's names are drawn a little dimmer than your household's.
 var townsfolk := false
@@ -92,7 +95,9 @@ func _draw() -> void:
 		draw_set_transform(Vector2(0.0, 4.0) * u, -0.35 if pawn.id % 2 == 0 else 0.35, Vector2.ONE)
 	if pawn.mount != 0:  # sitting in the saddle, a little above the ground
 		draw_set_transform(Vector2(0.0, -7.0) * u, 0.0, Vector2.ONE)
-	PawnArt.draw(self, pawn.look, pawn.facing, u, _phase * 0.5 if pawn.mount != 0 else _phase, asleep or fallen, PawnArt.outfit_for(pawn), breath)
+	var outfit := PawnArt.outfit_for(pawn, clothes)
+	outfit["fallen"] = fallen
+	PawnArt.draw(self, pawn.look, pawn.facing, u, _phase * 0.5 if pawn.mount != 0 else _phase, asleep or fallen, outfit, breath)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	if not pawn.carrying.is_empty() and not fallen and not asleep:
 		PawnArt.draw_carry(self, pawn.carrying, pawn.facing, u)

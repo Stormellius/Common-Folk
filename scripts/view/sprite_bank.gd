@@ -95,3 +95,77 @@ static func draw_floor(ci: CanvasItem, floor_id: String, rect: Rect2, cell: Vect
 		target = Rect2(Vector2(target.position.x, target.end.y), Vector2(target.size.x, -target.size.y))
 	ci.draw_texture_rect_region(picture, target, source)
 	return true
+
+
+# --- people ----------------------------------------------------------------------------------
+
+## What to wear instead, in order, when there is no picture of someone in an outfit at their age.
+const OUTFIT_FALLBACKS := {
+	"casual": ["worker"],
+	"worker": ["casual"],
+	"warm": ["winter", "casual", "worker"],
+	"winter": ["warm", "casual", "worker"],
+	"sleepwear": ["undergarments"],
+	"swim": ["undergarments"],
+}
+const PERSON_HEIGHT := 46.0  # a grown person, in units of 48 to the tile
+
+
+## Whether painted people are in use (a preview, off unless the player turns it on).
+static func people_enabled() -> bool:
+	return enabled() and Settings.painted_characters
+
+
+## The picture set for someone of this stage in these clothes: { "front", "back" (maybe) }, or empty when
+## there is none (babies, and a stage with no picture in any outfit that will do, are drawn by code).
+static func person_variant(stage: String, outfit_id: String, seed_value: int) -> Dictionary:
+	var order: Array = [outfit_id]
+	order.append_array(OUTFIT_FALLBACKS.get(outfit_id, []))
+	for candidate in order:
+		var entry := DataRegistry.get_def("sprites", "pawn.%s.%s" % [stage, candidate])
+		if not entry.is_empty() and not (entry["variants"] as Array).is_empty():
+			var variants: Array = entry["variants"]
+			return variants[posmod(seed_value >> 3, variants.size())]
+	return {}
+
+
+## Draws a person as a picture, walking with a bounce and squash (`phase`) and breathing when still, and
+## in bed showing only head and shoulders. Returns false (drawing nothing) when there is no picture, or
+## painted people are not in use, and the caller then draws them with code.
+static func draw_person(ci: CanvasItem, facing: Vector2i, u: float, phase: float, lying: bool, outfit: Dictionary, breath: float) -> bool:
+	if not people_enabled():
+		return false
+	var stage := str(outfit.get("stage", "adult"))
+	if stage == "baby":
+		return false
+	var seed_value := int(outfit.get("seed", 0))
+	var variant := person_variant(stage, str(outfit.get("clothes", "casual")), seed_value)
+	if variant.is_empty():
+		return false
+	var kind := PawnArt.facing_kind(facing)
+	var behind := kind == PawnArt.NORTH and not lying
+	var file := str(variant["back"]) if behind and variant.has("back") else str(variant["front"])
+	var picture := texture(file)
+	if picture == null:
+		return false
+	var fallen := bool(outfit.get("fallen", false))
+	var swing := sin(phase) if phase != 0.0 and not lying else 0.0
+	var squash := 1.0 + 0.045 * absf(swing) if phase != 0.0 else 1.0 + 0.012 * sin(breath)
+	var height := PERSON_HEIGHT * u * squash
+	var width := picture.get_width() * PERSON_HEIGHT * u / picture.get_height()
+	var side := kind == PawnArt.EAST or kind == PawnArt.WEST
+	if side:
+		width *= 0.9
+	var flip := -1.0 if kind == PawnArt.WEST else 1.0
+	var tint := Color.WHITE.darkened(0.04 - 0.10 * ObjectArt.hash01(seed_value, 3, 71))
+	if outfit.get("ill", false):
+		tint = tint.lerp(PawnArt.ILL_TINT, 0.30)
+	var feet := 14.0 * u - absf(swing) * 1.6 * u
+	var sway := swing * 1.1 * u
+	ci.draw_colored_polygon(PawnArt._ellipse_points(Vector2(2.0 * u, 13.0 * u), Vector2(12.0 * u, 5.0 * u)), SHADOW)
+	if lying and not fallen:  # tucked up in bed: head and shoulders over the blanket
+		var shown := 0.58
+		ci.draw_texture_rect_region(picture, Rect2(-width * 0.5, -25.0 * u, width, height * shown), Rect2(Vector2.ZERO, Vector2(picture.get_width(), picture.get_height() * shown)), tint)
+		return true
+	ci.draw_texture_rect(picture, Rect2(Vector2(-width * 0.5 * flip + sway, feet - height), Vector2(width * flip, height)), false, tint)
+	return true

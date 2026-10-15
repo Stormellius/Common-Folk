@@ -3,7 +3,8 @@ extends Node2D
 ## checking the code-drawn art at a glance. Needs a window (not --headless):
 ##   godot --path . res://tests/pawn_gallery.tscn -- --shot=gallery.png
 ## With --shot it saves the picture and quits; without it, it stays open. With --stages=1 it shows
-## the stages of life instead (baby to elder, men and women, and an expecting mother).
+## the stages of life instead (baby to elder, men and women, and an expecting mother). With
+## --outfits=1 it shows each outfit (see Clothing), and --painted=1 uses the painted people.
 
 const SCALE := 2.4
 const CELL := Vector2(140, 150)
@@ -12,6 +13,7 @@ const STAGE_AGES := [["baby", 0], ["toddler", 3], ["child", 8], ["youth", 15], [
 
 var _people: Array[Pawn] = []
 var _stages := false
+var _outfits := false
 
 
 func _ready() -> void:
@@ -43,6 +45,10 @@ func _ready() -> void:
 			shot = arg.trim_prefix("--shot=")
 		elif arg == "--stages=1":
 			_stages = true
+		elif arg == "--outfits=1":
+			_outfits = true
+		elif arg == "--painted=1":
+			Settings.painted_characters = true
 	if _stages:
 		_people.clear()
 		for gender in ["male", "female"]:
@@ -68,6 +74,18 @@ func _ready() -> void:
 			mother.pregnant_since = 0
 			mother.pregnancy_minutes = 1000
 			_people.append(mother)
+	if _outfits:
+		_people.clear()
+		for spec in [["male", 30, "peasant"], ["female", 30, "burgher"], ["male", 15, "peasant"], ["female", 8, "peasant"], ["male", 70, "peasant"], ["female", 68, "gentry"]]:
+			var pawn := Pawn.new()
+			pawn.id = _people.size() + 1
+			pawn.gender = spec[0]
+			pawn.age = spec[1]
+			pawn.adult = pawn.age >= 18
+			pawn.class_id = spec[2]
+			pawn.display_name = "%s %d" % [spec[0], spec[1]]
+			pawn.look = looks[(_people.size()) % looks.size()].duplicate()
+			_people.append(pawn)
 	if shot != "":
 		for frame in 6:
 			await get_tree().process_frame
@@ -79,6 +97,9 @@ func _draw() -> void:
 	var font := ThemeDB.fallback_font
 	if _stages:
 		_draw_stages(font)
+		return
+	if _outfits:
+		_draw_outfits(font)
 		return
 	for n in _people.size():
 		var pawn := _people[n]
@@ -111,3 +132,19 @@ func _draw_stages(font: Font) -> void:
 			PawnArt.draw(self, pawn.look, FACINGS[f], 1.0, 0.0, false, outfit)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		draw_string(font, origin + Vector2(0, 140), pawn.display_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.9))
+
+
+## One row for each outfit (data/clothing.json), a person of each stage across.
+func _draw_outfits(font: Font) -> void:
+	var row := 0
+	for outfit_id in Clothing.outfit_ids():
+		draw_string(font, Vector2(8, 46 + row * 82), outfit_id, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(1, 1, 1, 0.95))
+		for n in _people.size():
+			var pawn := _people[n]
+			var outfit := PawnArt.outfit_for(pawn, outfit_id)
+			var scale := SCALE * 0.8 * PawnArt.stage_scale(str(outfit["stage"]))
+			for f in 2:
+				draw_set_transform(Vector2(110 + n * 150 + f * 60, 46 + row * 82), 0.0, Vector2.ONE * scale)
+				PawnArt.draw(self, pawn.look, FACINGS[f * 2], 1.0, 0.0, false, outfit)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		row += 1

@@ -17,5 +17,21 @@
   {"id": "object.rug", "files": ["props/rug_red", "props/rug_runner_red", "props/rug_runner_green"], "fit": [1.5, 1.5], "base": 0.5, "shadow": false, "flat": true},
   {"id": "object.tuft", "files": ["props/grass_a", "props/grass_b", "props/grass_c", "props/grass_d", "props/grass_e"], "fit": [0.9, 0.9], "base": 0.48, "flip": true, "shadow": false},
   {"id": "floor.planks", "file": "floors/planks", "tiles": 4},
-  {"id": "floor.flagstone", "file": "floors/flagstone", "tiles": 4}
+  {"id": "floor.flagstone", "file": "floors/flagstone", "tiles": 4},
+  {"id": "pawn.toddler.undergarments", "variants": [{"front": "pawns/toddler_undergarments_a_front", "back": "pawns/toddler_undergarments_a_back"}]},
+  {"id": "pawn.child.undergarments", "variants": [{"front": "pawns/child_undergarments_a_front", "back": "pawns/child_undergarments_a_back"}]},
+  {"id": "pawn.child.casual", "variants": [{"front": "pawns/child_casual_a_front", "back": "pawns/child_casual_a_back"}, {"front": "pawns/child_casual_b_front", "back": "pawns/child_casual_b_back"}]},
+  {"id": "pawn.youth.undergarments", "variants": [{"front": "pawns/youth_undergarments_a_front", "back": "pawns/youth_undergarments_a_back"}]},
+  {"id": "pawn.youth.casual", "variants": [{"front": "pawns/youth_casual_a_front", "back": "pawns/youth_casual_a_back"}, {"front": "pawns/youth_casual_b_front", "back": "pawns/youth_casual_b_back"}]},
+  {"id": "pawn.youth.sleepwear", "variants": [{"front": "pawns/youth_sleepwear_a_front", "back": "pawns/youth_sleepwear_a_back"}, {"front": "pawns/youth_sleepwear_b_front", "back": "pawns/youth_sleepwear_b_back"}]},
+  {"id": "pawn.adult.undergarments", "variants": [{"front": "pawns/adult_undergarments_a_front"}, {"front": "pawns/adult_undergarments_b_front"}]},
+  {"id": "pawn.adult.worker", "variants": [{"front": "pawns/adult_worker_a_front", "back": "pawns/adult_worker_a_back"}, {"front": "pawns/adult_worker_b_front", "back": "pawns/adult_worker_b_back"}]},
+  {"id": "pawn.adult.winter", "variants": [{"front": "pawns/adult_winter_a_front", "back": "pawns/adult_winter_a_back"}, {"front": "pawns/adult_winter_b_front", "back": "pawns/adult_winter_b_back"}]},
+  {"id": "pawn.adult.formal", "variants": [{"front": "pawns/adult_formal_a_front", "back": "pawns/adult_formal_a_back"}, {"front": "pawns/adult_formal_b_front", "back": "pawns/adult_formal_b_back"}]},
+  {"id": "pawn.adult.warm", "variants": [{"front": "pawns/adult_warm_a_front", "back": "pawns/adult_warm_a_back"}, {"front": "pawns/adult_warm_b_front", "back": "pawns/adult_warm_b_back"}]},
+  {"id": "pawn.elder.undergarments", "variants": [{"front": "pawns/elder_undergarments_a_front", "back": "pawns/elder_undergarments_a_back"}]},
+  {"id": "pawn.elder.casual", "variants": [{"front": "pawns/elder_cozy_a_front", "back": "pawns/elder_cozy_a_back"}, {"front": "pawns/elder_cozy_b_front", "back": "pawns/elder_cozy_b_back"}]},
+  {"id": "pawn.elder.warm", "variants": [{"front": "pawns/elder_cozy_a_front", "back": "pawns/elder_cozy_a_back"}, {"front": "pawns/elder_cozy_b_front", "back": "pawns/elder_cozy_b_back"}]},
+  {"id": "pawn.elder.winter", "variants": [{"front": "pawns/elder_cozy_a_front", "back": "pawns/elder_cozy_a_back"}, {"front": "pawns/elder_cozy_b_front", "back": "pawns/elder_cozy_b_back"}]},
+  {"id": "pawn.elder.formal", "variants": [{"front": "pawns/elder_traditional_a_front", "back": "pawns/elder_traditional_a_back"}, {"front": "pawns/elder_traditional_b_front", "back": "pawns/elder_traditional_b_back"}]}
 ]
