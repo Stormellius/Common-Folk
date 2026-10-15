@@ -4009,6 +4009,8 @@ func _test_art() -> void:
 		elif id.begins_with("floor."):
 			ids_ok = ids_ok and DataRegistry.has_def("floors", id.trim_prefix("floor."))
 			shapes_ok = shapes_ok and int(entry.get("tiles", 4)) >= 1
+		elif id.begins_with("animal."):
+			ids_ok = ids_ok and DataRegistry.has_def("animals", id.trim_prefix("animal."))
 		elif id.begins_with("people."):
 			ids_ok = ids_ok and DataRegistry.has_def("life_stages", str(entry["stage"])) and not (entry["outfits"] as Array).is_empty()
 			for outfit_id in entry["outfits"]:
