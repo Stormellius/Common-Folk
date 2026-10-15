@@ -12,6 +12,8 @@ var _menu_tile := Vector2i.ZERO  # and which tile it was opened on
 var _loading := false           # true while a save is being put in place (no autosave then)
 ## False on the title screen, where the town behind is only to look at.
 var _in_game := false
+var _lot_picker := LotPicker.new()
+var _pending := {}   # the new game being set up: seed, start, lifespan, the family drawn
 var _speed_before_menu := 1     # the speed to go back to when the menus close
 var _to_name: Array[int] = []  # babies of your household still waiting for a name
 var _loaded_view: Dictionary = {}  # the camera of the save just loaded
@@ -51,6 +53,15 @@ func _ready() -> void:
 	build.tool_cleared.connect(hud.clear_build_selection)
 	build.message.connect(func(text: String) -> void: hud.show_message(text))
 	menus.new_game_requested.connect(_on_new_game_requested)
+	menus.land_confirmed.connect(_finish_new_game)
+	menus.land_cancelled.connect(_cancel_land)
+	menus.land_picked.connect(_on_land_picked)
+	_lot_picker.camera = camera
+	_lot_picker.visible = false
+	_lot_picker.picked.connect(func(lot_id: String) -> void:
+		menus.mark_land(lot_id)
+		_on_land_picked(lot_id))
+	add_child(_lot_picker)
 	menus.load_requested.connect(_on_load_requested)
 	menus.save_screen_requested.connect(func() -> void: menus.open_save(_default_save_name()))
 	menus.save_requested.connect(_on_save_requested)
@@ -458,6 +469,9 @@ func _open_screen(screen: String) -> void:
 		"create":
 			menus.open_new_game()
 			menus.open_create()
+		"land":
+			menus.open_new_game()
+			_on_new_game_requested(42, "bought", "normal")
 		"name":
 			var rng := RandomNumberGenerator.new()
 			rng.seed = 11
@@ -511,11 +525,54 @@ func _on_menus_closed() -> void:
 
 
 func _on_new_game_requested(world_seed: int, start_id: String, lifespan: String) -> void:
+	# The world is made and shown first, so that the player can look about and choose where to settle.
+	_pending = { "seed": world_seed, "start": start_id, "lifespan": lifespan, "design": menus.family_design.duplicate(true) }
+	_in_game = false
+	audio.listening = false
+	build.set_active(false)
+	hud.close_action_menu()
+	hud.visible = false
+	tile_cursor.visible = false
+	_start_new_world(world_seed, start_id, lifespan, _pending["design"])
+	GameClock.set_speed(0)
+	var options := Starts.land_options(world)
+	_lot_picker.show_options(options, WorldState.HOME_LOT)
+	camera.drift = Vector2.ZERO
+	camera.input_enabled = true
+	camera.zoom = Vector2(0.5, 0.5)
+	camera.focus_on((Vector2(world.lot.get_center()) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE)
+	var start_def := DataRegistry.get_def("starts", start_id)
+	var funds := int(start_def.get("coins", Economy.start_coins()))
+	var homed := str(start_def.get("house", "")) != ""
+	menus.open_land(options, WorldState.HOME_LOT, funds, "A house is waiting on your plot." if homed else "Your land is bare ground and a camp.")
+
+
+func _on_land_picked(lot_id: String) -> void:
+	for option in Starts.land_options(world):
+		if str(option["id"]) == lot_id:
+			camera.focus_on((Vector2(option["rect"].get_center()) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE)
+
+
+func _cancel_land() -> void:
+	_lot_picker.hide_picker()
+	camera.input_enabled = false
+	camera.drift = Vector2(16, 6)
+	menus.back_to_create()
+
+
+## The plot is chosen: the world is made again with the player on it, and the game begins.
+func _finish_new_game(lot_id: String) -> void:
+	_lot_picker.hide_picker()
 	_begin_game()
-	_start_new_world(world_seed, start_id, lifespan, menus.family_design)
+	_start_new_world(int(_pending.get("seed", randi())), str(_pending.get("start", "")), str(_pending.get("lifespan", "normal")), _pending.get("design", {}), lot_id)
 	menus.close()
-	GameClock.set_speed(1)
-	hud.show_message("A new life begins. The world's seed is %d." % world.world_seed, 4.0)
+	var builds := str(DataRegistry.get_def("starts", str(_pending.get("start", ""))).get("house", "")) == ""
+	GameClock.set_speed(0 if builds else 1)
+	if builds:
+		build.set_active(true)
+		hud.show_message("Raise a home with your %s. Press Space when you are ready for time to pass." % Economy.format(sim.household.coins), 9.0)
+	else:
+		hud.show_message("A new life begins. The world's seed is %d." % world.world_seed, 4.0)
 
 
 func _on_load_requested(path: String) -> void:
@@ -579,12 +636,13 @@ func _describe_newest_save() -> String:
 	return "Your last save"
 
 
-func _start_new_world(world_seed: int, start_id: String = "", lifespan: String = "normal", design: Dictionary = {}) -> void:
+func _start_new_world(world_seed: int, start_id: String = "", lifespan: String = "normal", design: Dictionary = {}, lot_id: String = "") -> void:
 	GameClock.reset()
 	var new_world := RegionGenerator.generate(world_seed)  # terrain, the towns, their roads, the player's lot
 	new_world.lifespan = lifespan if DataRegistry.has_def("lifespans", lifespan) else "normal"
 	if new_world.lot.size == Vector2i.ZERO:  # no town described in the data
 		new_world.lot = WorldState.centered_lot(new_world.width, new_world.height)
+	Starts.choose_lot(new_world, lot_id)
 	var begun := Starts.begin(new_world, start_id, design)  # the household, its land and its camp
 	_show_world(new_world, begun["household"], NpcGenerator.create(new_world), begun["realm"])
 

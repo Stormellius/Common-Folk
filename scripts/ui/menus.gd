@@ -8,6 +8,10 @@ extends CanvasLayer
 ## opened from (the title screen or the pause menu); Esc goes back too, or closes the pause menu.
 
 signal new_game_requested(world_seed: int, start_id: String, lifespan: String)
+## The create screen's Begin: the seed, the start and the lifespan are picked and the family drawn; next is the land.
+signal land_picked(lot_id: String)
+signal land_confirmed(lot_id: String)
+signal land_cancelled
 signal load_requested(path: String)
 signal save_requested(slot_name: String)
 ## Leave the game for the title screen.
@@ -43,6 +47,11 @@ var _start_buttons: Dictionary = {}
 var _start_picked := ""
 ## The family drawn up on the create screen, read by main.gd when the game begins.
 var family_design: Dictionary = {}
+var _land_list: VBoxContainer
+var _land_note: Label
+var _land_pick := ""
+var _land_funds: Label
+var _land_ids: Array[String] = []
 var _creator: FamilyCreator
 var _create_begin: Button
 var _begin_button: Button
@@ -90,6 +99,7 @@ func _ready() -> void:
 	_screens["pause"] = _build_pause()
 	_screens["new"] = _build_new_game()
 	_screens["create"] = _build_create()
+	_screens["land"] = _build_land()
 	_screens["load"] = _build_load()
 	_screens["save"] = _build_save()
 	_screens["settings"] = _build_settings()
@@ -150,6 +160,11 @@ func open_new_game() -> void:
 ## The family screen, straight from the new game screen (for a screenshot or test).
 func open_create() -> void:
 	_begin_button.pressed.emit()
+
+
+## Back from the land screen to the family screen.
+func back_to_create() -> void:
+	_show("create")
 
 
 ## The save screen; `default_name` fills the name field.
@@ -238,7 +253,7 @@ func close() -> void:
 func _show(screen: String) -> void:
 	for name in _screens:
 		_screens[name].visible = name == screen
-	_shade.visible = screen != "" and screen != "title"
+	_shade.visible = screen != "" and screen != "title" and screen != "land"
 	_current = screen
 	if screen == "" and get_viewport() != null:
 		get_viewport().gui_release_focus()
@@ -257,6 +272,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_on_name_chosen()  # Esc keeps the name in the box
 		"create":
 			_show("new")
+		"land":
+			land_cancelled.emit()
 		"confirm":
 			_show(_confirm_back)
 		"title", "game_over":
@@ -468,6 +485,82 @@ func _build_create() -> Control:
 	back.pressed.connect(func() -> void: _show("new"))
 	box.add_child(_button_row([back, _create_begin]))
 	return parts[0]
+
+
+## The land screen: a card on the left listing the plots on offer while the map shows them.
+func open_land(options: Array[Dictionary], first: String, funds: int, start_text: String) -> void:
+	_clear(_land_list)
+	_land_ids.clear()
+	var group := ButtonGroup.new()
+	for option in options:
+		_land_ids.append(str(option["id"]))
+		var button := Button.new()
+		button.toggle_mode = true
+		button.button_group = group
+		button.text = "%s: %s" % [str(option["town"]), str(option["name"])]
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.custom_minimum_size = Vector2(380, 38)
+		button.tooltip_text = str(option["note"])
+		var id := str(option["id"])
+		button.button_pressed = id == first
+		button.pressed.connect(func() -> void:
+			_land_pick = id
+			_land_note.text = str(option["note"])
+			land_picked.emit(id))
+		_land_list.add_child(button)
+	_land_pick = first
+	for option in options:
+		if str(option["id"]) == first:
+			_land_note.text = str(option["note"])
+	_land_funds.text = "%s  You begin with %s to put up a home." % [start_text, Economy.format(funds)] if funds > 0 else start_text
+	_show("land")
+
+
+## Marks which plot is chosen when the map was clicked instead.
+func mark_land(lot_id: String) -> void:
+	_land_pick = lot_id
+	var index := 0
+	for button: Button in _land_list.get_children():
+		button.set_pressed_no_signal(index == _land_index(lot_id))
+		index += 1
+
+
+func _land_index(lot_id: String) -> int:
+	return _land_ids.find(lot_id)
+
+
+func _build_land() -> Control:
+	var parts := _card("Choose Your Land", 430.0)
+	var panel: PanelContainer = parts[0]
+	panel.set_anchors_preset(Control.PRESET_CENTER_LEFT)
+	panel.offset_left = 24.0
+	panel.offset_right = 24.0 + 430.0
+	panel.grow_horizontal = Control.GROW_DIRECTION_END
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	var box: VBoxContainer = parts[1]
+	_land_funds = _ink_label("", "InkLabel")
+	_land_funds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(_land_funds)
+	box.add_child(_ink_label("Look about the map, then pick a plot here or click it. The one you choose is where you will build.", "InkDim"))
+	(box.get_child(box.get_child_count() - 1) as Label).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, 230)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	box.add_child(scroll)
+	_land_list = VBoxContainer.new()
+	_land_list.add_theme_constant_override("separation", 4)
+	scroll.add_child(_land_list)
+	_land_note = _ink_label("", "InkDim")
+	_land_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(_land_note)
+	var back := Button.new()
+	back.text = "Back"
+	back.pressed.connect(func() -> void: land_cancelled.emit())
+	var settle := Button.new()
+	settle.text = "Settle here"
+	settle.pressed.connect(func() -> void: land_confirmed.emit(_land_pick))
+	box.add_child(_button_row([back, settle]))
+	return panel
 
 
 ## A seed typed by the player: a number is used as it is, any other text is turned into one (so

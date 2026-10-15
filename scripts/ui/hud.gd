@@ -61,6 +61,7 @@ var _hint_label: Label
 var _help_panel: PanelContainer
 
 const SKILL_ROWS := 5
+const PALETTE_WIDTH := 700.0   # the build palette wraps to rows this wide
 const DETAILS_TOP := 100.0   # below the bar at the top
 const BOTTOM_ROOM := 170.0   # what the panels along the bottom take
 
@@ -71,7 +72,6 @@ var _bottom_right: VBoxContainer
 var _details_button: Button
 var _details_open := false
 var _big_portrait: PawnPortrait
-var _plumbob: Plumbob
 var _portrait_key := ""
 var _needs_name: Label
 var _needs_age: Label
@@ -111,6 +111,7 @@ var _build_panel: PanelContainer
 var _build_tabs: Dictionary = {}    # tab name -> HBoxContainer of item buttons
 var _build_tab_buttons: Dictionary = {}  # tab name -> Button
 var _build_items: Array[Button] = []
+var _palette_scroll: ScrollContainer
 
 
 func _ready() -> void:
@@ -346,8 +347,7 @@ func show_pawn(pawn: Pawn, activity: String, job: String = "", relations: Array[
 		_big_portrait.look = pawn.look
 		_big_portrait.outfit = PawnArt.outfit_for(pawn, worn)
 		_big_portrait.queue_redraw()
-	_plumbob.color = BAND_COLORS[Needs.band(pawn.mood)]
-	_plumbob.queue_redraw()
+
 	_needs_name.text = pawn.display_name
 	_needs_age.text = Life.describe_age(pawn) + (", née %s" % pawn.maiden_name.get_slice(" ", 1) if pawn.maiden_name != "" and pawn.maiden_name != pawn.display_name else "") + (", in %s" % Clothing.name_of(worn).to_lower() if worn != "" else "")
 	var trait_names: Array[String] = []
@@ -681,16 +681,13 @@ func _build_needs_panel() -> void:
 	row.add_theme_constant_override("separation", 14)
 	_control_panel.add_child(row)
 	var picture := Control.new()
-	picture.custom_minimum_size = Vector2(92, 118)
+	picture.custom_minimum_size = Vector2(92, 104)
 	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(picture)
 	_big_portrait = PawnPortrait.new()
 	_big_portrait.scale = Vector2(2.0, 2.0)
-	_big_portrait.position = Vector2(2, 34)
+	_big_portrait.position = Vector2(2, 20)
 	picture.add_child(_big_portrait)
-	_plumbob = Plumbob.new()
-	_plumbob.position = Vector2(35, -2)
-	picture.add_child(_plumbob)
 
 	var who := VBoxContainer.new()
 	who.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -873,14 +870,14 @@ func _build_bottom_bar() -> void:
 
 
 ## The look of the game's panels in play: rounded, a cool dark blue with a pale edge, as in The Sims.
-func _sims_panel(panel: Control, alpha: float = 0.92, margin: int = 12) -> void:
+func _sims_panel(panel: Control, alpha: float = 0.95, margin: int = 12) -> void:
 	var box := StyleBoxFlat.new()
-	box.bg_color = Color(0.105, 0.16, 0.24, alpha)
-	box.border_color = Color(0.58, 0.76, 0.90, 0.95)
-	box.set_border_width_all(2)
-	box.set_corner_radius_all(16)
-	box.shadow_color = Color(0, 0, 0, 0.35)
-	box.shadow_size = 6
+	box.bg_color = Color(0.15, 0.105, 0.07, alpha)
+	box.border_color = Color(0.72, 0.55, 0.28)
+	box.set_border_width_all(3)
+	box.set_corner_radius_all(5)
+	box.shadow_color = Color(0, 0, 0, 0.45)
+	box.shadow_size = 7
 	box.shadow_offset = Vector2(0, 2)
 	box.set_content_margin_all(margin)
 	panel.add_theme_stylebox_override("panel", box)
@@ -890,24 +887,28 @@ func _sims_panel(panel: Control, alpha: float = 0.92, margin: int = 12) -> void:
 func _sims_button(button: Button) -> void:
 	for state in ["normal", "hover", "pressed", "hover_pressed", "focus", "disabled"]:
 		var box := StyleBoxFlat.new()
-		box.set_corner_radius_all(11)
+		box.set_corner_radius_all(4)
 		box.set_content_margin_all(4)
 		box.set_border_width_all(2)
 		match state:
-			"normal", "focus", "disabled":
-				box.bg_color = Color(0.20, 0.30, 0.43)
-				box.border_color = Color(0.34, 0.49, 0.64)
+			"normal", "focus":
+				box.bg_color = Color(0.27, 0.19, 0.12)
+				box.border_color = Color(0.46, 0.34, 0.19)
+			"disabled":
+				box.bg_color = Color(0.20, 0.15, 0.10)
+				box.border_color = Color(0.33, 0.26, 0.16)
 			"hover":
-				box.bg_color = Color(0.27, 0.40, 0.56)
-				box.border_color = Color(0.58, 0.76, 0.90)
+				box.bg_color = Color(0.37, 0.26, 0.15)
+				box.border_color = Color(0.78, 0.60, 0.30)
 			_:
-				box.bg_color = Color(0.30, 0.60, 0.86)
-				box.border_color = Color(0.82, 0.93, 1.0)
+				box.bg_color = Color(0.47, 0.15, 0.11)
+				box.border_color = Color(0.86, 0.68, 0.36)
 		button.add_theme_stylebox_override(state, box)
-	button.add_theme_color_override("font_color", Color(0.90, 0.95, 1.0))
-	button.add_theme_color_override("font_hover_color", Color.WHITE)
-	button.add_theme_color_override("font_pressed_color", Color.WHITE)
-	button.add_theme_color_override("font_hover_pressed_color", Color.WHITE)
+	button.add_theme_color_override("font_color", UiTheme.INK)
+	button.add_theme_color_override("font_hover_color", Color(1.0, 0.94, 0.78))
+	button.add_theme_color_override("font_pressed_color", Color(1.0, 0.94, 0.78))
+	button.add_theme_color_override("font_hover_pressed_color", Color(1.0, 0.94, 0.78))
+	button.add_theme_color_override("font_disabled_color", UiTheme.INK_DIM)
 
 
 ## I: the dreams, skills, thoughts and friends of the person you are playing, down the left.
@@ -958,7 +959,7 @@ func _build_build_ui() -> void:
 
 	_build_panel = PanelContainer.new()
 	_root.add_child(_build_panel)
-	_build_panel.add_theme_stylebox_override("panel", _compact_wood())
+	_sims_panel(_build_panel, 0.96, 8)
 	_build_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM, Control.PRESET_MODE_MINSIZE, 10)
 	_build_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_build_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
@@ -970,8 +971,14 @@ func _build_build_ui() -> void:
 	var tab_row := HBoxContainer.new()
 	tab_row.add_theme_constant_override("separation", 3)
 	box.add_child(tab_row)
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size = Vector2(PALETTE_WIDTH + 12.0, 0.0)
+	scroll.set("_palette_scroll", true)
+	box.add_child(scroll)
+	_palette_scroll = scroll
 	var items_holder := VBoxContainer.new()
-	box.add_child(items_holder)
+	scroll.add_child(items_holder)
 
 	# One tab per object category (furniture, structure...), one for floors, one for tools.
 	var tabs: Dictionary = {}  # tab name -> array of { kind, id, name }
@@ -1005,11 +1012,14 @@ func _build_build_ui() -> void:
 		tab_button.button_group = tab_group
 		tab_button.focus_mode = Control.FOCUS_NONE
 		tab_button.custom_minimum_size = Vector2(96, 30)
+		_sims_button(tab_button)
 		tab_row.add_child(tab_button)
 		_build_tab_buttons[tab_name] = tab_button
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 4)
+		var row := HFlowContainer.new()
+		row.add_theme_constant_override("h_separation", 4)
+		row.add_theme_constant_override("v_separation", 4)
 		row.visible = false
+		row.custom_minimum_size = Vector2(PALETTE_WIDTH, 0)
 		items_holder.add_child(row)
 		_build_tabs[tab_name] = row
 		for entry in tabs[tab_name]:
@@ -1017,7 +1027,9 @@ func _build_build_ui() -> void:
 			item.toggle_mode = true
 			item.button_group = group
 			item.focus_mode = Control.FOCUS_NONE
-			item.custom_minimum_size = Vector2(90, 70)
+			item.custom_minimum_size = Vector2(90, 84)
+			_sims_button(item)
+			item.clip_contents = true
 			if entry.has("hint"):
 				item.tooltip_text = "%s  -  %s" % [str(entry["name"]), str(entry["hint"])]
 			else:
@@ -1028,9 +1040,11 @@ func _build_build_ui() -> void:
 			icon.position = Vector2(23, 3)
 			item.add_child(icon)
 			var label := Label.new()
-			label.text = str(entry["name"]) + ("  %s" % Economy.format(int(entry["cost"])) if int(entry.get("cost", 0)) > 0 else "")
-			label.position = Vector2(0, 48)
-			label.size = Vector2(90, 18)
+			label.text = str(entry["name"]) + ("\n%s" % Economy.format(int(entry["cost"])) if int(entry.get("cost", 0)) > 0 else "")
+			label.position = Vector2(0, 45)
+			label.size = Vector2(90, 36)
+			label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+			label.add_theme_constant_override("line_spacing", -3)
 			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			label.clip_text = true
 			label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1051,6 +1065,11 @@ func _build_build_ui() -> void:
 
 
 func _show_build_tab(tab_name: String) -> void:
+	# The palette is as tall as its tab needs, but never taller than a third of the screen.
+	var rows := 1
+	if _build_tabs.has(tab_name):
+		rows = ceili(float((_build_tabs[tab_name] as Control).get_child_count()) / floorf(PALETTE_WIDTH / 94.0))
+	_palette_scroll.custom_minimum_size.y = minf(float(rows) * 88.0, maxf(_root.size.y * 0.32, 150.0))
 	for name in _build_tabs:
 		_build_tabs[name].visible = (name == tab_name)
 	for name in _build_tab_buttons:

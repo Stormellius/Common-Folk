@@ -11,14 +11,16 @@ func _init() -> void:
 	custom_minimum_size = Vector2(44, 44)
 	size = Vector2(44, 44)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	clip_contents = true
 	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 
 
 func _draw() -> void:
 	match kind:
 		"place":
-			draw_set_transform(Vector2(22, 22), 0.0, Vector2.ONE)
-			ObjectArt.draw(self, id, 0.8, 0.0)
+			if not SpriteBank.draw_object_icon(self, id, Rect2(Vector2(3, 2), Vector2(38, 40))):
+				draw_set_transform(Vector2(22, 22), 0.0, Vector2.ONE)
+				ObjectArt.draw(self, id, 0.7, 0.0)
 		"floor":
 			FloorArt.draw(self, id, Rect2(Vector2(6, 6), Vector2(32, 32)), Vector2i(1, 1))
 		"roof":

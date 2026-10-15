@@ -72,6 +72,21 @@ static func draw_object(ci: CanvasItem, def_id: String, u: float, cell: Vector2i
 	return true
 
 
+## Draws an object's picture shrunk to fit `box` (for the build palette), or returns false when it has none.
+static func draw_object_icon(ci: CanvasItem, def_id: String, box: Rect2) -> bool:
+	var entry := object_entry(def_id)
+	if entry.is_empty() or (entry["files"] as Array).is_empty():
+		return false
+	var picture := texture(str(entry["files"][0]))
+	if picture == null:
+		return false
+	var size := picture.get_size()
+	var scale := minf(box.size.x / size.x, box.size.y / size.y)
+	var drawn := size * scale
+	ci.draw_texture_rect(picture, Rect2(box.position + (box.size - drawn) * 0.5, drawn), false)
+	return true
+
+
 ## Draws a floor tile from its texture, taking the piece of the picture that belongs to `cell` so that
 ## neighbours join up. The picture repeats mirrored (each repeat turned about its edge), so that it
 ## never shows a seam where one repeat meets the next. Returns false when there is none.

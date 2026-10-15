@@ -20,8 +20,11 @@ func _ready() -> void:
 	_check(menus.current() == "title" and not main._in_game and not hud.visible, "an ordinary launch opens the title screen, with the HUD hidden")
 
 	menus.new_game_requested.emit(4242, "arrived", "short")
+	_check(menus.current() == "land" and not main._in_game and main._lot_picker.visible, "Begin first lets the player choose their land")
+	menus.land_confirmed.emit("home")
 	_check(main._in_game and hud.visible and not menus.is_open(), "Begin starts the game and shows the HUD")
-	_check(main.world.world_seed == 4242 and main.world.titles.size() > 0 and main.world.lifespan == "short" and GameClock.speed_level == 1, "with the chosen seed, start and lifespan, running")
+	_check(main.world.world_seed == 4242 and main.world.titles.size() > 0 and main.world.lifespan == "short" and GameClock.speed_level == 0 and main.build.active, "with the chosen seed, start and lifespan, paused in build mode on bare land")
+	GameClock.set_speed(1)
 
 	# Time passes slowly, but people walk at a human pace: a walk across the yard takes seconds.
 	var walker: Pawn = main.sim.household.selected()

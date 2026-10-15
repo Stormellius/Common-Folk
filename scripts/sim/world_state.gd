@@ -25,6 +25,8 @@ var tiles: PackedInt32Array = PackedInt32Array()
 var objects: Array[PlacedObject] = []
 ## The player's home lot: the only place they may build. An empty rect means no lot.
 var lot := Rect2i()
+## Which side of its street the home lot is on, as TownGenerator turns a house (2: south of it, the door to the north).
+var lot_rot := 2
 ## The other lots of the town (see TownGenerator): { "id", "kind", "name", "template", "facing",
 ## "rect": Rect2i, "public": bool }. Things on a private lot can only be used by the people who
 ## live there (Pawn.home_lot); public ones (tavern, shop, clinic, green) by anyone. Land outside

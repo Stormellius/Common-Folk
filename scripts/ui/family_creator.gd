@@ -75,7 +75,7 @@ func _build() -> void:
 	editor.add_theme_constant_override("separation", 18)
 	add_child(editor)
 	var picture := Control.new()
-	picture.custom_minimum_size = Vector2(150, 170)
+	picture.custom_minimum_size = Vector2(150, 190)
 	editor.add_child(picture)
 	var frame := Panel.new()
 	frame.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -88,7 +88,7 @@ func _build() -> void:
 	picture.add_child(frame)
 	_portrait = PawnPortrait.new()
 	_portrait.scale = Vector2(3.0, 3.0)
-	_portrait.position = Vector2(9, 20)
+	_portrait.position = Vector2(9, 52)
 	picture.add_child(_portrait)
 
 	var fields := VBoxContainer.new()
