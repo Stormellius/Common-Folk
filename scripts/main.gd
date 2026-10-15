@@ -69,6 +69,7 @@ func _ready() -> void:
 	build.message.connect(func(text: String) -> void: hud.show_message(text))
 	menus.new_game_requested.connect(_on_new_game_requested)
 	menus.land_confirmed.connect(_finish_new_game)
+	menus.wardrobe_chosen.connect(_on_wardrobe_chosen)
 	menus.land_cancelled.connect(_cancel_land)
 	menus.land_picked.connect(_on_land_picked)
 	_lot_picker.camera = camera
@@ -514,6 +515,11 @@ func _open_screen(screen: String) -> void:
 		"create":
 			menus.open_new_game()
 			menus.open_create()
+		"wardrobe":
+			var chosen := sim.household.selected()
+			var spot := chosen.tile + Vector2i(1, 0)
+			var closet := world.add_object("wardrobe", spot)
+			menus.open_wardrobe(chosen, closet.id if closet != null else 0, Clothing.worn(sim, chosen))
 		"land":
 			menus.open_new_game()
 			_on_new_game_requested(42, "bought", "normal")
@@ -737,7 +743,7 @@ func _process(_delta: float) -> void:
 	if sim != null and _in_game:
 		hud.update_household_status(sim.household)
 		var chosen := sim.household.selected()
-		hud.show_pawn(chosen, sim.describe_activity(chosen) if chosen != null else "", sim.job_text(chosen) if chosen != null else "", sim.relationship_lines(chosen) if chosen != null else [], Ambitions.summary(sim, chosen) if chosen != null else {}, Clothing.worn(sim, chosen) if chosen != null else "")
+		hud.show_pawn(chosen, sim.describe_activity(chosen) if chosen != null else "", sim.job_text(chosen) if chosen != null else "", sim.relationship_lines(chosen) if chosen != null else [], Ambitions.summary(sim, chosen) if chosen != null else {}, Clothing.worn(sim, chosen) if chosen != null else "", Clothing.pieces(sim, chosen) if chosen != null else null)
 		hud.set_events(sim.events.names())
 		hud.set_purse(sim.household.coins, sim.household.stock)
 		hud.set_animals(Fauna.kept_text(sim))
@@ -851,7 +857,21 @@ func _on_action_chosen(action_id: String) -> void:
 	var result := PawnActions.perform(sim, pawn, action_id, _menu_tile)
 	if result["message"] != "":
 		hud.show_message(result["message"])
+	if str(result.get("dialog", "")) == "wardrobe":
+		_open_menu(func() -> void: menus.open_wardrobe(pawn, int(result["object"]), Clothing.worn(sim, pawn)))
+		return
 	hud.set_selected(sim.household.selected_id)  # an action may have switched person
+
+
+## The wardrobe dialog was confirmed: they go and change into what was chosen.
+func _on_wardrobe_chosen(pawn_id: int, object_id: int, outfit_id: String, slots: Dictionary) -> void:
+	var pawn := sim.household.get_pawn(pawn_id)
+	var wardrobe := world.get_object(object_id)
+	if pawn == null or wardrobe == null:
+		return
+	var result := sim.order_dress(pawn, wardrobe, outfit_id, slots)
+	if str(result["message"]) != "":
+		hud.show_message(str(result["message"]))
 
 
 func _on_pawn_chosen(id: int) -> void:

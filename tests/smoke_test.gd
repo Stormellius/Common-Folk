@@ -48,6 +48,7 @@ func _ready() -> void:
 	_section("family", _test_family_design)
 	_section("upstairs", _test_upstairs)
 	_section("traits", _test_trait_effects)
+	_section("garments", _test_garments)
 	_section("events", _test_events)
 	_section("realm", _test_realm)
 	_section("faith_and_illness", _test_faith_and_illness)
@@ -3992,6 +3993,9 @@ func _test_art() -> void:
 			var layers: Array = (entry["outfits"] as Array).duplicate()
 			for look_entry in entry["looks"]:
 				layers.append(str(look_entry["body"]))
+			for garment_id in entry.get("garments", []):
+				layers.append("g_" + str(garment_id))
+				_check(DataRegistry.has_def("garments", str(garment_id)), "the garment %s is in garments.json" % garment_id)
 			for layer in layers:
 				for side in ["front", "back"]:
 					names.append("%s/%s_%s" % [entry["dir"], layer, side])
@@ -6228,7 +6232,7 @@ func _test_wardrobe() -> void:
 	_check(Clothing.worn(sim, anna) == "casual", "someone dresses for the weather and work unless told otherwise")
 	var entries := PawnActions.list_for(sim, anna, wardrobe.tile)
 	var wear := entries.filter(func(e: Dictionary) -> bool: return str(e["id"]).begins_with(PawnActions.WEAR_PREFIX))
-	_check(wear.size() == Clothing.choices().size() + 1, "a wardrobe offers every outfit, and going back to dressing for the weather (%d)" % wear.size())
+	_check(wear.size() == Clothing.choices().size() + 1 and entries.any(func(e: Dictionary) -> bool: return str(e["id"]).begins_with(PawnActions.DRESS_PREFIX)), "a wardrobe offers every outfit, and going back to dressing for the weather (%d)" % wear.size())
 	var told := PawnActions.perform(sim, anna, "%s%s:%d" % [PawnActions.WEAR_PREFIX, "formal", wardrobe.id], wardrobe.tile)
 	_check(told["ok"] and anna.job_kind == "use" and anna.job_outfit == "formal" and anna.outfit_choice == "", "asking to change sends them to the wardrobe, and they have not changed yet")
 	_minutes(sim, 90, func() -> bool: return anna.outfit_choice != "")
@@ -6475,3 +6479,61 @@ func _test_trait_effects() -> void:
 		for other_id in def.get("excludes", []):
 			clashing = clashing and DataRegistry.has_def("traits", str(other_id))
 	_check(clashing, "every trait that excludes another names a trait that exists")
+
+
+func _test_garments() -> void:
+	print("Garments")
+	var game := _open_field()
+	var sim: Simulation = game["sim"]
+	var world: WorldState = game["world"]
+	var anna: Pawn = game["anna"]
+	GameClock.set_time(3, 12)
+	anna.tile = Vector2i(30, 25)
+	anna.step_to = anna.tile
+	var casual := Clothing.recipe("casual")
+	_check(casual == { "top": "casual_top", "bottom": "casual_bottom", "feet": "casual_feet" } and Clothing.recipe("undergarments").is_empty() and Clothing.recipe("swim").is_empty(), "an outfit is a garment for each slot, and underclothes are none")
+	var every_slot := true
+	for def in DataRegistry.get_list("clothing"):
+		for slot in def.get("garments", {}):
+			every_slot = every_slot and str(Clothing.garment(str(def["garments"][slot])).get("slot", "")) == str(slot)
+	_check(every_slot, "every garment an outfit names is in the slot it is put in")
+	_check(Clothing.pieces(sim, anna) == casual and not Clothing.available(anna, "top").is_empty(), "somebody with no choices wears what the outfit calls for")
+	anna.garments = { "top": "formal_top", "feet": "winter_feet" }
+	var mixed := Clothing.pieces(sim, anna)
+	_check(mixed["top"] == "formal_top" and mixed["feet"] == "winter_feet" and mixed["bottom"] == "casual_bottom", "pieces chosen for themselves replace the outfit's, slot by slot")
+	_check(Clothing.pieces_with("casual", { "top": "casual_bottom" })["top"] == "casual_top", "a garment only goes in its own slot")
+	anna.pose = "lie"
+	_check(Clothing.pieces(sim, anna) == Clothing.recipe("sleepwear"), "in bed they wear nightclothes, whatever they chose")
+	anna.pose = ""
+	var plain := Clothing.warmth_of_pieces(casual)
+	var coated := Clothing.warmth_of_pieces(Clothing.recipe("winter"))
+	_check(absf(plain - Clothing.warmth_of("casual")) < 0.001 and absf(coated - Clothing.warmth_of("winter")) < 0.001, "the warmth of the pieces is the warmth of the outfit they make")
+	anna.garments = { "top": "winter_top" }
+	_check(Clothing.drain_multipliers(sim, anna, {})["warmth"] < Clothing.warmth_of("casual"), "a warm coat over everyday clothes keeps more warmth in")
+	# Choosing at a wardrobe.
+	anna.garments = {}
+	var wardrobe := world.add_object("wardrobe", Vector2i(31, 25))
+	var sent := sim.order_dress(anna, wardrobe, "auto", { "top": "winter_top", "bottom": "worker_feet" })
+	_check(sent["ok"] and anna.job_garments == { "top": "winter_top" } and anna.garments.is_empty(), "they go to the wardrobe, and only the right pieces for each slot count")
+	for minute in 90:
+		GameClock.advance_one_tick()
+		sim.step()
+		if not anna.garments.is_empty():
+			break
+	_check(anna.garments == { "top": "winter_top" } and Clothing.pieces(sim, anna)["top"] == "winter_top", "and put on what they chose")
+	var copy := Pawn.from_dict(JSON.parse_string(JSON.stringify(anna.to_dict())))
+	_check(copy.garments == anna.garments, "their pieces are saved")
+	sim.order_dress(anna, wardrobe, "auto", {})
+	for minute in 90:
+		GameClock.advance_one_tick()
+		sim.step()
+		if anna.garments.is_empty():
+			break
+	_check(anna.garments.is_empty(), "and they can go back to what the outfit calls for")
+	# Pictures.
+	var woman := SpriteBank.person_set("adult", "female")
+	var elder := SpriteBank.person_set("elder", "female")
+	_check("tunic_top" in woman["garments"] and not ("tunic_top" in elder["garments"]), "the clean garments are only in the sets that have them")
+	_check(SpriteBank.garment_in(elder, "worker_top", "top") == "casual_top", "a set without work clothes wears the everyday ones")
+	var offered := Clothing.available(anna, "top").map(func(def: Dictionary) -> String: return str(def["id"]))
+	_check("tunic_top" in offered, "the wardrobe offers a woman's garments that her pictures have")

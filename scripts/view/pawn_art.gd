@@ -68,7 +68,7 @@ static func facing_kind(facing: Vector2i) -> int:
 ## What a person wears besides their colors. Headwear goes by class and sex (a hood or a straw
 ## hat for peasants, a felt cap for burghers, a feathered hat or a circlet for the gentry, a
 ## linen coif for many women), counter work brings an apron, and some men are bearded.
-static func outfit_for(pawn: Pawn, clothes: String = "casual") -> Dictionary:
+static func outfit_for(pawn: Pawn, clothes: String = "casual", pieces: Variant = null) -> Dictionary:
 	var seed := hash(pawn.seed_name())
 	var roll := func(salt: int) -> float: return ObjectArt.hash01(seed, salt, 211)
 	var stage := Life.stage_id(pawn)
@@ -112,6 +112,7 @@ static func outfit_for(pawn: Pawn, clothes: String = "casual") -> Dictionary:
 	if float(outfit["bump"]) > 0.3:
 		outfit["belt"] = false  # the belt comes off as the belly grows
 	outfit["clothes"] = clothes
+	outfit["pieces"] = pieces if pieces is Dictionary else Clothing.recipe(clothes)  # the garments, for the painted people
 	outfit["seed"] = seed
 	outfit["gender"] = pawn.gender
 	outfit["scarf"] = SCARF_COLORS[int(roll.call(13) * SCARF_COLORS.size()) % SCARF_COLORS.size()]

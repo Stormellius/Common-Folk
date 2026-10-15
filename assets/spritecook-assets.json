@@ -60,6 +60,30 @@
   {
    "asset_id": "64f9c9a9-61a1-4a29-8265-e7cb5e3efef7",
    "label": "Wardrobe prop"
+  },
+  {
+   "asset_id": "9ab386a5-9bea-431d-9f46-179a28eb3077",
+   "label": "Garment on its own: adult_female tunic"
+  },
+  {
+   "asset_id": "f8dcf73d-176e-4b81-9398-5f87c45a12b7",
+   "label": "Garment on its own: adult_female trousers"
+  },
+  {
+   "asset_id": "e06c638c-21e0-45b4-b411-3a58c65dfade",
+   "label": "Garment on its own: adult_female boots"
+  },
+  {
+   "asset_id": "0f8fd067-d78e-49d9-9fb7-ac74697f284f",
+   "label": "Garment on its own: adult_male tunic"
+  },
+  {
+   "asset_id": "19234d84-2b02-4bab-adbb-db9e5b073204",
+   "label": "Garment on its own: adult_male trousers"
+  },
+  {
+   "asset_id": "b3d5f24e-3de7-4bfc-a285-f87b41f2067c",
+   "label": "Garment on its own: adult_male boots"
   }
  ]
 }

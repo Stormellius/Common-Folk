@@ -36,6 +36,8 @@ var label_drop := 0.0:
 
 ## What they are wearing (an outfit id; the layer sets it each frame from Clothing).
 var clothes := "casual"
+## The garments they have on, by slot (see Clothing.pieces).
+var pieces: Dictionary = {}
 
 var _phase := 0.0
 ## Townspeople's names are drawn a little dimmer than your household's.
@@ -95,7 +97,7 @@ func _draw() -> void:
 		draw_set_transform(Vector2(0.0, 4.0) * u, -0.35 if pawn.id % 2 == 0 else 0.35, Vector2.ONE)
 	if pawn.mount != 0:  # sitting in the saddle, a little above the ground
 		draw_set_transform(Vector2(0.0, -7.0) * u, 0.0, Vector2.ONE)
-	var outfit := PawnArt.outfit_for(pawn, clothes)
+	var outfit := PawnArt.outfit_for(pawn, clothes, pieces)
 	outfit["fallen"] = fallen
 	PawnArt.draw(self, pawn.look, pawn.facing, u, _phase * 0.5 if pawn.mount != 0 else _phase, asleep or fallen, outfit, breath)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

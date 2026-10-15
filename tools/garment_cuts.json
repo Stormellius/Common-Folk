@@ -1,0 +1,44 @@
+{
+ "adult_female": {
+  "waist": 372,
+  "arms_end": 470,
+  "feet": 598,
+  "band": 0.3
+ },
+ "adult_male": {
+  "waist": 462,
+  "arms_end": 505,
+  "feet": 595,
+  "band": 0.27
+ },
+ "elder_female": {
+  "waist": 440,
+  "arms_end": 478,
+  "feet": 598,
+  "band": 0.27
+ },
+ "elder_male": {
+  "waist": 500,
+  "arms_end": 540,
+  "feet": 650,
+  "band": 0.27
+ },
+ "youth": {
+  "waist": 462,
+  "arms_end": 525,
+  "feet": 645,
+  "band": 0.27
+ },
+ "child": {
+  "waist": 452,
+  "arms_end": 535,
+  "feet": 588,
+  "band": 0.27
+ },
+ "adult_female_pregnant": {
+  "waist": 395,
+  "arms_end": 430,
+  "feet": 595,
+  "band": 0.27
+ }
+}

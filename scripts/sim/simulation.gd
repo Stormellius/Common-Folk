@@ -335,14 +335,20 @@ func order_craft(pawn: Pawn, placed: PlacedObject, recipe_id: String) -> Diction
 
 ## Sends a pawn to a wardrobe to change into an outfit (an id of data/clothing.json, or "auto" to go back to dressing for
 ## the weather and the work). Their body, hair and size stay as they are.
-func order_dress(pawn: Pawn, placed: PlacedObject, outfit_id: String) -> Dictionary:
+func order_dress(pawn: Pawn, placed: PlacedObject, outfit_id: String, slots: Dictionary = {}) -> Dictionary:
 	if not bool(placed.def().get("wardrobe", false)) or household.get_pawn(pawn.id) == null:
 		return { "ok": false, "message": "Nothing to change into there" }
 	if outfit_id != "auto" and outfit_id not in Clothing.choices():
 		return { "ok": false, "message": "They have nothing like that" }
+	var wanted: Dictionary = {}
+	for slot in slots:
+		var garment_id := str(slots[slot])
+		if garment_id != "" and str(Clothing.garment(garment_id).get("slot", "")) == str(slot):
+			wanted[str(slot)] = garment_id
 	var result := order_use(pawn, placed)
 	if result["ok"]:
 		pawn.job_outfit = outfit_id
+		pawn.job_garments = wanted
 	return result
 
 
@@ -1477,6 +1483,7 @@ func _step_job(pawn: Pawn) -> void:
 			_be_seen([pawn])
 		if pawn.job_outfit != "" and bool(object_def.get("wardrobe", false)):
 			pawn.outfit_choice = "" if pawn.job_outfit == "auto" else pawn.job_outfit
+			pawn.garments = pawn.job_garments.duplicate()
 		if open_sky < 1.0:
 			Mood.add_event(pawn, "slept_rough", GameClock.tick)
 		if not recipe.is_empty():
@@ -1866,6 +1873,7 @@ func _end_job(pawn: Pawn) -> void:
 	Skills.unequip(self, pawn)
 	pawn.job_recipe = ""
 	pawn.job_outfit = ""
+	pawn.job_garments = {}
 	if pawn.job_kind == "build":
 		Construction.release(self, pawn)
 	if pawn.caravan != 0:

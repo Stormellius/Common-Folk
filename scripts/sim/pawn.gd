@@ -142,6 +142,10 @@ var job_recipe := ""
 ## wardrobe, what they are changing into.
 var outfit_choice := ""
 var job_outfit := ""
+## Garments they chose for themselves, by slot (see Clothing); empty means whatever the outfit calls for. job_garments is
+## what they are on their way to a wardrobe to put on.
+var garments: Dictionary = {}
+var job_garments: Dictionary = {}
 var mentor_gain := 1.0
 ## The animal they ride (0 for none), and how much each step costs: 1 on foot, less on a horse, more
 ## when stalking game (worked out again from those two, so not saved).
@@ -347,6 +351,7 @@ func to_dict() -> Dictionary:
 		"tool_lent": tool_lent,
 		"job_recipe": job_recipe,
 		"outfit_choice": outfit_choice,
+		"garments": garments.duplicate(),
 		"deeds": deeds.duplicate(),
 		"ambition": ambition,
 		"ambition_step": ambition_step,
@@ -460,6 +465,10 @@ static func from_dict(data: Dictionary) -> Pawn:
 	pawn.tool_lent = bool(data.get("tool_lent", false))
 	pawn.job_recipe = str(data.get("job_recipe", ""))
 	pawn.outfit_choice = str(data.get("outfit_choice", ""))
+	var saved_garments: Variant = data.get("garments", {})
+	if saved_garments is Dictionary:
+		for slot in saved_garments:
+			pawn.garments[str(slot)] = str(saved_garments[slot])
 	var saved_deeds: Variant = data.get("deeds", {})
 	if saved_deeds is Dictionary:
 		for key in saved_deeds:

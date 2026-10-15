@@ -24,6 +24,7 @@ signal closed
 ## A newborn of your household was given a name.
 signal baby_named(baby_id: int, given: String)
 ## The families screen was asked for (from the pause menu, or the end of a line): the game fills it in.
+signal wardrobe_chosen(pawn_id: int, object_id: int, outfit_id: String, slots: Dictionary)
 signal families_requested
 ## Take up the family on this lot, or move the household into the empty house on it.
 signal play_family_requested(lot_id: String)
@@ -47,6 +48,12 @@ var _start_buttons: Dictionary = {}
 var _start_picked := ""
 ## The family drawn up on the create screen, read by main.gd when the game begins.
 var family_design: Dictionary = {}
+var _wd_pawn: Pawn
+var _wd_object := 0
+var _wd_worn := "casual"
+var _wd_outfit_option: OptionButton
+var _wd_slot_options: Dictionary = {}
+var _wd_portrait: PawnPortrait
 var _land_list: VBoxContainer
 var _land_note: Label
 var _land_pick := ""
@@ -100,6 +107,7 @@ func _ready() -> void:
 	_screens["new"] = _build_new_game()
 	_screens["create"] = _build_create()
 	_screens["land"] = _build_land()
+	_screens["wardrobe"] = _build_wardrobe()
 	_screens["load"] = _build_load()
 	_screens["save"] = _build_save()
 	_screens["settings"] = _build_settings()
@@ -160,6 +168,110 @@ func open_new_game() -> void:
 ## The family screen, straight from the new game screen (for a screenshot or test).
 func open_create() -> void:
 	_begin_button.pressed.emit()
+
+
+## The wardrobe: what somebody puts on, as a whole outfit and piece by piece. `worn` is what they have on now.
+func open_wardrobe(pawn: Pawn, object_id: int, worn: String) -> void:
+	_wd_pawn = pawn
+	_wd_object = object_id
+	_wd_worn = worn
+	_wd_outfit_option.clear()
+	_wd_outfit_option.add_item("Whatever suits the weather and work")
+	_wd_outfit_option.set_item_metadata(0, "auto")
+	var chosen := 0
+	for outfit_id in Clothing.choices():
+		_wd_outfit_option.add_item(Clothing.name_of(outfit_id))
+		_wd_outfit_option.set_item_metadata(_wd_outfit_option.item_count - 1, outfit_id)
+		if outfit_id == pawn.outfit_choice:
+			chosen = _wd_outfit_option.item_count - 1
+	_wd_outfit_option.select(chosen)
+	for slot in Clothing.SLOTS:
+		var option: OptionButton = _wd_slot_options[slot]
+		option.clear()
+		option.add_item("As the outfit has it")
+		option.set_item_metadata(0, "")
+		var picked := 0
+		for def in Clothing.available(pawn, slot):
+			option.add_item(str(def.get("name", def["id"])))
+			option.set_item_metadata(option.item_count - 1, str(def["id"]))
+			if str(def["id"]) == str(pawn.garments.get(slot, "")):
+				picked = option.item_count - 1
+		option.select(picked)
+	_wd_refresh()
+	_show("wardrobe")
+
+
+func _wd_choice() -> Dictionary:
+	var slots := {}
+	for slot in Clothing.SLOTS:
+		var option: OptionButton = _wd_slot_options[slot]
+		var garment_id := str(option.get_item_metadata(option.selected)) if option.selected >= 0 else ""
+		if garment_id != "":
+			slots[slot] = garment_id
+	var outfit_id := str(_wd_outfit_option.get_item_metadata(_wd_outfit_option.selected)) if _wd_outfit_option.selected >= 0 else "auto"
+	return { "outfit": outfit_id, "slots": slots }
+
+
+func _wd_refresh() -> void:
+	if _wd_pawn == null:
+		return
+	var choice := _wd_choice()
+	var outfit_id := _wd_worn if str(choice["outfit"]) == "auto" else str(choice["outfit"])
+	_wd_portrait.look = _wd_pawn.look
+	_wd_portrait.outfit = PawnArt.outfit_for(_wd_pawn, outfit_id, Clothing.pieces_with(outfit_id, choice["slots"]))
+	_wd_portrait.queue_redraw()
+
+
+func _build_wardrobe() -> Control:
+	var parts := _card("Wardrobe", 560.0)
+	var box: VBoxContainer = parts[1]
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 18)
+	box.add_child(row)
+	var frame := Control.new()
+	frame.custom_minimum_size = Vector2(150, 190)
+	row.add_child(frame)
+	var backing := Panel.new()
+	backing.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var backing_box := StyleBoxFlat.new()
+	backing_box.bg_color = Color(0.47, 0.56, 0.36, 0.6)
+	backing_box.border_color = Color(UiTheme.DARK_INK_DIM, 0.8)
+	backing_box.set_border_width_all(2)
+	backing_box.set_corner_radius_all(14)
+	backing.add_theme_stylebox_override("panel", backing_box)
+	frame.add_child(backing)
+	_wd_portrait = PawnPortrait.new()
+	_wd_portrait.scale = Vector2(3.0, 3.0)
+	_wd_portrait.position = Vector2(9, 52)
+	frame.add_child(_wd_portrait)
+	var fields := VBoxContainer.new()
+	fields.add_theme_constant_override("separation", 8)
+	fields.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(fields)
+	fields.add_child(_ink_label("Outfit", "InkLabel"))
+	_wd_outfit_option = OptionButton.new()
+	_wd_outfit_option.item_selected.connect(func(_index: int) -> void: _wd_refresh())
+	fields.add_child(_wd_outfit_option)
+	fields.add_child(_ink_rule())
+	fields.add_child(_ink_label("Or piece by piece", "InkDim"))
+	for slot in Clothing.SLOTS:
+		fields.add_child(_ink_label({ "top": "Top", "bottom": "Bottoms", "feet": "Shoes" }.get(slot, slot), "InkLabel"))
+		var option := OptionButton.new()
+		option.item_selected.connect(func(_index: int) -> void: _wd_refresh())
+		fields.add_child(option)
+		_wd_slot_options[slot] = option
+	var cancel := Button.new()
+	cancel.text = "Cancel"
+	cancel.pressed.connect(close)
+	var go := Button.new()
+	go.text = "Go and change"
+	go.pressed.connect(func() -> void:
+		var choice := _wd_choice()
+		var pawn_id := _wd_pawn.id if _wd_pawn != null else 0
+		close()
+		wardrobe_chosen.emit(pawn_id, _wd_object, str(choice["outfit"]), choice["slots"]))
+	box.add_child(_button_row([cancel, go]))
+	return parts[0]
 
 
 ## Back from the land screen to the family screen.
@@ -270,6 +382,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			close()
 		"name":
 			_on_name_chosen()  # Esc keeps the name in the box
+		"wardrobe":
+			close()
 		"create":
 			_show("new")
 		"land":

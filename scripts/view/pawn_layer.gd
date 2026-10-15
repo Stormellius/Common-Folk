@@ -76,6 +76,7 @@ func _process(_delta: float) -> void:
 		view.label_scale = 1.0 / camera.zoom.x if camera != null else 1.0
 		view.townsfolk = sim.household.get_pawn(id) == null
 		view.clothes = Clothing.worn(sim, view.pawn)
+		view.pieces = Clothing.pieces(sim, view.pawn)
 		view.visible = view.pawn.caravan == 0 and Levels.of(_level_tile(view.pawn)) == Levels.view  # a rider is drawn on the cart; the floor not on screen is not shown
 	if names_visible:
 		_stack_labels(camera.zoom.x if camera != null else 1.0)

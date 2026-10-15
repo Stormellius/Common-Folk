@@ -338,16 +338,17 @@ func _update_baby_chip(baby: Pawn) -> void:
 
 
 ## Shows the selected person's name, what they are doing and their need bars (hidden if null).
-func show_pawn(pawn: Pawn, activity: String, job: String = "", relations: Array[Dictionary] = [], dreams: Dictionary = {}, worn: String = "") -> void:
+func show_pawn(pawn: Pawn, activity: String, job: String = "", relations: Array[Dictionary] = [], dreams: Dictionary = {}, worn: String = "", pieces: Variant = null) -> void:
 	_control_panel.visible = pawn != null
 	_needs_panel.visible = pawn != null and _details_open
 	if pawn == null:
 		return
-	var portrait_key := "%s%s" % [str(pawn.look), str(PawnArt.outfit_for(pawn, worn))]
+	var dressed := PawnArt.outfit_for(pawn, worn if worn != "" else "casual", pieces)
+	var portrait_key := "%s%s" % [str(pawn.look), str(dressed)]
 	if portrait_key != _portrait_key:
 		_portrait_key = portrait_key
 		_big_portrait.look = pawn.look
-		_big_portrait.outfit = PawnArt.outfit_for(pawn, worn)
+		_big_portrait.outfit = dressed
 		_big_portrait.queue_redraw()
 
 	_needs_name.text = pawn.display_name

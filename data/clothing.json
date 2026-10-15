@@ -1,18 +1,10 @@
 [
-  { "id": "undergarments", "name": "Underclothes", "warmth": 1.0,
-    "text": "Vest and drawers: for washing, and for getting dressed" },
-  { "id": "sleepwear", "name": "Nightclothes", "warmth": 0.9,
-    "text": "A nightshirt and, for many, a cap, worn in bed" },
-  { "id": "casual", "name": "Everyday clothes", "warmth": 0.93,
-    "text": "What people wear about the house and in mild weather" },
-  { "id": "worker", "name": "Work clothes", "warmth": 0.93,
-    "text": "Sturdy and plain, for work that gets dirty" },
-  { "id": "formal", "name": "Good clothes", "warmth": 0.9,
-    "text": "Kept for weddings and for church" },
-  { "id": "warm", "name": "Warm clothes", "warmth": 0.82,
-    "text": "A scarf and heavier layers for a chilly day" },
-  { "id": "winter", "name": "Winter coat", "warmth": 0.7,
-    "text": "A thick coat with a fur collar, and mittens and a cap" },
-  { "id": "swim", "name": "Swimwear", "warmth": 1.15,
-    "text": "For going in the water (nobody swims yet)" }
+  {"id": "undergarments", "name": "Underclothes", "warmth": 1.0, "text": "Vest and drawers: for washing, and for getting dressed", "garments": {}},
+  {"id": "sleepwear", "name": "Nightclothes", "warmth": 0.9, "text": "A nightshirt and, for many, a cap, worn in bed", "garments": {"top": "sleepwear_top", "bottom": "sleepwear_bottom", "feet": "sleepwear_feet"}},
+  {"id": "casual", "name": "Everyday clothes", "warmth": 0.93, "text": "What people wear about the house and in mild weather", "garments": {"top": "casual_top", "bottom": "casual_bottom", "feet": "casual_feet"}},
+  {"id": "worker", "name": "Work clothes", "warmth": 0.93, "text": "Sturdy and plain, for work that gets dirty", "garments": {"top": "worker_top", "bottom": "worker_bottom", "feet": "worker_feet"}},
+  {"id": "formal", "name": "Good clothes", "warmth": 0.9, "text": "Kept for weddings and for church", "garments": {"top": "formal_top", "bottom": "formal_bottom", "feet": "formal_feet"}},
+  {"id": "warm", "name": "Warm clothes", "warmth": 0.82, "text": "A scarf and heavier layers for a chilly day", "garments": {"top": "winter_top", "bottom": "casual_bottom", "feet": "worker_feet"}},
+  {"id": "winter", "name": "Winter coat", "warmth": 0.7, "text": "A thick coat with a fur collar, and mittens and a cap", "garments": {"top": "winter_top", "bottom": "winter_bottom", "feet": "winter_feet"}},
+  {"id": "swim", "name": "Swimwear", "warmth": 1.15, "text": "For going in the water (nobody swims yet)", "garments": {}}
 ]

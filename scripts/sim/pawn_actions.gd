@@ -32,6 +32,7 @@ const SELL_PREFIX := "sell:"         # "sell:<resource id>"
 const FIRE_ACTION := "fight_fire"
 const TREAT_PREFIX := "treat:"       # "treat:<patient's id>"
 const CRAFT_PREFIX := "craft:"       # "craft:<recipe id>:<object id>"
+const DRESS_PREFIX := "dress:"       # "dress:<object id>": opens the wardrobe to choose from
 const WEAR_PREFIX := "wear:"         # "wear:<outfit id or auto>:<object id>"
 const BUY_PREFIX := "buy:"           # "buy:<tool or good id>"
 const HUNT_PREFIX := "hunt:"         # "hunt:<animal id>"
@@ -311,6 +312,7 @@ static func _recipe_entries(sim: Simulation, pawn: Pawn, placed: PlacedObject) -
 static func _wardrobe_entries(sim: Simulation, pawn: Pawn, placed: PlacedObject) -> Array[Dictionary]:
 	var entries: Array[Dictionary] = []
 	var blocker := sim.use_blocker(pawn, placed)
+	entries.append(_entry(DRESS_PREFIX + str(placed.id), "Change clothes...", blocker == "", blocker))
 	for outfit_id in Clothing.choices():
 		var label := "Wear: %s" % Clothing.name_of(outfit_id).to_lower()
 		if pawn.outfit_choice == outfit_id:
@@ -442,6 +444,8 @@ static func _perform(sim: Simulation, pawn: Pawn, action_id: String, tile: Vecto
 		return sim.sell_stock(action_id.trim_prefix(SELL_PREFIX), pawn)
 	if action_id.begins_with(BUY_PREFIX):
 		return sim.buy_item(pawn, action_id.trim_prefix(BUY_PREFIX))
+	if action_id.begins_with(DRESS_PREFIX):
+		return { "ok": true, "message": "", "dialog": "wardrobe", "object": int(action_id.trim_prefix(DRESS_PREFIX)) }
 	if action_id.begins_with(WEAR_PREFIX):
 		var wear_parts := action_id.trim_prefix(WEAR_PREFIX).split(":")
 		var wardrobe := sim.world.get_object(int(wear_parts[1])) if wear_parts.size() == 2 else null

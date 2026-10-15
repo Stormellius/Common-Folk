@@ -109,3 +109,16 @@ would be the next step up.
 * The HUD panels are dark timber with a gilt edge (`_sims_panel`, `_sims_button` in `hud.gd`); the build palette wraps and scrolls inside the window and shows each object's picture fitted into its frame.
 * After the family screen the player chooses their land (`Starts.land_options`, `LotPicker`): the usual plot beside the square or any empty lot in the region (grown towards 16 by 13). A start without a house begins paused in build mode with the starting coin.
 * **Two storeys** (`Levels`): a tile upstairs is the ground tile with its y lifted by 4096, so floors, walls, objects, roofs and people upstairs live in the same tables. Stairs (built in a roofed room) put a landing upstairs; upstairs floors grow out from the landing over a roofed room, then walls, furniture and a roof. `PathFinder` keeps a grid per floor and routes by the nearest stairs. PageUp / PageDown or the button at the bottom right change the floor on screen; choosing a person on the other floor switches to it. The stairs are drawn by code for now.
+
+## Garments (clothes in separate pieces)
+* An outfit (`data/clothing.json`) is now a recipe of **garments** (`data/garments.json`), one per slot: top, bottom, shoes. Underclothes are the
+  body itself (its vest and briefs are painted on it), so they are the "no garments" case.
+* Each painted set lists its garments (`garments` in `data/sprites.json`) and draws them as `g_<garment>_<side>.png` over the body: bottoms, then
+  shoes, then the top. A set without a garment wears the same slot of a likeness (work clothes fall back to everyday ones).
+* Two sources of pieces: `tools/split_garments.py` cuts the existing whole-outfit layers into top / bottom / shoes with per-set cut rows
+  (`tools/garment_cuts.json`; free, with rough seams where a dress or coat is cut), and `tools/make_garments.py` makes clean pieces from a body
+  wearing just that garment (a SpriteCook edit). Clean ones so far: adult women and men, a linen tunic, grey trousers and leather boots.
+* People choose pieces at a wardrobe (right-click it, "Change clothes..."): an outfit, or any garment per slot. Choices are saved on the person
+  (`Pawn.garments`), apply on top of whatever outfit they wear, give way to nightclothes in bed, underclothes at the basin and good clothes at
+  weddings and services, and change how warm they are (`warm` on each garment).
+* Still to do when there are credits: clean garments for the other sets (elders, youth, child, maternity), hats, outer layers and underwear.

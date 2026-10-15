@@ -219,6 +219,21 @@ static func _gap(a: Color, b: Color) -> float:
 	return Vector3(a.r - b.r, a.g - b.g, a.b - b.b).length()
 
 
+## The garment this set has for what is asked: itself, or the same slot of a likeness (work clothes for a set
+## with only everyday ones), or "".
+static func garment_in(entry: Dictionary, garment_id: String, slot: String) -> String:
+	if garment_id == "":
+		return ""
+	var have: Array = entry.get("garments", [])
+	if garment_id in have:
+		return garment_id
+	var outfit_id := garment_id.trim_suffix("_" + slot)
+	for alternative in OUTFIT_FALLBACKS.get(outfit_id, []):
+		if "%s_%s" % [alternative, slot] in have:
+			return "%s_%s" % [alternative, slot]
+	return ""
+
+
 ## The layer worn for an outfit in a set: the outfit itself, a likeness, or "" (the bare body: underclothes).
 static func layer_for(entry: Dictionary, outfit_id: String) -> String:
 	if outfit_id in ["undergarments", "swim"]:
@@ -248,8 +263,19 @@ static func draw_layered_person(ci: CanvasItem, look: Dictionary, facing: Vector
 	var body := texture(folder + str(chosen_look["body"]) + "_" + side)
 	if body == null:
 		return false
-	var layer_id := layer_for(entry, str(outfit.get("clothes", "casual")))
-	var cloth: Texture2D = texture(folder + layer_id + "_" + side) if layer_id != "" else null
+	var cloths: Array[Texture2D] = []
+	if outfit.has("pieces") and entry.has("garments"):  # separate garments, the lower ones first so the top lies over them
+		for slot in ["bottom", "feet", "top"]:
+			var garment_id := garment_in(entry, str((outfit["pieces"] as Dictionary).get(slot, "")), slot)
+			if garment_id != "":
+				var piece := texture(folder + "g_" + garment_id + "_" + side)
+				if piece != null:
+					cloths.append(piece)
+	else:
+		var layer_id := layer_for(entry, str(outfit.get("clothes", "casual")))
+		var whole: Texture2D = texture(folder + layer_id + "_" + side) if layer_id != "" else null
+		if whole != null:
+			cloths.append(whole)
 	var fallen := bool(outfit.get("fallen", false))
 	var swing := sin(phase) if phase != 0.0 and not lying else 0.0
 	var squash := 1.0 + 0.045 * absf(swing) if phase != 0.0 else 1.0 + 0.012 * sin(breath)
@@ -276,11 +302,11 @@ static func draw_layered_person(ci: CanvasItem, look: Dictionary, facing: Vector
 		rect = Rect2(-width * 0.5, -25.0 * u, width, height * shown)
 		var source := Rect2(Vector2.ZERO, Vector2(body.get_width(), body.get_height() * shown))
 		ci.draw_texture_rect_region(body, rect, source, body_tint * tint)
-		if cloth != null:
+		for cloth in cloths:
 			ci.draw_texture_rect_region(cloth, rect, Rect2(Vector2.ZERO, Vector2(cloth.get_width(), cloth.get_height() * shown)), tint)
 		return true
 	ci.draw_texture_rect(body, rect, false, body_tint * tint)
-	if cloth != null:
+	for cloth in cloths:
 		ci.draw_texture_rect(cloth, rect, false, tint)
 	return true
 
