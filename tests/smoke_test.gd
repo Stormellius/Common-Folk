@@ -4088,6 +4088,42 @@ func _test_art() -> void:
 	Settings.painted_characters = true
 	_check(off and on and painted_before, "painted people are a setting, on by default")
 	_check(not ObjectArt.is_animated("hearth") == SpriteBank.has_object("hearth") and ObjectArt.is_animated("watch_post") == not SpriteBank.has_object("watch_post"), "a painted fireplace stands still, and so does everything else painted")
+	_check_floor_pieces()
+
+
+## A floor picture repeats mirrored: every tile must take a piece that lies inside the picture it is read
+## from, and neighbouring tiles must meet on the very same line of the original picture (no gap, no seam).
+func _check_floor_pieces() -> void:
+	var size := Vector2(64, 64)
+	var tiles := 4
+	var inside := true
+	var seamless := true
+	for y in range(-9, 10):
+		for x in range(-9, 10):
+			var here := SpriteBank.floor_piece(size, tiles, Vector2i(x, y))
+			var region: Rect2 = here["region"]
+			inside = inside and region.size == Vector2(16, 16) and region.position.x >= 0.0 and region.position.y >= 0.0 and region.end.x <= size.x and region.end.y <= size.y
+			var east := SpriteBank.floor_piece(size, tiles, Vector2i(x + 1, y))
+			var south := SpriteBank.floor_piece(size, tiles, Vector2i(x, y + 1))
+			seamless = seamless and is_equal_approx(_source_line(here, size, true, true), _source_line(east, size, true, false))
+			seamless = seamless and is_equal_approx(_source_line(here, size, false, true), _source_line(south, size, false, false))
+	_check(inside, "every floor tile takes a whole piece from inside its picture, in any direction from the origin")
+	_check(seamless, "and neighbouring floor tiles meet on the same line of the picture, so the repeat shows no seam")
+	var texture := SpriteBank.texture("floors/planks")
+	var turned := SpriteBank.turned_texture("floors/planks", true, true)
+	_check(texture != null and turned != null and turned.get_size() == texture.get_size() and SpriteBank.turned_texture("floors/planks", true, true) == turned, "a turned floor picture is made once, the same size as the original")
+
+
+## Where in the original picture a floor tile's piece starts or ends along one axis (a turned picture reads backwards).
+static func _source_line(piece: Dictionary, size: Vector2, horizontal: bool, far_side: bool) -> float:
+	var region: Rect2 = piece["region"]
+	var turned := bool(piece["x"]) if horizontal else bool(piece["y"])
+	var start := region.position.x if horizontal else region.position.y
+	var stop := region.end.x if horizontal else region.end.y
+	var length := size.x if horizontal else size.y
+	if turned:
+		return length - (stop if far_side else start)
+	return stop if far_side else start
 
 
 func _test_clothing() -> void:
