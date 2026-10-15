@@ -42,6 +42,7 @@ func _ready() -> void:
 	_section("dreams", _test_dreams)
 	_section("families", _test_families)
 	_section("audio", _test_audio)
+	_section("art", _test_art)
 	_section("events", _test_events)
 	_section("realm", _test_realm)
 	_section("faith_and_illness", _test_faith_and_illness)
@@ -3965,6 +3966,64 @@ func _test_audio() -> void:
 	director._refresh_players()
 	_check(director._players.is_empty(), "who stops when they stand up")
 	director.queue_free()
+
+
+func _test_art() -> void:
+	print("Painted art")
+	var files_ok := true
+	var sizes_ok := true
+	var entries := 0
+	var missing := ""
+	for entry in DataRegistry.get_list("sprites"):
+		entries += 1
+		var names: Array = entry.get("files", [entry.get("file", "")])
+		for name in names:
+			var path := "res://assets/art/%s.png" % str(name)
+			var exists := ResourceLoader.exists(path)
+			files_ok = files_ok and exists
+			if not exists:
+				missing += str(name) + " "
+			var picture := SpriteBank.texture(str(name))
+			sizes_ok = sizes_ok and picture != null and picture.get_width() >= 16 and picture.get_width() <= 400 and picture.get_height() >= 16 and picture.get_height() <= 400
+	_check(entries >= 18 and files_ok and sizes_ok, "every picture in data/sprites.json is a real file of a sensible size (%d entries%s)" % [entries, ", missing " + missing if missing != "" else ""])
+	var ids_ok := true
+	var shapes_ok := true
+	for entry in DataRegistry.get_list("sprites"):
+		var id := str(entry["id"])
+		if id.begins_with("object."):
+			ids_ok = ids_ok and DataRegistry.has_def("objects", id.trim_prefix("object."))
+			var fit: Array = entry.get("fit", [1.0, 1.0])
+			shapes_ok = shapes_ok and not (entry["files"] as Array).is_empty() and float(fit[0]) > 0.3 and float(fit[1]) > 0.3 and float(fit[0]) < 2.0 and float(fit[1]) < 2.0 and float(entry.get("base", 0.5)) > 0.3 and float(entry.get("base", 0.5)) < 0.7
+		elif id.begins_with("floor."):
+			ids_ok = ids_ok and DataRegistry.has_def("floors", id.trim_prefix("floor."))
+			shapes_ok = shapes_ok and int(entry.get("tiles", 4)) >= 1
+		else:
+			ids_ok = false
+	_check(ids_ok and shapes_ok, "and each is for an object or floor that exists, with a sensible size and place")
+	var decor_ok := true
+	for def_id in ["chair", "chest", "crates", "sacks", "jar", "rug", "tuft"]:
+		var def := DataRegistry.get_def("objects", def_id)
+		decor_ok = decor_ok and str(def.get("category", "")) == "decor" and int(def.get("cost", 0)) > 0 and DataRegistry.has_def("sprites", "object." + def_id)
+	_check(decor_ok, "the new decor (chair, chest, crates, sacks, jar, rug, tall grass) can be built and has its picture")
+	var spec: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://tools/art_sheets.json"))
+	var cut_ok: bool = spec is Dictionary
+	var cut_count := 0
+	if cut_ok:
+		for sheet in spec["sheets"]:
+			for group in ["crops", "textures"]:
+				for name in sheet.get(group, {}):
+					cut_count += 1
+					cut_ok = cut_ok and ResourceLoader.exists("res://assets/art/%s.png" % str(name)) and FileAccess.file_exists("res://assets/source/%s" % str(sheet["source"]).get_file())
+	_check(cut_ok and cut_count >= 80, "every sprite the slicing tool lists has been cut from a sheet that is kept (%d)" % cut_count)
+	# The player can choose the code-drawn look, and then no picture is used.
+	var before := Settings.illustrated_art
+	Settings.illustrated_art = true
+	var painted := SpriteBank.has_object("bed") and SpriteBank.has_object("hearth") and not SpriteBank.has_object("lute") and not SpriteBank.has_object("no_such_thing")
+	Settings.illustrated_art = false
+	var drawn := not SpriteBank.has_object("bed") and SpriteBank.object_entry("bed").is_empty()
+	Settings.illustrated_art = before
+	_check(painted and drawn, "painted objects are used by default, and none with the code-drawn look chosen (a lute has no picture)")
+	_check(not ObjectArt.is_animated("hearth") == SpriteBank.has_object("hearth") and ObjectArt.is_animated("cooking_pot"), "a painted fireplace stands still, while the pot over a fire is still animated")
 
 
 func _test_events() -> void:

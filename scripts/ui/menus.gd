@@ -58,6 +58,7 @@ var _display_option: OptionButton
 var _size_option: OptionButton
 var _scale_option: OptionButton
 var _volume_sliders: Dictionary = {}  # setting name -> HSlider
+var _art_box: CheckBox
 var _vsync_box: CheckBox
 var _autosave_box: CheckBox
 var _name_intro: Label
@@ -654,6 +655,10 @@ func _build_settings() -> Control:
 		_volume_sliders[key] = slider
 		_setting_row(grid, entry[1], slider)
 
+	_art_box = CheckBox.new()
+	_art_box.toggled.connect(func(on: bool) -> void: Settings.set_value("illustrated_art", on))
+	_setting_row(grid, "Painted art", _art_box)
+
 	_vsync_box = CheckBox.new()
 	_vsync_box.toggled.connect(func(on: bool) -> void: Settings.set_value("vsync", on))
 	_setting_row(grid, "Vertical sync", _vsync_box)
@@ -688,6 +693,7 @@ func _refresh_settings() -> void:
 	_scale_option.select(nearest)
 	for key in _volume_sliders:
 		(_volume_sliders[key] as HSlider).set_value_no_signal(float(Settings.get(key)))
+	_art_box.set_pressed_no_signal(Settings.illustrated_art)
 	_vsync_box.set_pressed_no_signal(Settings.vsync)
 	_autosave_box.set_pressed_no_signal(Settings.autosave)
 

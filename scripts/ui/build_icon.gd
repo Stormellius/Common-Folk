@@ -11,6 +11,7 @@ func _init() -> void:
 	custom_minimum_size = Vector2(44, 44)
 	size = Vector2(44, 44)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 
 
 func _draw() -> void:

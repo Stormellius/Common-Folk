@@ -1,7 +1,8 @@
 class_name ObjectArt
 extends RefCounted
 ## Draws the things people use (bed, pot, hearth...) with code, in the same hand-inked
-## style as the people. Like PawnArt this is a placeholder: swap draw() for sprites later.
+## style as the people. A painted picture (see SpriteBank) is drawn instead where there is one; this
+## is what the rest look like, and what everything looks like with the code-drawn art chosen.
 ## An object whose id has no drawing here (for example one added by a mod) shows up as a crate.
 ##
 ## Drawing is centered on the tile; one tile is 48 units wide and `u` scales units to pixels.
@@ -17,7 +18,7 @@ const STONE := Color(0.57, 0.57, 0.56)
 
 
 static func is_animated(def_id: String) -> bool:
-	return def_id in ANIMATED
+	return def_id in ANIMATED and not SpriteBank.has_object(def_id)  # a painted picture does not move
 
 
 ## How far the crops have got: 0 bare earth, 1 seedlings, 2 growing, 3 ripe, 4 stubble. They are
@@ -42,6 +43,8 @@ static func crop_stage() -> int:
 ## (1 north, 2 east, 4 south, 8 west; see WorldState.connection_mask). `cell` is the tile it
 ## stands on; it only varies the stonework and planks so neighbors do not look stamped.
 static func draw(ci: CanvasItem, def_id: String, u: float, t: float, occupied: bool = false, connections: int = 0, cell: Vector2i = Vector2i.ZERO) -> void:
+	if SpriteBank.draw_object(ci, def_id, u, cell):
+		return
 	match def_id:
 		"wall":
 			_wall(ci, u, connections, cell, false)

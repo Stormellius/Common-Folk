@@ -1,0 +1,21 @@
+[
+  {"id": "object.bed", "files": ["props/bed_green", "props/bed_red"], "fit": [0.92, 1.12], "base": 0.52, "text": "A straw bed with a green or red blanket"},
+  {"id": "object.hearth", "files": ["props/fireplace"], "fit": [1.12, 1.2], "base": 0.52},
+  {"id": "object.oven", "files": ["props/oven_stone"], "fit": [1.12, 1.2], "base": 0.52},
+  {"id": "object.well", "files": ["props/well_frame"], "fit": [1.12, 1.2], "base": 0.52},
+  {"id": "object.barrel", "files": ["props/barrel_a", "props/barrel_c"], "fit": [0.82, 0.92], "base": 0.5},
+  {"id": "object.ale_barrel", "files": ["props/barrel_b"], "fit": [0.82, 0.95], "base": 0.5},
+  {"id": "object.table", "files": ["props/table_square"], "fit": [1.0, 1.0], "base": 0.5},
+  {"id": "object.meal_table", "files": ["props/table_square"], "fit": [1.0, 1.0], "base": 0.5},
+  {"id": "object.storage", "files": ["props/crates_pair", "props/crates_stack", "props/chest_iron"], "fit": [1.05, 1.05], "base": 0.52},
+  {"id": "object.bush", "files": ["props/bush_a", "props/bush_b", "props/bush_c", "props/bush_d", "props/bush_e"], "fit": [1.0, 0.95], "base": 0.5, "flip": true},
+  {"id": "object.chair", "files": ["props/chair_a", "props/chair_b", "props/chair_c"], "fit": [0.7, 0.95], "base": 0.5},
+  {"id": "object.chest", "files": ["props/chest_wood_open", "props/chest_gold", "props/chest_iron", "props/chest_iron_open"], "fit": [0.92, 0.92], "base": 0.5},
+  {"id": "object.crates", "files": ["props/crates_pair", "props/crates_stack"], "fit": [1.05, 1.05], "base": 0.52},
+  {"id": "object.sacks", "files": ["props/sack_a", "props/sack_b", "props/sack_c", "props/sack_d", "props/sack_e"], "fit": [0.7, 0.7], "base": 0.45, "flip": true, "shadow": false},
+  {"id": "object.jar", "files": ["props/jug_clay", "props/amphora", "props/urn_grey", "props/jar_clay", "props/vase_green", "props/pitcher"], "fit": [0.62, 0.8], "base": 0.45, "flip": true},
+  {"id": "object.rug", "files": ["props/rug_red", "props/rug_runner_red", "props/rug_runner_green"], "fit": [1.5, 1.5], "base": 0.5, "shadow": false, "flat": true},
+  {"id": "object.tuft", "files": ["props/grass_a", "props/grass_b", "props/grass_c", "props/grass_d", "props/grass_e"], "fit": [0.9, 0.9], "base": 0.48, "flip": true, "shadow": false},
+  {"id": "floor.planks", "file": "floors/planks", "tiles": 4},
+  {"id": "floor.flagstone", "file": "floors/flagstone", "tiles": 4}
+]

@@ -13,6 +13,14 @@ var _dirty := false
 
 func _ready() -> void:
 	y_sort_enabled = true
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS  # painted pictures are scaled down smoothly
+	Settings.changed.connect(_on_setting_changed)
+
+
+func _on_setting_changed(key: String) -> void:
+	if key == "illustrated_art":
+		for view in _views.values():
+			view.queue_redraw()
 
 
 func bind(new_sim: Simulation) -> void:

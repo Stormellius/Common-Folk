@@ -127,7 +127,7 @@ func label_anchor() -> Vector2:
 
 ## A blanket pulled up to the chest, and a little Zzz drifting up from the head.
 func _draw_blanket_and_zzz(u: float) -> void:
-	if not pawn.is_infant():  # (a baby in its cradle is already wrapped up)
+	if not pawn.is_infant() and not SpriteBank.has_object("bed"):  # (a baby in its cradle is already wrapped up, and a painted bed has its own blanket)
 		draw_rect(Rect2(Vector2(-15.0, -1.0) * u, Vector2(30.0, 17.0) * u), PawnArt.OUTLINE)
 		draw_rect(Rect2(Vector2(-14.0, 0.0) * u, Vector2(28.0, 15.0) * u), Color(0.49, 0.31, 0.31))
 		draw_line(Vector2(-14.0, 3.0) * u, Vector2(14.0, 3.0) * u, Color(0.64, 0.44, 0.44), maxf(1.0, 1.5 * u))

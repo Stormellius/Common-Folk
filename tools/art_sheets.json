@@ -1,0 +1,526 @@
+{
+ "sheets": [
+  {
+   "source": "assets/source/pack_props_1.webp",
+   "out": "assets/art",
+   "pad": 2,
+   "crops": {
+    "characters/villager_blue_hat": [
+     16,
+     4,
+     96,
+     108
+    ],
+    "characters/villager_purple_hat": [
+     132,
+     4,
+     212,
+     108
+    ],
+    "characters/villager_green_coif": [
+     244,
+     20,
+     324,
+     108
+    ],
+    "characters/villager_red": [
+     16,
+     140,
+     96,
+     232
+    ],
+    "characters/villager_green_hat": [
+     132,
+     128,
+     212,
+     232
+    ],
+    "characters/villager_grey_hood": [
+     244,
+     132,
+     324,
+     232
+    ],
+    "characters/villager_blue": [
+     16,
+     264,
+     96,
+     360
+    ],
+    "characters/villager_brown": [
+     132,
+     260,
+     208,
+     360
+    ],
+    "characters/villager_green_hood": [
+     244,
+     260,
+     324,
+     360
+    ],
+    "characters/villager_green": [
+     16,
+     392,
+     96,
+     492
+    ],
+    "characters/villager_bald_purple": [
+     132,
+     392,
+     208,
+     492
+    ],
+    "characters/villager_back_red": [
+     20,
+     516,
+     96,
+     620
+    ],
+    "characters/villager_back_green_hood": [
+     132,
+     520,
+     208,
+     620
+    ],
+    "characters/villager_side_hooded": [
+     244,
+     512,
+     304,
+     620
+    ],
+    "props/table_long": [
+     416,
+     8,
+     620,
+     108
+    ],
+    "props/chair_a": [
+     640,
+     4,
+     704,
+     108
+    ],
+    "props/chair_b": [
+     740,
+     8,
+     800,
+     108
+    ],
+    "props/chair_c": [
+     244,
+     392,
+     308,
+     496
+    ],
+    "props/bowl_wood": [
+     828,
+     32,
+     892,
+     88
+    ],
+    "props/table_square": [
+     420,
+     144,
+     504,
+     232
+    ],
+    "props/chest_gold": [
+     520,
+     136,
+     612,
+     232
+    ],
+    "props/chest_iron_open": [
+     624,
+     132,
+     716,
+     236
+    ],
+    "props/chest_wood_open": [
+     420,
+     264,
+     504,
+     364
+    ],
+    "props/chest_iron": [
+     416,
+     532,
+     504,
+     604
+    ],
+    "props/barrel_a": [
+     732,
+     140,
+     800,
+     228
+    ],
+    "props/barrel_b": [
+     932,
+     140,
+     1000,
+     228
+    ],
+    "props/barrel_c": [
+     392,
+     764,
+     448,
+     828
+    ],
+    "props/urn_grey": [
+     832,
+     144,
+     892,
+     224
+    ],
+    "props/fireplace": [
+     516,
+     248,
+     632,
+     376
+    ],
+    "props/oven_stone": [
+     648,
+     248,
+     772,
+     376
+    ],
+    "props/well_ring": [
+     792,
+     276,
+     888,
+     372
+    ],
+    "props/well_frame": [
+     912,
+     264,
+     1012,
+     372
+    ],
+    "props/bed_green": [
+     420,
+     384,
+     500,
+     500
+    ],
+    "props/bed_red": [
+     524,
+     388,
+     604,
+     500
+    ],
+    "props/bed_plain": [
+     628,
+     396,
+     708,
+     504
+    ],
+    "props/crates_pair": [
+     724,
+     388,
+     824,
+     504
+    ],
+    "props/crates_stack": [
+     832,
+     384,
+     928,
+     504
+    ],
+    "props/sack_a": [
+     948,
+     388,
+     992,
+     436
+    ],
+    "props/sack_b": [
+     948,
+     448,
+     992,
+     500
+    ],
+    "props/sack_c": [
+     460,
+     768,
+     504,
+     820
+    ],
+    "props/sack_d": [
+     964,
+     580,
+     1008,
+     628
+    ],
+    "props/sack_e": [
+     780,
+     708,
+     824,
+     752
+    ],
+    "props/rug_red": [
+     520,
+     512,
+     632,
+     632
+    ],
+    "props/rugs_pair": [
+     396,
+     640,
+     504,
+     760
+    ],
+    "props/rug_runner_red": [
+     516,
+     640,
+     632,
+     696
+    ],
+    "props/rug_runner_green": [
+     516,
+     704,
+     636,
+     756
+    ],
+    "props/jug_clay": [
+     644,
+     508,
+     704,
+     568
+    ],
+    "props/amphora": [
+     716,
+     512,
+     764,
+     568
+    ],
+    "props/bowl_clay": [
+     776,
+     524,
+     828,
+     560
+    ],
+    "props/cup_clay": [
+     840,
+     520,
+     888,
+     560
+    ],
+    "props/tankard": [
+     904,
+     516,
+     952,
+     564
+    ],
+    "props/pot_small": [
+     964,
+     516,
+     1008,
+     564
+    ],
+    "props/pitcher": [
+     652,
+     572,
+     700,
+     632
+    ],
+    "props/plate_a": [
+     712,
+     576,
+     764,
+     628
+    ],
+    "props/plate_b": [
+     772,
+     588,
+     828,
+     620
+    ],
+    "props/bowl_white": [
+     840,
+     592,
+     888,
+     620
+    ],
+    "props/plate_c": [
+     712,
+     644,
+     768,
+     688
+    ],
+    "props/cup_plain": [
+     784,
+     648,
+     820,
+     688
+    ],
+    "props/cup_small": [
+     528,
+     776,
+     560,
+     816
+    ],
+    "props/jar_clay": [
+     652,
+     640,
+     696,
+     692
+    ],
+    "props/vase_green": [
+     660,
+     704,
+     692,
+     756
+    ],
+    "props/fence_wood": [
+     528,
+     828,
+     752,
+     888
+    ],
+    "props/fence_stone": [
+     528,
+     892,
+     752,
+     952
+    ],
+    "props/wall_low_stone": [
+     832,
+     832,
+     1024,
+     888
+    ],
+    "props/bush_a": [
+     916,
+     20,
+     1012,
+     104
+    ],
+    "props/bush_b": [
+     512,
+     956,
+     576,
+     1016
+    ],
+    "props/bush_c": [
+     580,
+     956,
+     640,
+     1016
+    ],
+    "props/bush_d": [
+     704,
+     956,
+     764,
+     1016
+    ],
+    "props/bush_e": [
+     768,
+     896,
+     832,
+     956
+    ],
+    "props/grass_a": [
+     836,
+     904,
+     892,
+     948
+    ],
+    "props/grass_b": [
+     900,
+     892,
+     956,
+     952
+    ],
+    "props/grass_c": [
+     644,
+     960,
+     700,
+     1012
+    ],
+    "props/grass_d": [
+     768,
+     960,
+     832,
+     1012
+    ],
+    "props/grass_e": [
+     840,
+     964,
+     888,
+     1008
+    ],
+    "items/axe_a": [
+     848,
+     636,
+     884,
+     696
+    ],
+    "items/axe_b": [
+     904,
+     576,
+     936,
+     632
+    ],
+    "items/axe_c": [
+     904,
+     636,
+     940,
+     700
+    ],
+    "items/shovel_a": [
+     972,
+     636,
+     1004,
+     696
+    ],
+    "items/shovel_long": [
+     400,
+     836,
+     440,
+     956
+    ],
+    "items/shovel_b": [
+     460,
+     832,
+     500,
+     956
+    ]
+   },
+   "textures": {
+    "floors/planks": {
+     "box": [
+      8,
+      640,
+      186,
+      818
+     ],
+     "rotate": 90
+    },
+    "floors/flagstone": {
+     "box": [
+      202,
+      640,
+      380,
+      818
+     ]
+    },
+    "floors/grass_a": {
+     "box": [
+      8,
+      834,
+      186,
+      1012
+     ]
+    },
+    "floors/grass_b": {
+     "box": [
+      202,
+      834,
+      380,
+      1012
+     ]
+    }
+   }
+  }
+ ]
+}

@@ -5,6 +5,13 @@ extends Node2D
 var _watched: WorldState
 
 
+func _ready() -> void:
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	Settings.changed.connect(func(key: String) -> void:
+		if key == "illustrated_art":
+			queue_redraw())
+
+
 func bind(world: WorldState) -> void:
 	if _watched != null and _watched.tile_changed.is_connected(_on_tile_changed):
 		_watched.tile_changed.disconnect(_on_tile_changed)

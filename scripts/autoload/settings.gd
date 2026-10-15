@@ -23,6 +23,8 @@ var master_volume := 0.8
 var music_volume := 0.6
 var ambience_volume := 0.8
 var effects_volume := 0.8
+## Painted pictures (assets/art) where there are some, or everything drawn by code (see SpriteBank).
+var illustrated_art := true
 
 
 func _ready() -> void:
@@ -82,6 +84,7 @@ func load_file() -> void:
 	vsync = bool(config.get_value("display", "vsync", vsync))
 	ui_scale = clampf(float(config.get_value("display", "ui_scale", ui_scale)), 0.5, 3.0)
 	autosave = bool(config.get_value("game", "autosave", autosave))
+	illustrated_art = bool(config.get_value("display", "illustrated_art", illustrated_art))
 	master_volume = clampf(float(config.get_value("sound", "master", master_volume)), 0.0, 1.0)
 	music_volume = clampf(float(config.get_value("sound", "music", music_volume)), 0.0, 1.0)
 	ambience_volume = clampf(float(config.get_value("sound", "ambience", ambience_volume)), 0.0, 1.0)
@@ -96,6 +99,7 @@ func save_file() -> void:
 	config.set_value("display", "vsync", vsync)
 	config.set_value("display", "ui_scale", ui_scale)
 	config.set_value("game", "autosave", autosave)
+	config.set_value("display", "illustrated_art", illustrated_art)
 	config.set_value("sound", "master", master_volume)
 	config.set_value("sound", "music", music_volume)
 	config.set_value("sound", "ambience", ambience_volume)

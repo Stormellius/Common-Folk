@@ -9,6 +9,10 @@ var connections := 0
 var cell := Vector2i.ZERO
 
 
+func _ready() -> void:
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+
+
 func show_at(new_cell: Vector2i, valid: bool) -> void:
 	cell = new_cell
 	position = (Vector2(cell) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE
