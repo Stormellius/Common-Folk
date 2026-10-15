@@ -73,3 +73,14 @@ nobody has the other sex's clothes. A grown-up in each of the eight outfits, for
 youth and elder add about twice that again. Walking is a bounce and a squash of one picture (see `SpriteBank.draw_person`),
 and the sides use the front picture turned; side views and a real walk cycle (SpriteCook's character animation tools)
 would be the next step up.
+
+
+## Update: layered people, animals and more
+
+* **People are layers now** (`tools/make_layers.py`, `tools/people_sets.json`, `assets/art/people/<set>/`): a body sheet (front and back) and
+  dressed copies made with SpriteCook's edit tool, which keeps the figures in place; each outfit layer is what the clothes
+  changed, so any outfit stacks on any body, and a person's skin tints the body. Sets: adult man and woman, elder man and woman,
+  youth, child; outfits casual, worker, formal, winter, sleepwear (warm uses winter; underclothes are the bare body).
+  Babies and toddlers are still drawn by code. More looks (hair, skin tones) mean more body sheets and their five edits.
+* **Animals** (`animal.<kind>` in `data/sprites.json`): all nine, side-on, turned for west.
+* Cut but not wired yet: goods icons (`assets/art/goods`), trees, rocks and a log (`assets/art/trees`), tools and fences.

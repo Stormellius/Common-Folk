@@ -74,5 +74,14 @@
   {"id": "people.elder_male", "stage": "elder", "gender": "male", "dir": "people/elder_male", "outfits": ["casual", "formal", "sleepwear", "winter"], "skin": "#f0b890"},
   {"id": "people.elder_female", "stage": "elder", "gender": "female", "dir": "people/elder_female", "outfits": ["casual", "formal", "sleepwear", "winter"], "skin": "#f0b890"},
   {"id": "people.youth", "stage": "youth", "gender": "any", "dir": "people/youth", "outfits": ["casual", "formal", "sleepwear", "winter", "worker"], "skin": "#f0b890"},
-  {"id": "people.child", "stage": "child", "gender": "any", "dir": "people/child", "outfits": ["casual", "formal", "sleepwear", "winter"], "skin": "#f0b890"}
+  {"id": "people.child", "stage": "child", "gender": "any", "dir": "people/child", "outfits": ["casual", "formal", "sleepwear", "winter"], "skin": "#f0b890"},
+  {"id": "animal.deer", "file": "animals/deer"},
+  {"id": "animal.rabbit", "file": "animals/rabbit"},
+  {"id": "animal.boar", "file": "animals/boar"},
+  {"id": "animal.wolf", "file": "animals/wolf"},
+  {"id": "animal.horse", "file": "animals/horse"},
+  {"id": "animal.donkey", "file": "animals/donkey"},
+  {"id": "animal.ox", "file": "animals/ox"},
+  {"id": "animal.dog", "file": "animals/dog"},
+  {"id": "animal.cat", "file": "animals/cat"}
 ]

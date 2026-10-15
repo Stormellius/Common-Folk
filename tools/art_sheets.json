@@ -1104,6 +1104,255 @@
      1016
     ]
    }
+  },
+  {
+   "source": "assets/source/sheet_animals.png",
+   "out": "assets/art",
+   "pad": 2,
+   "crops": {
+    "animals/deer": [
+     380,
+     14,
+     632,
+     351
+    ],
+    "animals/rabbit": [
+     70,
+     104,
+     275,
+     304
+    ],
+    "animals/boar": [
+     697,
+     110,
+     1008,
+     338
+    ],
+    "animals/wolf": [
+     8,
+     391,
+     347,
+     665
+    ],
+    "animals/horse": [
+     369,
+     360,
+     718,
+     691
+    ],
+    "animals/donkey": [
+     712,
+     392,
+     1017,
+     707
+    ],
+    "animals/ox": [
+     9,
+     706,
+     450,
+     1020
+    ],
+    "animals/dog": [
+     483,
+     795,
+     748,
+     1014
+    ],
+    "animals/cat": [
+     797,
+     837,
+     998,
+     1011
+    ]
+   }
+  },
+  {
+   "source": "assets/source/sheet_goods.png",
+   "out": "assets/art",
+   "pad": 2,
+   "crops": {
+    "goods/wood": [
+     16,
+     42,
+     190,
+     191
+    ],
+    "goods/stone": [
+     235,
+     47,
+     388,
+     187
+    ],
+    "goods/grain": [
+     438,
+     20,
+     590,
+     214
+    ],
+    "goods/fish": [
+     638,
+     49,
+     801,
+     180
+    ],
+    "goods/herbs": [
+     849,
+     26,
+     1004,
+     207
+    ],
+    "goods/ring": [
+     44,
+     291,
+     167,
+     416
+    ],
+    "goods/meat": [
+     246,
+     286,
+     378,
+     412
+    ],
+    "goods/hide": [
+     631,
+     263,
+     800,
+     437
+    ],
+    "goods/flour": [
+     846,
+     273,
+     992,
+     427
+    ],
+    "goods/bread": [
+     20,
+     512,
+     186,
+     640
+    ],
+    "goods/ale": [
+     449,
+     497,
+     585,
+     661
+    ],
+    "goods/iron": [
+     634,
+     525,
+     798,
+     657
+    ],
+    "goods/leather": [
+     832,
+     509,
+     1008,
+     670
+    ],
+    "goods/cloth": [
+     14,
+     747,
+     194,
+     897
+    ],
+    "goods/wine": [
+     475,
+     753,
+     556,
+     990
+    ],
+    "goods/salt": [
+     246,
+     816,
+     391,
+     922
+    ],
+    "goods/spice": [
+     851,
+     824,
+     1001,
+     927
+    ]
+   }
+  },
+  {
+   "source": "assets/source/sheet_trees.png",
+   "out": "assets/art",
+   "pad": 2,
+   "crops": {
+    "trees/oak": [
+     5,
+     12,
+     264,
+     323
+    ],
+    "trees/pine": [
+     266,
+     10,
+     486,
+     324
+    ],
+    "trees/birch": [
+     606,
+     10,
+     765,
+     322
+    ],
+    "trees/bare": [
+     782,
+     20,
+     1014,
+     319
+    ],
+    "trees/dead": [
+     40,
+     391,
+     247,
+     675
+    ],
+    "trees/autumn": [
+     520,
+     363,
+     760,
+     668
+    ],
+    "trees/bare_b": [
+     776,
+     375,
+     1014,
+     674
+    ],
+    "trees/boulder": [
+     277,
+     431,
+     492,
+     646
+    ],
+    "trees/dead_b": [
+     17,
+     710,
+     243,
+     1017
+    ],
+    "trees/rocks": [
+     266,
+     777,
+     503,
+     973
+    ],
+    "trees/flowers": [
+     524,
+     810,
+     756,
+     965
+    ],
+    "trees/log": [
+     777,
+     812,
+     1014,
+     975
+    ]
+   }
   }
  ]
 }

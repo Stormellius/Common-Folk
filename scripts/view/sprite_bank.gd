@@ -243,3 +243,26 @@ static func draw_layered_person(ci: CanvasItem, look: Dictionary, facing: Vector
 	if cloth != null:
 		ci.draw_texture_rect(cloth, rect, false, tint)
 	return true
+
+
+## Draws an animal as a picture (drawn side-on, facing right, turned to face west), bobbing as it walks.
+## `origin` is where its middle is. False when there is none.
+static func draw_animal(ci: CanvasItem, kind: String, facing: Vector2i, u: float, phase: float, origin: Vector2) -> bool:
+	if not enabled():
+		return false
+	var entry := DataRegistry.get_def("sprites", "animal." + kind)
+	if entry.is_empty():
+		return false
+	var picture := texture(str(entry["file"]))
+	if picture == null:
+		return false
+	var length := float((DataRegistry.get_def("animals", kind).get("art", {}).get("body", [20, 10]) as Array)[0])
+	var width := (length + 12.0) * u * 1.15
+	var height := width * picture.get_height() / picture.get_width()
+	var swing := sin(phase) if phase != 0.0 else 0.0
+	var flip := -1.0 if facing.x < 0 else 1.0
+	ci.draw_set_transform(origin, 0.0, Vector2.ONE)
+	ci.draw_colored_polygon(PawnArt._ellipse_points(Vector2(0.0, 3.0 * u), Vector2(width * 0.38, 3.5 * u)), SHADOW)
+	ci.draw_texture_rect(picture, Rect2(Vector2(-width * 0.5 * flip, 4.0 * u - height - absf(swing) * 1.4 * u), Vector2(width * flip, height)), false)
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	return true

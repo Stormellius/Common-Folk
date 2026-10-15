@@ -14,6 +14,8 @@ const SADDLE := Color(0.42, 0.26, 0.16)
 
 
 static func draw(ci: CanvasItem, kind: String, coat: int, facing: Vector2i, u: float, phase: float, clock: float = 0.0, origin: Vector2 = Vector2.ZERO) -> void:
+	if SpriteBank.draw_animal(ci, kind, facing, u, phase, origin):
+		return
 	var art: Dictionary = DataRegistry.get_def("animals", kind).get("art", {})
 	var body: Array = art.get("body", [20, 10])
 	var length := float(body[0])
