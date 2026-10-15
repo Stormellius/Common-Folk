@@ -49,7 +49,10 @@ static func draw_object(ci: CanvasItem, def_id: String, u: float, cell: Vector2i
 	var files: Array = entry["files"]
 	if files.is_empty():
 		return false
-	var texture_here := texture(str(files[mini(floori(ObjectArt.hash01(cell.x, cell.y, 977) * files.size()), files.size() - 1)]))
+	var chosen := str(files[mini(floori(ObjectArt.hash01(cell.x, cell.y, 977) * files.size()), files.size() - 1)])
+	if entry.has("stages"):  # crops: a picture for each stage of the year
+		chosen = str((entry["stages"] as Array)[clampi(ObjectArt.crop_stage(), 0, (entry["stages"] as Array).size() - 1)])
+	var texture_here := texture(chosen)
 	if texture_here == null:
 		return false
 	var tile := 48.0 * u

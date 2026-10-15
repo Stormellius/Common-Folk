@@ -829,6 +829,281 @@
     ]
    },
    "clean": true
+  },
+  {
+   "source": "assets/source/sheet_home.png",
+   "out": "assets/art",
+   "pad": 2,
+   "crops": {
+    "props/cooking_pot": [
+     19,
+     24,
+     317,
+     284
+    ],
+    "props/wash_basin": [
+     355,
+     21,
+     529,
+     290
+    ],
+    "props/chamber_pot": [
+     570,
+     50,
+     751,
+     238
+    ],
+    "props/cradle": [
+     777,
+     26,
+     1015,
+     259
+    ],
+    "props/shelf": [
+     771,
+     294,
+     1011,
+     622
+    ],
+    "props/bench": [
+     17,
+     324,
+     435,
+     634
+    ],
+    "props/counter": [
+     75,
+     636,
+     507,
+     1015
+    ],
+    "props/stool": [
+     813,
+     780,
+     978,
+     986
+    ]
+   }
+  },
+  {
+   "source": "assets/source/sheet_work.png",
+   "out": "assets/art",
+   "pad": 2,
+   "crops": {
+    "props/forge": [
+     8,
+     46,
+     312,
+     463
+    ],
+    "props/workbench": [
+     321,
+     166,
+     620,
+     425
+    ],
+    "props/tool_rack": [
+     572,
+     204,
+     789,
+     454
+    ],
+    "props/quern": [
+     794,
+     235,
+     1014,
+     486
+    ],
+    "props/tanning_rack": [
+     262,
+     615,
+     510,
+     981
+    ],
+    "props/brew_vat": [
+     19,
+     660,
+     243,
+     975
+    ],
+    "props/chopping_block": [
+     534,
+     691,
+     751,
+     972
+    ]
+   }
+  },
+  {
+   "source": "assets/source/sheet_market.png",
+   "out": "assets/art",
+   "pad": 2,
+   "crops": {
+    "props/market_stall": [
+     40,
+     14,
+     350,
+     374
+    ],
+    "props/food_shelf": [
+     418,
+     21,
+     672,
+     322
+    ],
+    "props/notice_board": [
+     733,
+     15,
+     990,
+     323
+    ],
+    "props/cart": [
+     427,
+     383,
+     707,
+     606
+    ],
+    "props/haystack": [
+     735,
+     365,
+     991,
+     597
+    ],
+    "props/hitching_post": [
+     138,
+     415,
+     235,
+     591
+    ],
+    "props/lantern_post": [
+     810,
+     638,
+     946,
+     999
+    ],
+    "props/haystack_b": [
+     53,
+     681,
+     331,
+     943
+    ],
+    "props/woodpile": [
+     392,
+     682,
+     684,
+     942
+    ]
+   }
+  },
+  {
+   "source": "assets/source/sheet_chapel.png",
+   "out": "assets/art",
+   "pad": 2,
+   "crops": {
+    "props/altar": [
+     35,
+     29,
+     323,
+     316
+    ],
+    "props/pew": [
+     391,
+     20,
+     704,
+     313
+    ],
+    "props/grave": [
+     745,
+     34,
+     982,
+     290
+    ],
+    "props/sickbed": [
+     382,
+     341,
+     708,
+     655
+    ],
+    "props/lute": [
+     741,
+     495,
+     998,
+     678
+    ],
+    "props/watch_post": [
+     45,
+     590,
+     350,
+     1015
+    ],
+    "props/harp": [
+     421,
+     750,
+     685,
+     995
+    ],
+    "props/drum": [
+     748,
+     788,
+     988,
+     982
+    ]
+   }
+  },
+  {
+   "source": "assets/source/sheet_farm.png",
+   "out": "assets/art",
+   "pad": 2,
+   "crops": {
+    "props/flower_bed": [
+     19,
+     8,
+     419,
+     252
+    ],
+    "props/herb_bed": [
+     513,
+     7,
+     867,
+     247
+    ],
+    "props/field_growing": [
+     535,
+     228,
+     1002,
+     506
+    ],
+    "props/field_seedlings": [
+     24,
+     284,
+     491,
+     503
+    ],
+    "props/field_ripe": [
+     26,
+     492,
+     493,
+     765
+    ],
+    "props/field_stubble": [
+     536,
+     537,
+     1002,
+     765
+    ],
+    "props/quarry_face": [
+     85,
+     767,
+     405,
+     1018
+    ],
+    "props/jetty": [
+     531,
+     792,
+     907,
+     1016
+    ]
+   }
   }
  ]
 }

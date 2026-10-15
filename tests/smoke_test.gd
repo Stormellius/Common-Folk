@@ -3991,7 +3991,7 @@ func _test_art() -> void:
 			if not exists:
 				missing += str(name) + " "
 			var picture := SpriteBank.texture(str(name))
-			sizes_ok = sizes_ok and picture != null and picture.get_width() >= 16 and picture.get_width() <= 400 and picture.get_height() >= 16 and picture.get_height() <= 400
+			sizes_ok = sizes_ok and picture != null and picture.get_width() >= 16 and picture.get_width() <= 520 and picture.get_height() >= 16 and picture.get_height() <= 520
 	_check(entries >= 34 and files_ok and sizes_ok, "every picture in data/sprites.json is a real file of a sensible size (%d entries%s)" % [entries, ", missing " + missing if missing != "" else ""])
 	var ids_ok := true
 	var shapes_ok := true
@@ -4028,11 +4028,11 @@ func _test_art() -> void:
 	# The player can choose the code-drawn look, and then no picture is used.
 	var before := Settings.illustrated_art
 	Settings.illustrated_art = true
-	var painted := SpriteBank.has_object("bed") and SpriteBank.has_object("hearth") and not SpriteBank.has_object("lute") and not SpriteBank.has_object("no_such_thing")
+	var painted := SpriteBank.has_object("bed") and SpriteBank.has_object("hearth") and SpriteBank.has_object("lute") and not SpriteBank.has_object("no_such_thing")
 	Settings.illustrated_art = false
 	var drawn := not SpriteBank.has_object("bed") and SpriteBank.object_entry("bed").is_empty()
 	Settings.illustrated_art = before
-	_check(painted and drawn, "painted objects are used by default, and none with the code-drawn look chosen (a lute has no picture)")
+	_check(painted and drawn, "painted objects are used by default, and none with the code-drawn look chosen (a made-up object has none)")
 	# People: painted ones where there is a picture, falling back to a likeness in other clothes, else code.
 	var adult_winter := SpriteBank.person_variant("adult", "winter", 1)
 	var elder_sleep := SpriteBank.person_variant("elder", "sleepwear", 1)
@@ -4051,7 +4051,7 @@ func _test_art() -> void:
 	var on := SpriteBank.people_enabled()
 	Settings.painted_characters = painted_before
 	_check(off and on, "painted people are a setting, off by default")
-	_check(not ObjectArt.is_animated("hearth") == SpriteBank.has_object("hearth") and ObjectArt.is_animated("cooking_pot"), "a painted fireplace stands still, while the pot over a fire is still animated")
+	_check(not ObjectArt.is_animated("hearth") == SpriteBank.has_object("hearth") and ObjectArt.is_animated("watch_post") == not SpriteBank.has_object("watch_post"), "a painted fireplace stands still, and so does everything else painted")
 
 
 func _test_clothing() -> void:

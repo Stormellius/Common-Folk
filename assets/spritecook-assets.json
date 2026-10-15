@@ -20,6 +20,26 @@
   {
    "asset_id": "0d04a5f0-22cb-471c-89f2-09b2e67559dc",
    "label": "Test: a cooking pot on a tripod over a fire (generated with the pack as the style reference; not downloaded yet)"
+  },
+  {
+   "asset_id": "e6d2889b-4dbe-4cfd-a2e8-574636e8c47a",
+   "label": "Sheet: home and kitchen"
+  },
+  {
+   "asset_id": "51f53387-f173-464a-b0e3-37059f255a6a",
+   "label": "Sheet: workshop"
+  },
+  {
+   "asset_id": "eac801d3-0007-4efc-87d3-dbc83f49006a",
+   "label": "Sheet: shop and market"
+  },
+  {
+   "asset_id": "074648ed-19ee-4f24-b56c-e484f06a2b99",
+   "label": "Sheet: chapel, clinic, instruments"
+  },
+  {
+   "asset_id": "21aaf4e4-89d7-444a-9017-948ca36f3fe1",
+   "label": "Sheet: farm, garden, quarry, jetty"
   }
  ]
 }
