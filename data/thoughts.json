@@ -122,5 +122,11 @@
   { "id": "wish_granted_big", "text": "A great wish came true: {name}", "mood": 9,  "hours": 18, "on": "wish_granted_big" },
   { "id": "ambition_step",    "text": "Closer to a dream: {name}",      "mood": 6,  "hours": 24, "on": "ambition_step" },
   { "id": "ambition_fulfilled", "text": "Fulfilled: {name}",            "mood": 15, "hours": 120, "on": "ambition_fulfilled" },
-  { "id": "fulfilled",        "text": "A life with purpose",            "mood": 4,  "when": { "fulfilled": true } }
+  { "id": "fulfilled",        "text": "A life with purpose",            "mood": 4,  "when": { "fulfilled": true } },
+  { "id": "jealous",      "text": "Jealous of whoever has their partner's eye", "mood": -9, "hours": 24, "on": "partner_strayed", "only_for": ["jealous"] },
+  { "id": "betrayed",     "text": "Their partner strayed",         "mood": -5, "hours": 48, "on": "partner_strayed", "never_for": ["jealous", "polyamorous"] },
+  { "id": "embarrassed",  "text": "Somebody saw",                  "mood": -8, "hours": 12, "on": "seen", "only_for": ["shy"] },
+  { "id": "showed_off",   "text": "Enjoyed being seen",            "mood": 7,  "hours": 12, "on": "seen", "only_for": ["exhibitionist"] },
+  { "id": "devoted",      "text": "Devoted to their partner",      "mood": 4,  "when": { "partner": true }, "only_for": ["faithful"] },
+  { "id": "gossiped",     "text": "Passed on some news",           "mood": 4,  "hours": 6, "on": "gossiped", "only_for": ["gossip"] }
 ]

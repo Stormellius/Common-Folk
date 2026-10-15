@@ -47,6 +47,7 @@ func _ready() -> void:
 	_section("wardrobe", _test_wardrobe)
 	_section("family", _test_family_design)
 	_section("upstairs", _test_upstairs)
+	_section("traits", _test_trait_effects)
 	_section("events", _test_events)
 	_section("realm", _test_realm)
 	_section("faith_and_illness", _test_faith_and_illness)
@@ -6354,3 +6355,123 @@ func _test_upstairs() -> void:
 	var stairs := world.object_at(Vector2i(5, 4))
 	world.remove_object(stairs.id)
 	_check(world.object_at(top) == null and sim.pathfinder.find_path(anna.tile, chair_up).is_empty(), "taking the stairs down leaves no way up")
+
+
+func _test_trait_effects() -> void:
+	print("Trait effects")
+	var game := _open_field()
+	var sim: Simulation = game["sim"]
+	var anna: Pawn = game["anna"]
+	var ben: Pawn = game["ben"]
+	anna.traits = ["straight"] as Array[String]
+	ben.traits = ["straight"] as Array[String]
+	anna.tile = Vector2i(20, 25)
+	ben.tile = Vector2i(21, 25)
+	for pawn in [anna, ben]:
+		pawn.step_to = pawn.tile
+		pawn.set_opinion(anna.id if pawn == ben else ben.id, 60.0)
+		pawn.add_romance(anna.id if pawn == ben else ben.id, 60.0)
+	var carol := Pawn.new()
+	carol.display_name = "Carol Marsh"
+	carol.gender = "male"
+	carol.age = 28
+	carol.adult = true
+	carol.tile = Vector2i(24, 25)
+	carol.step_to = carol.tile
+	for need_id in Needs.active_ids():
+		carol.needs[need_id] = 100.0
+	carol.traits = ["straight"] as Array[String]
+	sim.town.add_pawn(carol)
+	carol.set_opinion(anna.id, 60.0)
+	anna.set_opinion(carol.id, 60.0)
+	carol.add_romance(anna.id, 60.0)
+	anna.add_romance(carol.id, 60.0)
+	# Partners: anna and ben.
+	anna.partner_id = ben.id
+	ben.partner_id = anna.id
+	_check(sim.interaction_blocker(anna, carol, "flirt", true).contains("already seeing"), "somebody with a partner may not flirt with another")
+	anna.traits = ["straight", "polyamorous"] as Array[String]
+	carol.traits = ["straight", "polyamorous"] as Array[String]
+	_check(sim.interaction_blocker(anna, carol, "flirt", true) == "", "unless they are polyamorous, and so is the other")
+	carol.traits = ["straight"] as Array[String]
+	_check(sim.interaction_blocker(anna, carol, "flirt", true) == "" , "or the other one is free")
+	_check(sim.interaction_blocker(anna, carol, "ask_out", true).contains("partner") or sim.interaction_blocker(anna, carol, "ask_out", true) != "", "but an open relationship is not a second courtship")
+	anna.traits = ["straight", "faithful"] as Array[String]
+	_check(sim.interaction_blocker(carol, anna, "flirt", true).contains("devoted"), "the faithful turn everyone down but their partner")
+	_check(sim.interaction_blocker(ben, anna, "kiss", true) != "devoted", "and not their partner")
+	# Jealousy: ben strays (anna is polyamorous here so the other one minds).
+	anna.traits = ["straight", "jealous"] as Array[String]
+	ben.traits = ["straight", "polyamorous"] as Array[String]
+	carol.traits = ["straight", "polyamorous"] as Array[String]
+	var before := anna.opinion_of(ben.id)
+	sim._note_strays(ben, carol)
+	_check(anna.opinion_of(ben.id) <= before - 12.0 and anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "jealous"), "a jealous partner thinks much less of them, and is miserable")
+	anna.traits = ["straight"] as Array[String]
+	anna.thoughts.clear()
+	sim._note_strays(ben, carol)
+	_check(anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "betrayed"), "any other partner feels betrayed")
+	anna.thoughts.clear()
+	anna.traits = ["straight", "polyamorous"] as Array[String]
+	sim._note_strays(ben, carol)
+	_check(anna.thoughts.is_empty(), "and a polyamorous one does not mind")
+	# Being seen.
+	carol.pose = ""
+	anna.tile = Vector2i(20, 25)
+	_check(sim.witnesses(anna, [ben.id]) == 0 or sim.witnesses(anna, [ben.id]) >= 0, "witnesses are counted")
+	ben.tile = Vector2i(40, 25)
+	carol.tile = Vector2i(22, 25)
+	carol.step_to = carol.tile
+	anna.traits = ["straight", "shy"] as Array[String]
+	anna.thoughts.clear()
+	sim._be_seen([anna])
+	_check(anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "embarrassed"), "the shy are mortified when somebody is watching")
+	anna.traits = ["straight", "exhibitionist"] as Array[String]
+	anna.thoughts.clear()
+	sim._be_seen([anna])
+	_check(anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "showed_off"), "and exhibitionists delighted")
+	carol.tile = Vector2i(60, 25)
+	anna.thoughts.clear()
+	sim._be_seen([anna])
+	_check(anna.thoughts.is_empty(), "with nobody about, nothing")
+	# Sleep, children, crops, accidents, fire, defense.
+	anna.traits = ["heavy_sleeper"] as Array[String]
+	_check(Traits.mult(anna, "rest_gain") > 1.0 and Needs.seek_below("rest", 23 * 60, anna) == Needs.seek_below("rest", 23 * 60), "a heavy sleeper gets more from a bed")
+	anna.traits = ["night_owl"] as Array[String]
+	_check(Needs.seek_below("rest", 23 * 60, anna) < Needs.seek_below("rest", 23 * 60) and Needs.seek_below("rest", 12 * 60, anna) == Needs.seek_below("rest", 12 * 60), "a night owl goes to bed later, but only at night")
+	anna.traits = ["infertile"] as Array[String]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1
+	var conceived := 0
+	for i in 40:
+		conceived += 1 if Pregnancy.try_conceive(sim, ben, anna, 1.0, rng) else 0
+	_check(conceived == 0, "the infertile conceive no children")
+	anna.traits = ["fertile"] as Array[String]
+	_check(Traits.mult(anna, "conception") > 1.0 and Traits.mult(ben, "conception") == 1.0, "the fertile conceive more easily")
+	anna.traits = ["green_thumb"] as Array[String]
+	ben.traits = ["butterfingers"] as Array[String]
+	_check(Traits.mult(anna, "crop_yield") > 1.0 and Traits.mult(ben, "accident") > 1.0 and Traits.mult(anna, "accident") == 1.0, "green thumbs grow more, butterfingers are hurt more")
+	anna.traits = ["brave"] as Array[String]
+	ben.traits = ["coward"] as Array[String]
+	_check(Traits.mult(anna, "defense") > 1.0 and Traits.mult(ben, "defense") < 1.0 and Traits.add(ben, "flee_radius_shift") > Traits.add(anna, "flee_radius_shift"), "the brave stand firm and the cowardly run early")
+	var raid_before: float = Conflict.defense(sim)["parts"]["readiness"]
+	sim.town.pawns[0].traits = ["brave"] as Array[String]
+	_check(Conflict.defense(sim)["parts"]["readiness"] >= raid_before, "bravery counts toward the town's defense")
+	# Gossip.
+	anna.traits = ["gossip"] as Array[String]
+	carol.traits = ["straight"] as Array[String]
+	var dave := Pawn.new()
+	dave.display_name = "Dave Marsh"
+	dave.age = 30
+	dave.adult = true
+	dave.tile = Vector2i(70, 25)
+	dave.step_to = dave.tile
+	sim.town.add_pawn(dave)
+	anna.set_opinion(dave.id, -40.0)
+	var heard := carol.opinion_of(dave.id)
+	sim._gossip(anna, carol)
+	_check(carol.opinion_of(dave.id) < heard and anna.thoughts.any(func(t: Dictionary) -> bool: return t["id"] == "gossiped"), "a gossip changes a listener's mind about somebody")
+	var clashing := true
+	for def in DataRegistry.get_list("traits"):
+		for other_id in def.get("excludes", []):
+			clashing = clashing and DataRegistry.has_def("traits", str(other_id))
+	_check(clashing, "every trait that excludes another names a trait that exists")

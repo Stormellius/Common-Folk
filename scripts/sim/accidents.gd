@@ -16,6 +16,7 @@ static func roll(sim: Simulation, pawn: Pawn, object_def: Dictionary, rng: Rando
 	var skill_id := str(object_def.get("skill", ""))
 	if skill_id != "":
 		chance *= Skills.safety_multiplier(pawn, skill_id)  # the practised are hurt less often
+	chance *= Traits.mult(pawn, "accident")
 	if rng.randf() >= chance:
 		return ""
 	return strike(sim, pawn, risk, rng)

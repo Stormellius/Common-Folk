@@ -24,6 +24,7 @@ var _age_option: OptionButton
 var _skin_row: HBoxContainer
 var _hair_row: HBoxContainer
 var _style_row: HBoxContainer
+var _look_row: HBoxContainer
 var _orientation_option: OptionButton
 var _orientation_note: Label
 var _trait_row: HFlowContainer
@@ -141,6 +142,10 @@ func _build() -> void:
 
 	_skin_row = _swatch_row(fields, "Skin")
 	_hair_row = _swatch_row(fields, "Hair")
+	_look_row = HBoxContainer.new()
+	_look_row.add_theme_constant_override("separation", 6)
+	fields.add_child(_look_row)
+	_look_row.add_child(_label("Look", "InkLabel", 80))
 	var style_line := HBoxContainer.new()
 	style_line.add_theme_constant_override("separation", 6)
 	fields.add_child(style_line)
@@ -292,6 +297,7 @@ func _refresh() -> void:
 	_age_option.select(age_index)
 	_fill_swatches(_skin_row, SKIN_COLORS, "skin")
 	_fill_swatches(_hair_row, HAIR_COLORS, "hair")
+	_fill_looks()
 	for child in _style_row.get_children().slice(1):
 		child.queue_free()
 	for index in HAIR_STYLE_NAMES.size():
@@ -340,6 +346,36 @@ func _fill_swatches(row: HBoxContainer, colors: Array[String], key: String) -> v
 			_member()[key] = color
 			_refresh())
 		row.add_child(swatch)
+
+
+## The painted people come in a few looks (hair and all) rather than in parts, so with them the person is
+## given a choice of looks; the hair colour and style below only mean something to the drawn people.
+func _fill_looks() -> void:
+	for child in _look_row.get_children().slice(1):
+		child.queue_free()
+	var painted := SpriteBank.people_enabled()
+	var temp := Pawn.new()
+	FamilyDesign.apply(temp, _member(), str(design["family"]))
+	var entry := SpriteBank.person_set(str(PawnArt.outfit_for(temp).get("stage", "adult")), temp.gender)
+	var looks: Array = entry.get("looks", []) if painted and not entry.is_empty() else []
+	_look_row.visible = not looks.is_empty()
+	_hair_row.visible = looks.is_empty()
+	_style_row.visible = looks.is_empty()
+	if looks.is_empty():
+		return
+	var current := SpriteBank.pick_look(entry, temp.look)
+	for index in looks.size():
+		var look: Dictionary = looks[index]
+		var button := Button.new()
+		button.text = "Look %d" % (index + 1)
+		button.toggle_mode = true
+		button.custom_minimum_size = Vector2(86, 30)
+		button.set_pressed_no_signal(str(look["id"]) == str(current["id"]))
+		button.pressed.connect(func() -> void:
+			_member()["skin"] = str(look["skin"])
+			_member()["hair"] = str(look["hair"])
+			_refresh())
+		_look_row.add_child(button)
 
 
 func _refresh_traits() -> void:

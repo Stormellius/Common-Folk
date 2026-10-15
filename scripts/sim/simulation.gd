@@ -414,10 +414,17 @@ func _romance_blocker(pawn: Pawn, other: Pawn, interaction: Dictionary) -> Strin
 	var other_name := _first_name(other)
 	if Relations.are_kin(pawn, other):
 		return "%s is family" % other_name
-	if pawn.partner_id != 0 and pawn.partner_id != other.id:
+	for pair in [[pawn, other], [other, pawn]]:  # the faithful keep to their partner
+		var loyal: Pawn = pair[0]
+		if Traits.has(loyal, "faithful") and loyal.partner_id != 0 and loyal.partner_id != pair[1].id:
+			return "%s is devoted to %s" % [_first_name(loyal), _first_name(person(loyal.partner_id)) if person(loyal.partner_id) != null else "their partner"]
+	if pawn.partner_id != 0 and pawn.partner_id != other.id and not Traits.has(pawn, "polyamorous"):
 		return "%s is already seeing someone" % _first_name(pawn)
-	if other.partner_id != 0 and other.partner_id != pawn.id:
+	if other.partner_id != 0 and other.partner_id != pawn.id and not Traits.has(other, "polyamorous"):
 		return "%s is already seeing someone" % other_name
+	if bool(interaction.get("begins_dating", false)) or bool(interaction.get("proposes", false)):
+		if (pawn.partner_id != 0 and pawn.partner_id != other.id) or (other.partner_id != 0 and other.partner_id != pawn.id):
+			return "one of them already has a partner"  # an open relationship is not a second marriage
 	if bool(interaction.get("begins_dating", false)) and Romance.together(pawn, other):
 		return "already together"
 	if bool(interaction.get("proposes", false)):
@@ -1437,7 +1444,7 @@ func _step_job(pawn: Pawn) -> void:
 	for need_id in satisfies:
 		if not pawn.needs.has(need_id):
 			continue
-		var value := minf(Needs.FULL, float(pawn.needs[need_id]) + float(satisfies[need_id]) * boost * (open_sky if need_id == "rest" else 1.0) / 60.0)
+		var value := minf(Needs.FULL, float(pawn.needs[need_id]) + float(satisfies[need_id]) * boost * ((open_sky * Traits.mult(pawn, "rest_gain")) if need_id == "rest" else 1.0) / 60.0)
 		pawn.needs[need_id] = value
 		if value < Needs.FULL:
 			all_full = false
@@ -1466,6 +1473,8 @@ func _step_job(pawn: Pawn) -> void:
 	var minutes_needed := Skills.recipe_minutes(pawn, recipe) if not recipe.is_empty() else int(object_def.get("max_use_minutes", 60))
 	if all_full or pawn.job_minutes >= minutes_needed:
 		Mood.add_event(pawn, "used:%s" % placed.def_id, GameClock.tick)
+		if bool(object_def.get("private", false)):
+			_be_seen([pawn])
 		if pawn.job_outfit != "" and bool(object_def.get("wardrobe", false)):
 			pawn.outfit_choice = "" if pawn.job_outfit == "auto" else pawn.job_outfit
 		if open_sky < 1.0:
@@ -1494,6 +1503,9 @@ func _collect(pawn: Pawn, object_def: Dictionary) -> void:
 		var amount := int(gathers[resource_id])
 		if pawn.traits.has("lazy"):
 			amount = maxi(1, amount - 1)
+		if object_def.has("gather_seasons") and Traits.mult(pawn, "crop_yield") != 1.0:
+			var scaled := float(amount) * Traits.mult(pawn, "crop_yield")
+			amount = floori(scaled) + (1 if _rng.randf() < scaled - floorf(scaled) else 0)
 		if skill_id != "":
 			amount = Skills.yield_amount(pawn, skill_id, amount, _rng)
 		var packed := Fauna.pack_bonus(self, pawn)
@@ -1650,9 +1662,70 @@ func _finish_interaction(pawn: Pawn, partner: Pawn, interaction: Dictionary) -> 
 		var engaged := Romance.engage(self, pawn, partner)
 		if household.get_pawn(pawn.id) != null or household.get_pawn(partner.id) != null:
 			health_notice.emit(engaged)
+	if bool(interaction.get("romantic", false)) and not flopped:
+		_note_strays(pawn, partner)
+	if str(interaction.get("id", "")) in ["kiss", "intimacy"]:
+		_be_seen([pawn, partner])
+	if str(interaction.get("id", "")) in ["chat", "joke"] and not flopped:
+		_gossip(pawn, partner)
+		_gossip(partner, pawn)
 	var conception := float(interaction.get("conception_chance", 0.0))
 	if conception > 0.0 and not flopped:
 		Pregnancy.try_conceive(self, pawn, partner, conception, _rng)
+
+
+## When somebody's partner is romantic with another person, they mind (a jealous one a great deal) and think less of
+## both. Only the open-hearted can be, since nobody else may.
+func _note_strays(a: Pawn, b: Pawn) -> void:
+	for pair in [[a, b], [b, a]]:
+		var straying: Pawn = pair[0]
+		var other: Pawn = pair[1]
+		var spouse := person(straying.partner_id) if straying.partner_id != 0 else null
+		if spouse == null or spouse.id == other.id or Traits.has(spouse, "polyamorous"):
+			continue
+		Mood.add_event(spouse, "partner_strayed", GameClock.tick)
+		var jealous := Traits.has(spouse, "jealous")
+		spouse.add_opinion(straying.id, -12.0 if jealous else -4.0)
+		spouse.add_romance(straying.id, -8.0 if jealous else -3.0)
+		if household.get_pawn(spouse.id) != null:
+			health_notice.emit("%s is %s that %s and %s were so close." % [_first_name(spouse), "furious" if jealous else "hurt", _first_name(straying), _first_name(other)])
+
+
+## How many people who are up and about stand near enough to see: not the ones in `ignore`, babies or the sleeping.
+func witnesses(pawn: Pawn, ignore: Array, radius: int = 6) -> int:
+	var count := 0
+	for other in people():
+		if other.id == pawn.id or other.id in ignore or other.is_infant() or other.pose == "lie" or other.is_dying():
+			continue
+		if Levels.of(other.tile) == Levels.of(pawn.tile) and _distance(other.tile, pawn.tile) <= radius:
+			count += 1
+	return count
+
+
+## Being seen at something private: the shy are mortified and the exhibitionists delighted.
+func _be_seen(who: Array) -> void:
+	var ids: Array = []
+	for pawn: Pawn in who:
+		ids.append(pawn.id)
+	for pawn: Pawn in who:
+		if (Traits.has(pawn, "shy") or Traits.has(pawn, "exhibitionist")) and witnesses(pawn, ids) > 0:
+			Mood.add_event(pawn, "seen", GameClock.tick)
+
+
+## A gossip tells the one they are talking to what they think of somebody else, and the listener comes round a little.
+func _gossip(teller: Pawn, listener: Pawn) -> void:
+	if not Traits.has(teller, "gossip"):
+		return
+	var known: Array[int] = []
+	for other_id in teller.relations:
+		var third := int(other_id)
+		if third != listener.id and absf(teller.opinion_of(third)) >= 12.0 and person(third) != null:
+			known.append(third)
+	if known.is_empty():
+		return
+	var subject := known[_rng.randi() % known.size()]
+	listener.add_opinion(subject, clampf(teller.opinion_of(subject) * 0.25, -4.0, 4.0))
+	Mood.add_event(teller, "gossiped", GameClock.tick)
 
 
 ## Lines for the panel: who `pawn` knows best (or least well), as { "name", "label", "opinion" }.
@@ -1877,7 +1950,7 @@ func _think(pawn: Pawn, minute: int) -> bool:
 	var wants: Array = []
 	for need_id in active_needs:
 		var value := float(pawn.needs.get(need_id, Needs.FULL))
-		if value < Needs.seek_below(need_id, minute):
+		if value < Needs.seek_below(need_id, minute, pawn):
 			wants.append([value, need_id])
 	if wants.is_empty():
 		return false
@@ -2022,16 +2095,16 @@ func _react_to_fire(pawn: Pawn) -> void:
 			_end_job(pawn)
 			_flee(pawn, pawn.job_target)
 		return
-	var danger := Fire.nearest(world, pawn.tile, int(Fire.config().get("flee_radius", 3)))
+	var danger := Fire.nearest(world, pawn.tile, maxi(1, int(Fire.config().get("flee_radius", 3)) + int(Traits.add(pawn, "flee_radius_shift"))))
 	if danger.x >= 0 or standing:
 		if pawn.job_kind != "" or pawn.has_orders():
 			_end_job(pawn)
 		_flee(pawn, danger if danger.x >= 0 else pawn.tile)
 		Mood.add_event(pawn, "saw_fire", GameClock.tick)
 		return
-	if pawn.adult and not pawn.is_busy() and not _needs_break(pawn) and pawn.age >= 14:
+	if pawn.adult and not pawn.is_busy() and not _needs_break(pawn) and pawn.age >= 14 and not Traits.has(pawn, "coward"):
 		var near := Fire.nearest(world, pawn.tile, int(Fire.config().get("fight_radius", 12)))
-		if near.x >= 0 and Fire.count_near(world, near, 5) <= int(Fire.config().get("max_fightable", 10)):
+		if near.x >= 0 and Fire.count_near(world, near, 5) <= int(float(Fire.config().get("max_fightable", 10)) * Traits.mult(pawn, "fire_fight_bonus")):
 			order_extinguish(pawn, near)
 
 

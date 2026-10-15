@@ -95,7 +95,7 @@ static func try_conceive(sim: Simulation, a: Pawn, b: Pawn, chance: float, rng: 
 	var father := b if mother == a else a
 	if sim.person(mother.id) == null or not can_conceive(mother):
 		return false
-	if rng.randf() >= chance:
+	if rng.randf() >= chance * Traits.mult(a, "conception") * Traits.mult(b, "conception"):
 		return false
 	begin(sim, mother, father, rng)
 	return true
