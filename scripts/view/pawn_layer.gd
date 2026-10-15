@@ -48,7 +48,7 @@ func visual_position(id: int) -> Vector2:
 		return _views[id].position
 	var pawn := sim.person(id) if sim != null else null
 	if pawn != null:
-		return (Vector2(pawn.tile) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE
+		return Levels.pixel(pawn.tile)
 	return Vector2.ZERO
 
 
@@ -76,7 +76,7 @@ func _process(_delta: float) -> void:
 		view.label_scale = 1.0 / camera.zoom.x if camera != null else 1.0
 		view.townsfolk = sim.household.get_pawn(id) == null
 		view.clothes = Clothing.worn(sim, view.pawn)
-		view.visible = view.pawn.caravan == 0  # a rider is drawn on the cart
+		view.visible = view.pawn.caravan == 0 and Levels.of(_level_tile(view.pawn)) == Levels.view  # a rider is drawn on the cart; the floor not on screen is not shown
 	if names_visible:
 		_stack_labels(camera.zoom.x if camera != null else 1.0)
 	var chosen := sim.household.selected()
@@ -182,7 +182,12 @@ func _draw() -> void:
 
 
 func _tile_center(cell: Vector2i) -> Vector2:
-	return (Vector2(cell) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE
+	return Levels.pixel(cell)
+
+
+## The tile that says which floor somebody is on: halfway up or down a flight of stairs they have changed floors.
+func _level_tile(pawn: Pawn) -> Vector2i:
+	return pawn.step_to if pawn.is_moving() and pawn.step_progress() > 0.5 else pawn.tile
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -196,7 +201,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 	elif event.button_index == MOUSE_BUTTON_RIGHT:
 		if sim.household.selected() != null:
-			var tile := Vector2i(floori(world_point.x / MapView.TILE_SIZE), floori(world_point.y / MapView.TILE_SIZE))
+			var tile := Levels.lift(Vector2i(floori(world_point.x / MapView.TILE_SIZE), floori(world_point.y / MapView.TILE_SIZE)), Levels.view)
 			context_menu_requested.emit(event.position, tile)
 			get_viewport().set_input_as_handled()
 
@@ -205,7 +210,7 @@ func _pawn_at(world_point: Vector2) -> Pawn:
 	var best: Pawn = null
 	var best_distance := PICK_RADIUS * MapView.TILE_SIZE
 	for pawn in sim.household.pawns:
-		if pawn.is_infant():
+		if pawn.is_infant() or (_views.has(pawn.id) and not _views[pawn.id].visible):
 			continue
 		var distance := visual_position(pawn.id).distance_to(world_point)
 		if distance < best_distance:

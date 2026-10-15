@@ -7,6 +7,8 @@ const SHOW_BELOW := 0.50  # camera zoom at which roofs are fully there
 const HIDE_ABOVE := 0.90  # and at which they have faded away
 
 var mode := 0  # 0 by the zoom, 1 always shown, 2 hidden
+## 0 roofs the ground floor (seen from the ground floor); 1 the roofs over the upstairs (seen from upstairs).
+var level := 0
 var _watched: WorldState
 var _alpha := -1.0
 
@@ -34,11 +36,14 @@ func _process(_delta: float) -> void:
 	var camera := get_viewport().get_camera_2d()
 	var zoom := camera.zoom.x if camera != null else 1.0
 	var wanted := 1.0
-	match mode:
-		0:
-			wanted = 1.0 - smoothstep(SHOW_BELOW, HIDE_ABOVE, zoom)
-		2:
-			wanted = 0.0
+	if Levels.view != level:
+		wanted = 0.0
+	else:
+		match mode:
+			0:
+				wanted = 1.0 - smoothstep(SHOW_BELOW, HIDE_ABOVE, zoom)
+			2:
+				wanted = 0.0
 	if absf(wanted - _alpha) > 0.01:
 		_alpha = wanted
 		modulate.a = wanted
@@ -50,6 +55,8 @@ func _draw() -> void:
 		return
 	var size := float(MapView.TILE_SIZE)
 	for cell: Vector2i in _watched.roofs:
+		if Levels.of(cell) != level:
+			continue
 		var edges := 0
 		if not _watched.roofs.has(cell + Vector2i(0, -1)):
 			edges |= 1
@@ -59,4 +66,4 @@ func _draw() -> void:
 			edges |= 4
 		if not _watched.roofs.has(cell + Vector2i(-1, 0)):
 			edges |= 8
-		RoofArt.draw(self, str(_watched.roofs[cell]), Rect2(Vector2(cell) * size, Vector2(size, size)), cell, edges)
+		RoofArt.draw(self, str(_watched.roofs[cell]), Rect2(Vector2(Levels.ground(cell)) * size, Vector2(size, size)), cell, edges)

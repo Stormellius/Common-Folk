@@ -33,11 +33,12 @@ func _process(_delta: float) -> void:
 			light.texture = ObjectView.glow_texture()
 			light.color = Color(1.0, 0.58, 0.22)
 			light.texture_scale = 3.2 * MapView.TILE_SIZE / (ObjectView.LIGHT_TEXTURE_SIZE * 0.5)
-			light.position = (Vector2(tile) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE
+			light.position = Levels.pixel(tile)
 			add_child(light)
 			_lights[tile] = light
 	var t := Time.get_ticks_msec() / 1000.0
 	for tile in _lights:
+		_lights[tile].visible = Levels.shown(tile)
 		_lights[tile].energy = 0.9 + 0.25 * sin(t * 9.0 + tile.x * 1.7 + tile.y * 2.3)
 	if not fires.is_empty() or _was_burning:
 		queue_redraw()
@@ -53,9 +54,11 @@ func _draw() -> void:
 	var t := Time.get_ticks_msec() / 1000.0
 	var u := MapView.TILE_SIZE / 48.0
 	for tile in sim.world.fires:
+		if not Levels.shown(tile):
+			continue
 		var burning: Dictionary = sim.world.fires[tile]
 		var strength := clampf(float(burning["fuel"]) / 20.0, 0.35, 1.0)
-		var centre := (Vector2(tile) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE
+		var centre := Levels.pixel(tile)
 		draw_circle(centre, 30.0 * u * strength, Color(1.0, 0.45, 0.10, 0.14))
 		for i in 5:  # flame tongues
 			var phase := t * (6.0 + i * 1.3) + float(tile.x * 7 + tile.y * 3) + i * 2.1

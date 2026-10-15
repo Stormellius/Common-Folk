@@ -30,6 +30,9 @@ var _loaded_view: Dictionary = {}  # the camera of the save just loaded
 @onready var object_layer: ObjectLayer = $ObjectLayer
 @onready var site_layer: SiteLayer = $SiteLayer
 @onready var roof_layer: RoofLayer = $RoofLayer
+var floor_upper := FloorLayer.new()   # what is laid, shaded and roofed upstairs (see Levels)
+var shadow_upper := ShadowLayer.new()
+var roof_upper := RoofLayer.new()
 @onready var tree_layer: TreeLayer = $TreeLayer
 @onready var build: BuildController = $BuildController
 @onready var pawn_layer: PawnLayer = $PawnLayer
@@ -41,8 +44,20 @@ var _loaded_view: Dictionary = {}  # the camera of the save just loaded
 
 
 func _ready() -> void:
+	floor_upper.level = 1
+	shadow_upper.level = 1
+	roof_upper.level = 1
+	add_child(floor_upper)
+	add_child(shadow_upper)
+	add_child(roof_upper)
+	move_child(floor_upper, shadow_layer.get_index() + 1)
+	move_child(shadow_upper, floor_upper.get_index() + 1)
+	move_child(roof_upper, roof_layer.get_index() + 1)
+	hud.level_requested.connect(_show_level)
 	tile_cursor.hovered_changed.connect(_on_tile_hovered)
-	pawn_layer.pawn_selected.connect(hud.set_selected)
+	pawn_layer.pawn_selected.connect(func(id: int) -> void:
+		hud.set_selected(id)
+		_follow_level(sim.household.get_pawn(id)))
 	pawn_layer.context_menu_requested.connect(_on_context_menu_requested)
 	hud.action_chosen.connect(_on_action_chosen)
 	hud.pawn_chosen.connect(_on_pawn_chosen)
@@ -127,6 +142,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			tile_cursor.toggle_grid()
 		KEY_R:
 			hud.show_message(roof_layer.cycle())
+			roof_upper.mode = roof_layer.mode
+			roof_upper._alpha = -1.0
+		KEY_PAGEUP:
+			_show_level(1)
+		KEY_PAGEDOWN:
+			_show_level(0)
 		KEY_TAB:
 			if sim != null:
 				sim.household.cycle_selection(-1 if event.shift_pressed else 1)
@@ -357,6 +378,30 @@ func _build_demo_house() -> void:
 	sim.build_place("wall", origin + Vector2i(5, 3))
 	sim.build_place("bed", origin + Vector2i(2, 2))
 	sim.build_place("hearth", origin + Vector2i(7, 2))
+	if _launch_option("upstairs") != "":  # a second storey, for pictures
+		Rooms.auto_roof(world, Rect2i(origin, Vector2i(9, 7)))
+		sim.build_place("stairs", origin + Vector2i(1, 1))
+		for dx in range(1, 8):
+			for dy in range(1, 6):
+				sim.build_floor("planks", Levels.lift(origin + Vector2i(dx, dy), 1))
+		for dx in range(0, 9):
+			for dy in [0, 6]:
+				world.set_floor(Levels.lift(origin + Vector2i(dx, dy), 1), "planks")
+		for dx in range(0, 9):
+			for dy in [0, 6]:
+				world.add_object("wall", Levels.lift(origin + Vector2i(dx, dy), 1))
+		for dy in range(1, 6):
+			for dx in [0, 8]:
+				world.set_floor(Levels.lift(origin + Vector2i(dx, dy), 1), "planks")
+				world.add_object("wall", Levels.lift(origin + Vector2i(dx, dy), 1))
+		world.add_object("bed", Levels.lift(origin + Vector2i(3, 2), 1))
+		world.add_object("table", Levels.lift(origin + Vector2i(6, 3), 1))
+		Rooms.auto_roof(world, Rect2i(Levels.lift(origin, 1), Vector2i(9, 7)))
+		if _launch_option("upstairs") == "up":
+			var chosen := sim.household.selected()
+			chosen.tile = Levels.lift(origin + Vector2i(4, 3), 1)
+			chosen.step_to = chosen.tile
+			_show_level(1)
 
 
 ## For screenshots: the selected person is on the way to mastering a craft, and has two wishes.
@@ -661,8 +706,13 @@ func _show_world(new_world: WorldState, household: Household, town: Household = 
 	sim.event_ended.connect(_on_event_ended)
 	map_view.set_world(world)
 	tile_cursor.set_world(world)
+	Levels.set_view(0)
+	hud.set_level(0)
 	floor_layer.bind(world)
+	floor_upper.bind(world)
 	shadow_layer.bind(world)
+	shadow_upper.bind(world)
+	roof_upper.bind(world)
 	smoke_layer.bind(sim)
 	cloud_shadows.set_world(world)
 	weather.bind(world)
@@ -808,7 +858,21 @@ func _on_pawn_chosen(id: int) -> void:
 	hud.close_action_menu()
 	if sim.household.select(id):
 		hud.set_selected(id)
+		_follow_level(sim.household.get_pawn(id))
 		camera.focus_on(pawn_layer.visual_position(id))
+
+
+## Shows the other floor of a two-storey house (PageUp: upstairs, PageDown: the ground floor).
+func _show_level(level: int) -> void:
+	Levels.set_view(level)
+	hud.set_level(Levels.view)
+	hud.close_action_menu()
+
+
+## The floor on screen is the one somebody was chosen on.
+func _follow_level(pawn: Pawn) -> void:
+	if pawn != null and Levels.of(pawn.committed_tile()) != Levels.view:
+		_show_level(Levels.of(pawn.committed_tile()))
 
 
 ## The camera goes to the player's own town.
@@ -943,9 +1007,11 @@ func _describe_tile(tile: Vector2i) -> String:
 		return footer
 	var tile_id := world.get_tile_id(tile.x, tile.y)
 	var tile_name := str(DataRegistry.get_def("tiles", tile_id).get("name", tile_id))
+	if Levels.of(tile) == 1:
+		tile_name = "Upstairs, %s" % ("floor" if world.floors.has(tile) else "open air")
 	var walk := "walkable" if world.is_walkable(tile.x, tile.y) else "blocked"
 	var placed := world.object_at(tile)
 	var what := tile_name if placed == null else "%s with %s" % [tile_name, placed.display_name().to_lower()]
 	var town := world.town_at(tile)
 	var place := "%s: " % str(town["name"]) if not town.is_empty() else ""
-	return "%sTile (%d, %d): %s, %s\n%s" % [place, tile.x, tile.y, what, walk, footer]
+	return "%sTile (%d, %d): %s, %s\n%s" % [place, Levels.ground(tile).x, Levels.ground(tile).y, what, walk, footer]

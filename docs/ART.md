@@ -104,3 +104,8 @@ would be the next step up.
 * **Family screen**: after "How do you begin?" you draw up your family (`FamilyCreator`, `FamilyDesign`): up to five people with name, gender,
   age, skin, hair, hair style and traits. Painted people pick the body look nearest to the chosen skin and hair.
 * The painted-people setting is saved as `painted_people` so an old saved "off" no longer hides the new art.
+
+## Medieval HUD, land and upstairs
+* The HUD panels are dark timber with a gilt edge (`_sims_panel`, `_sims_button` in `hud.gd`); the build palette wraps and scrolls inside the window and shows each object's picture fitted into its frame.
+* After the family screen the player chooses their land (`Starts.land_options`, `LotPicker`): the usual plot beside the square or any empty lot in the region (grown towards 16 by 13). A start without a house begins paused in build mode with the starting coin.
+* **Two storeys** (`Levels`): a tile upstairs is the ground tile with its y lifted by 4096, so floors, walls, objects, roofs and people upstairs live in the same tables. Stairs (built in a roofed room) put a landing upstairs; upstairs floors grow out from the landing over a roofed room, then walls, furniture and a roof. `PathFinder` keeps a grid per floor and routes by the nearest stairs. PageUp / PageDown or the button at the bottom right change the floor on screen; choosing a person on the other floor switches to it. The stairs are drawn by code for now.

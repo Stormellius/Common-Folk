@@ -37,7 +37,7 @@ func _process(delta: float) -> void:
 		_sources.clear()
 		for placed in sim.world.objects:
 			if bool(placed.def().get("smoke", false)):
-				_sources.append((Vector2(placed.tile) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE)
+				_sources.append(Levels.pixel(placed.tile))
 	if GameClock.speed_level > 0:
 		_clock += delta
 	if not _sources.is_empty():

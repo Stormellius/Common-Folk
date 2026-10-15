@@ -52,6 +52,10 @@ static func draw(ci: CanvasItem, def_id: String, u: float, t: float, occupied: b
 			_wall(ci, u, connections, cell, true)
 		"door":
 			_door(ci, u, connections, cell)
+		"stairs":
+			_stairs(ci, u, false)
+		"stairs_top":
+			_stairs(ci, u, true)
 		"grave":
 			_grave(ci, u)
 		"bed":
@@ -570,6 +574,36 @@ static func _courses(ci: CanvasItem, u: float, area: Rect2, along_x: bool, rows:
 	var last0 := Vector2(start - origin, across_start + rows * across) if along_x else Vector2(across_start + rows * across, start - origin)
 	var last1 := Vector2(end - origin, across_start + rows * across) if along_x else Vector2(across_start + rows * across, end - origin)
 	ci.draw_line(last0 * u, last1 * u, mortar, width)
+
+
+## A flight of timber stairs seen from above, climbing toward the top of the picture; `landing` draws the
+## top of it as it is seen from upstairs: the opening with a rail round it and the steps going down.
+static func _stairs(ci: CanvasItem, u: float, landing: bool) -> void:
+	var wood := TIMBER.lightened(0.05)
+	var dark := Color(0.20, 0.14, 0.09)
+	if landing:
+		ci.draw_rect(Rect2(Vector2(-18, -20) * u, Vector2(36, 40) * u), dark)
+		for i in 5:  # the steps going down, seen over the edge
+			var y := -14.0 + i * 7.0
+			ci.draw_rect(Rect2(Vector2(-15, y) * u, Vector2(30, 5.5) * u), wood.darkened(0.12 + 0.07 * i))
+		var rail := TIMBER.lightened(0.18)
+		ci.draw_rect(Rect2(Vector2(-21, -22) * u, Vector2(4, 44) * u), rail)
+		ci.draw_rect(Rect2(Vector2(17, -22) * u, Vector2(4, 44) * u), rail)
+		ci.draw_rect(Rect2(Vector2(-21, -23) * u, Vector2(42, 4) * u), rail)
+		ci.draw_line(Vector2(-21, -23) * u, Vector2(21, -23) * u, OUTLINE, maxf(1.0, u))
+		ci.draw_line(Vector2(-21, -23) * u, Vector2(-21, 22) * u, OUTLINE, maxf(1.0, u))
+		ci.draw_line(Vector2(21, -23) * u, Vector2(21, 22) * u, OUTLINE, maxf(1.0, u))
+		return
+	ci.draw_rect(Rect2(Vector2(-21, -23) * u, Vector2(42, 46) * u), OUTLINE)
+	for i in 7:  # treads, the high ones lighter
+		var y := 19.0 - i * 6.2
+		ci.draw_rect(Rect2(Vector2(-18, y) * u, Vector2(36, 5.2) * u), wood.lightened(0.04 * i))
+		ci.draw_line(Vector2(-18, y) * u, Vector2(18, y) * u, wood.lightened(0.05 * i + 0.14), maxf(1.0, 0.8 * u))
+		ci.draw_line(Vector2(-18, y + 5.2) * u, Vector2(18, y + 5.2) * u, dark, maxf(1.0, 0.8 * u))
+	for x in [-21.0, 17.0]:  # the stringers
+		ci.draw_rect(Rect2(Vector2(x, -23) * u, Vector2(4, 46) * u), TIMBER.darkened(0.12))
+	var arrow := Color(1.0, 0.92, 0.65, 0.85)
+	ci.draw_colored_polygon(PackedVector2Array([Vector2(0, -17) * u, Vector2(-5, -9) * u, Vector2(5, -9) * u]), arrow)
 
 
 ## A door stands in a gap in the wall: timber jambs at either end, a plank leaf with iron

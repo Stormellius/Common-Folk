@@ -8,6 +8,7 @@ const BLUEPRINT := Color(0.45, 0.70, 0.95)
 var sim: Simulation
 var _ghosts := SiteGhosts.new()
 var _signature := -1
+var _seen_view := -1
 
 
 func _ready() -> void:
@@ -27,6 +28,9 @@ func bind(new_sim: Simulation) -> void:
 func _process(_delta: float) -> void:
 	if sim == null:
 		return
+	if _seen_view != Levels.serial:
+		_seen_view = Levels.serial
+		_signature = -1
 	var sig := sim.world.sites.size() * 1000003
 	for site in sim.world.sites:
 		sig += site.id * 31 + roundi(site.progress * 40.0) * 7 + int(site.delivered.size()) * 13 + sim.world.reserved.size()
@@ -43,7 +47,9 @@ func _draw() -> void:
 		return
 	var size := float(MapView.TILE_SIZE)
 	for site in sim.world.sites:
-		var rect := Rect2(Vector2(site.tile) * size, Vector2(size, size)).grow(-3.0)
+		if not Levels.shown(site.tile):
+			continue
+		var rect := Rect2(Vector2(Levels.ground(site.tile)) * size, Vector2(size, size)).grow(-3.0)
 		_dashed(rect)
 		var bar := Rect2(rect.position + Vector2(0, rect.size.y + 1.0), Vector2(rect.size.x, 4.0))
 		draw_rect(bar, Color(0, 0, 0, 0.55))
@@ -79,7 +85,9 @@ class SiteGhosts extends Node2D:
 			return
 		var size := float(MapView.TILE_SIZE)
 		for site in sim.world.sites:
-			var rect := Rect2(Vector2(site.tile) * size, Vector2(size, size))
+			if not Levels.shown(site.tile):
+				continue
+			var rect := Rect2(Vector2(Levels.ground(site.tile)) * size, Vector2(size, size))
 			match site.kind:
 				"floor":
 					FloorArt.draw(self, site.def_id, rect, site.tile)

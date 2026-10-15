@@ -472,7 +472,12 @@ func _build_create() -> Control:
 	var parts := _card("Your Family", 820.0)
 	var box: VBoxContainer = parts[1]
 	_creator = FamilyCreator.new()
-	box.add_child(_creator)
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size = Vector2(0, 560)
+	_creator.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(_creator)
+	box.add_child(scroll)
 	_create_begin = Button.new()
 	_create_begin.text = "Begin"
 	_creator.changed.connect(func() -> void: _create_begin.disabled = _creator.problem() != "")

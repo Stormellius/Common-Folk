@@ -10,7 +10,11 @@ const CAST_REACH := 0.48     # how far that shadow reaches, in tiles
 const CONTACT := 0.18        # the faint shadow against a wall to the east or south
 const CONTACT_REACH := 0.16
 
+## 0 shades the ground floor; 1 the upstairs, when it is on screen.
+var level := 0
+
 var _watched: WorldState
+var _seen_view := -1
 
 
 func _ready() -> void:
@@ -31,12 +35,18 @@ func _on_tile_changed(_tile: Vector2i) -> void:
 	queue_redraw()  # redraws once per frame however many tiles changed
 
 
+func _process(_delta: float) -> void:
+	if _seen_view != Levels.serial:
+		_seen_view = Levels.serial
+		visible = Levels.view == level
+
+
 func _draw() -> void:
 	if _watched == null:
 		return
 	var walls := {}
 	for placed in _watched.objects:
-		if str(placed.def().get("connects", "")) == "wall":
+		if str(placed.def().get("connects", "")) == "wall" and Levels.of(placed.tile) == level:
 			walls[placed.tile] = true
 	var done := {}
 	for tile in walls:
@@ -51,7 +61,7 @@ func _draw() -> void:
 ## Shades one open tile for the walls around it.
 func _shade(spot: Vector2i, walls: Dictionary) -> void:
 	var size := float(MapView.TILE_SIZE)
-	var rect := Rect2(Vector2(spot) * size, Vector2(size, size))
+	var rect := Rect2(Vector2(Levels.ground(spot)) * size, Vector2(size, size))
 	var west := walls.has(spot + Vector2i(-1, 0))
 	var north := walls.has(spot + Vector2i(0, -1))
 	if west:

@@ -32,7 +32,7 @@ var _crop_stage := -1
 
 func setup(new_placed: PlacedObject) -> void:
 	placed = new_placed
-	position = (Vector2(placed.tile) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE
+	position = Levels.pixel(placed.tile)
 	_add_light()
 	set_process(_light != null or ObjectArt.is_animated(placed.def_id) or placed.def().has("gather_seasons"))  # most things never change
 	queue_redraw()
@@ -97,7 +97,7 @@ static func glow_texture() -> GradientTexture2D:
 
 ## Follows the object if it was moved.
 func refresh() -> void:
-	var wanted := (Vector2(placed.tile) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE
+	var wanted := Levels.pixel(placed.tile)
 	if position != wanted:
 		position = wanted
 

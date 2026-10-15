@@ -49,9 +49,9 @@ func setup(new_pawn: Pawn) -> void:
 
 
 func _target() -> Vector2:
-	var here := Vector2(pawn.tile) + Vector2(0.5, 0.5)
+	var here := Vector2(Levels.ground(pawn.tile)) + Vector2(0.5, 0.5)
 	if pawn.is_moving():
-		here = here.lerp(Vector2(pawn.step_to) + Vector2(0.5, 0.5), pawn.step_progress())
+		here = here.lerp(Vector2(Levels.ground(pawn.step_to)) + Vector2(0.5, 0.5), pawn.step_progress())
 	if pawn.is_infant() and pawn.pose != "lie":
 		here += Vector2(0.2, -0.12)  # on the carer's arm
 	return here * MapView.TILE_SIZE

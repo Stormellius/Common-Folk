@@ -39,6 +39,7 @@ signal build_toggled(on: bool)
 ## A palette entry was picked: kind is "place", "floor", "move" or "remove", or "none" when it was put away.
 signal build_tool_chosen(kind: String, id: String)
 ## The Menu button was pressed.
+signal level_requested(level: int)
 signal menu_requested
 
 const TEXT_COLOR := UiTheme.INK
@@ -107,6 +108,7 @@ var _chip_marks: Dictionary = {}  # pawn id -> ColorRect, the strip showing how 
 var _baby_chips: Dictionary = {}  # baby's id -> its chip (babies are shown, not chosen)
 var _toast_serial := 0
 var _build_button: Button
+var _level_button: Button
 var _build_panel: PanelContainer
 var _build_tabs: Dictionary = {}    # tab name -> HBoxContainer of item buttons
 var _build_tab_buttons: Dictionary = {}  # tab name -> Button
@@ -911,6 +913,11 @@ func _sims_button(button: Button) -> void:
 	button.add_theme_color_override("font_disabled_color", UiTheme.INK_DIM)
 
 
+## Which floor is on screen, on the button that changes it.
+func set_level(level: int) -> void:
+	_level_button.text = "Upstairs" if level == 1 else "Ground floor"
+
+
 ## I: the dreams, skills, thoughts and friends of the person you are playing, down the left.
 func toggle_details() -> void:
 	_details_button.button_pressed = not _details_button.button_pressed
@@ -955,6 +962,16 @@ func _build_build_ui() -> void:
 	_build_button.custom_minimum_size = Vector2(120, 44)
 	_sims_button(_build_button)
 	_bottom_right.add_child(_build_button)
+	_level_button = Button.new()
+	_level_button.text = "Ground floor"
+	_level_button.tooltip_text = "Go up or down a floor (PageUp, PageDown)"
+	_level_button.focus_mode = Control.FOCUS_NONE
+	_level_button.custom_minimum_size = Vector2(120, 34)
+	_sims_button(_level_button)
+	_level_button.pressed.connect(func() -> void: level_requested.emit(1 - Levels.view))
+	_bottom_right.add_child(_level_button)
+	_bottom_right.move_child(_level_button, 0)
+	_bottom_right.add_theme_constant_override("separation", 6)
 	_build_button.toggled.connect(func(on: bool) -> void: build_toggled.emit(on))
 
 	_build_panel = PanelContainer.new()
@@ -1069,7 +1086,7 @@ func _show_build_tab(tab_name: String) -> void:
 	var rows := 1
 	if _build_tabs.has(tab_name):
 		rows = ceili(float((_build_tabs[tab_name] as Control).get_child_count()) / floorf(PALETTE_WIDTH / 94.0))
-	_palette_scroll.custom_minimum_size.y = minf(float(rows) * 88.0, maxf(_root.size.y * 0.32, 150.0))
+	_palette_scroll.custom_minimum_size.y = minf(float(rows) * 88.0, maxf(_root.size.y * 0.38, 170.0))
 	for name in _build_tabs:
 		_build_tabs[name].visible = (name == tab_name)
 	for name in _build_tab_buttons:

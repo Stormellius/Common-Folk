@@ -87,7 +87,13 @@ func clear_tool() -> bool:
 	return had
 
 
+var _seen_view := 0
+
+
 func _process(_delta: float) -> void:
+	if _seen_view != Levels.serial:  # the other floor is on screen now
+		_seen_view = Levels.serial
+		_hover = Vector2i(-1, -1)
 	if _painting and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 		_painting = false  # released over the interface, where we never saw it
 	var mouse := get_global_mouse_position()
@@ -98,7 +104,7 @@ func _process(_delta: float) -> void:
 
 
 func _tile_at(point: Vector2) -> Vector2i:
-	return Vector2i(floori(point.x / MapView.TILE_SIZE), floori(point.y / MapView.TILE_SIZE))
+	return Levels.lift(Vector2i(floori(point.x / MapView.TILE_SIZE), floori(point.y / MapView.TILE_SIZE)), Levels.view)
 
 
 ## What the preview and the cursor should show for the tile under the mouse.
@@ -122,6 +128,8 @@ func _refresh_preview() -> void:
 		elif kind == "floor":
 			if not sim.world.can_build_at(_hover):
 				_hover_reason = "outside your land"
+			elif Levels.of(_hover) == 1:
+				_hover_reason = Levels.floor_blocker(sim.world, _hover) if sim.world.floor_at(_hover) == "" else ""
 			elif not sim.world.is_ground_walkable(_hover.x, _hover.y):
 				_hover_reason = "not solid ground"
 			_show_ghost(kind, id, _hover_reason == "")
@@ -266,11 +274,11 @@ func _draw() -> void:
 
 	if not sim.world.in_bounds(_hover.x, _hover.y) or tool.is_empty():
 		return
-	var cell := Rect2(Vector2(_hover) * size, Vector2(size, size))
+	var cell := Rect2(Vector2(Levels.ground(_hover)) * size, Vector2(size, size))
 	var kind := str(tool.get("kind", ""))
 	if kind == "roof":
 		for roof_tile in _roof_tiles:
-			draw_rect(Rect2(Vector2(roof_tile) * size, Vector2(size, size)), Color(0.55, 0.85, 0.50, 0.35))
+			draw_rect(Rect2(Vector2(Levels.ground(roof_tile)) * size, Vector2(size, size)), Color(0.55, 0.85, 0.50, 0.35))
 		if _roof_tiles.is_empty():
 			draw_rect(cell, Color(0.95, 0.35, 0.30, 0.30))
 		return
