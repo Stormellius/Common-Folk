@@ -294,6 +294,8 @@ static func draw_layered_person(ci: CanvasItem, look: Dictionary, facing: Vector
 	if body == null:
 		return false
 	var cloths: Array[Texture2D] = []
+	var hair := girl_hair(entry, outfit, side)
+	var hair_under := false  # under a garment that covers the head (a nightcap), else over the clothes
 	if outfit.has("pieces") and entry.has("garments"):  # separate garments, the lower ones first so the top lies over them
 		for slot in ["bottom", "feet", "top"]:
 			var garment_id := garment_in(entry, str((outfit["pieces"] as Dictionary).get(slot, "")), slot)
@@ -301,6 +303,7 @@ static func draw_layered_person(ci: CanvasItem, look: Dictionary, facing: Vector
 				var piece := texture(folder + "g_" + garment_id + "_" + side)
 				if piece != null:
 					cloths.append(piece)
+					hair_under = hair_under or garment_id in entry.get("hair_under", [])
 	else:
 		var layer_id := layer_for(entry, str(outfit.get("clothes", "casual")))
 		var whole: Texture2D = texture(folder + layer_id + "_" + side) if layer_id != "" else null
@@ -322,6 +325,7 @@ static func draw_layered_person(ci: CanvasItem, look: Dictionary, facing: Vector
 	var tint := Color(shade, shade, shade)
 	if outfit.get("ill", false):
 		tint = tint.lerp(PawnArt.ILL_TINT, 0.30)
+	var hair_tint := Color(str(chosen_look.get("hair", "#4a3220"))) * body_tint * tint  # as the body's own hair is drawn
 	var feet := 14.0 * u - absf(swing) * 1.6 * u
 	var sway := swing * 1.1 * u
 	ci.draw_colored_polygon(PawnArt._ellipse_points(Vector2(2.0 * u, 13.0 * u), Vector2(12.0 * u, 5.0 * u)), SHADOW)
@@ -332,13 +336,28 @@ static func draw_layered_person(ci: CanvasItem, look: Dictionary, facing: Vector
 		rect = Rect2(-width * 0.5, -25.0 * u, width, height * shown)
 		var source := Rect2(Vector2.ZERO, Vector2(body.get_width(), body.get_height() * shown))
 		ci.draw_texture_rect_region(body, rect, source, body_tint * tint)
-		for cloth in cloths:
-			ci.draw_texture_rect_region(cloth, rect, Rect2(Vector2.ZERO, Vector2(cloth.get_width(), cloth.get_height() * shown)), tint)
+		var layers := cloths.duplicate()
+		if hair != null:
+			layers.insert(0 if hair_under else layers.size(), hair)
+		for layer: Texture2D in layers:
+			ci.draw_texture_rect_region(layer, rect, Rect2(Vector2.ZERO, Vector2(layer.get_width(), layer.get_height() * shown)), hair_tint if layer == hair else tint)
 		return true
 	ci.draw_texture_rect(body, rect, false, body_tint * tint)
+	if hair != null and hair_under:
+		ci.draw_texture_rect(hair, rect, false, hair_tint)
 	for cloth in cloths:
 		ci.draw_texture_rect(cloth, rect, false, tint)
+	if hair != null and not hair_under:
+		ci.draw_texture_rect(hair, rect, false, hair_tint)
 	return true
+
+
+## The long hair a girl wears over a set's body when the set is shared with boys (children and youths), or null.
+## It is grey, to be tinted with the look's hair.
+static func girl_hair(entry: Dictionary, outfit: Dictionary, side: String) -> Texture2D:
+	if str(outfit.get("gender", "")) != "female" or not entry.has("girl_hair"):
+		return null
+	return texture("%s/%s_%s" % [str(entry["dir"]), str(entry["girl_hair"]), side])
 
 
 ## Draws an animal as a picture (drawn side-on, facing right, turned to face west), bobbing as it walks.
