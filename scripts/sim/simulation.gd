@@ -1566,7 +1566,7 @@ func treat(nurse: Pawn, patient: Pawn) -> Dictionary:
 	household.add_stock("herbs", -1)
 	var days := 3.0 * (1.0 + Skills.effect(nurse, "healing", "cure"))
 	patient.treated_until = GameClock.tick + roundi(days * GameClock.MINUTES_PER_DAY)
-	Skills.practice(self, nurse, "healing", 40.0)
+	Skills.practice_deed(self, nurse, "healing", "treat", 40.0)
 	Mood.add_event(patient, "cared_for", GameClock.tick)
 	Ambitions.note(nurse, "healed")
 	return { "ok": true, "message": "%s nurses %s with herbs." % [_first_name(nurse), _first_name(patient)] }
@@ -1594,7 +1594,7 @@ func sell_stock(resource_id: String, seller: Pawn = null) -> Dictionary:
 	household.add_stock(resource_id, -amount)
 	household.coins += earned
 	if seller != null:
-		Skills.practice(self, seller, "trading", 10.0)
+		Skills.practice_deed(self, seller, "trading", "sale", 10.0)
 	sound_made.emit("coin", Vector2i(-1, -1))
 	return { "ok": true, "message": "Sold %d %s for %s" % [amount, Economy.resource_name(resource_id).to_lower(), Economy.format(earned)] }
 

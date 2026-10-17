@@ -1391,7 +1391,7 @@ func _interaction_entries(sim: Simulation, from: Pawn, to: Pawn) -> Dictionary:
 func _test_work_sites() -> void:
 	print("Work sites, resources and materials")
 	var ids := Economy.resource_ids()
-	_check(str(ids.slice(0, 8)) == str(["wood", "stone", "grain", "fish", "herbs", "ring", "meat", "hide"]) and ids.size() == 17, "there are five resources to gather, rings, meat, hides, five made goods and four traded (%d)" % ids.size())
+	_check(str(ids.slice(0, 8)) == str(["wood", "stone", "grain", "fish", "herbs", "ring", "meat", "hide"]) and ids.size() == 21, "there are five resources to gather, rings, meat, hides, flax, eight made goods and four traded (%d)" % ids.size())
 	_check(Economy.resource_price("wood") == 2 and Economy.sell_price("wood", 10) == 14 and Economy.sell_price("wood", 10, 1.3) == 18, "the shop pays a share of the price, and more on a market day")
 
 	# The region has sites at every town's edge.
@@ -1541,7 +1541,7 @@ func _test_skills() -> void:
 	print("Skills, tools and trades")
 	# The data hangs together.
 	var skill_ids := Skills.skill_ids()
-	_check(skill_ids.size() == 14 and "woodcutting" in skill_ids and "smithing" in skill_ids and "music" in skill_ids and "hunting" in skill_ids and "masonry" in skill_ids, "there are fourteen skills (%d)" % skill_ids.size())
+	_check(skill_ids.size() == 15 and "woodcutting" in skill_ids and "smithing" in skill_ids and "tailoring" in skill_ids and "music" in skill_ids and "hunting" in skill_ids and "masonry" in skill_ids, "there are fifteen skills (%d)" % skill_ids.size())
 	var tools_ok := true
 	for tool_id in Skills.tool_ids():
 		tools_ok = tools_ok and Skills.skill_ids().has(str(DataRegistry.get_def("tools", tool_id)["skill"])) and Skills.tool_price(tool_id) > 0
@@ -1563,9 +1563,9 @@ func _test_skills() -> void:
 	var learner := Pawn.new()
 	learner.age = 30
 	_check(Skills.level(learner, "mining") == 0 and Skills.rank_name(0) == "Untrained" and Skills.rank_name(10) == "Master", "a stranger to a skill is at level 0; level 10 is a master")
-	learner.skills["mining"] = 20.0
-	_check(Skills.level(learner, "mining") == 1 and Skills.level_of_xp(59.0) == 1 and Skills.level_of_xp(60.0) == 2 and Skills.level_of_xp(99999.0) == Skills.max_level(), "xp turns into levels")
-	learner.skills["mining"] = 40.0
+	learner.skills["mining"] = 15.0
+	_check(Skills.level(learner, "mining") == 1 and Skills.level_of_xp(44.0) == 1 and Skills.level_of_xp(45.0) == 2 and Skills.level_of_xp(99999.0) == Skills.max_level(), "xp turns into levels")
+	learner.skills["mining"] = 30.0
 	_check(absf(Skills.progress(learner, "mining") - 0.5) < 0.01, "and shows how far to the next one")
 
 	# Practice, and who learns faster.
@@ -1730,6 +1730,27 @@ func _test_skills() -> void:
 	household.add_stock("hammer", 1)
 	entries = PawnActions.list_for(sim, anna, bench.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "craft:carve_rod:%d" % bench.id)
 	_check(entries.size() == 1 and entries[0]["enabled"], "the workbench carves a fishing rod from wood")
+	var loom := world.add_object("loom", Vector2i(14, 8))
+	anna.tile = Vector2i(14, 6)
+	anna.step_to = anna.tile
+	household.stock = { "flax": 3, "leather": 2 }
+	entries = PawnActions.list_for(sim, anna, loom.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "craft:spin_linen:%d" % loom.id)
+	_check(entries.size() == 1 and not entries[0]["enabled"] and "sewing kit" in str(entries[0]["reason"]), "a tailor needs a sewing kit at the loom (%s)" % str(entries))
+	household.add_stock("sewing_kit", 1)
+	var tailoring_before := Skills.xp(anna, "tailoring")
+	result = PawnActions.perform(sim, anna, "craft:spin_linen:%d" % loom.id, loom.tile)
+	for i in 200:
+		GameClock.advance_one_tick()
+		sim.step(GameClock.SUBSTEPS_PER_MINUTE)
+		if anna.job_kind == "":
+			break
+	_check(result["ok"] and household.stock_of("cloth") == 1 and household.stock_of("flax") == 0 and Skills.xp(anna, "tailoring") > tailoring_before + 5.0, "flax is spun and woven into linen cloth, and she practises tailoring (%s)" % str(household.stock))
+	entries = PawnActions.list_for(sim, anna, loom.tile).filter(func(e: Dictionary) -> bool: return str(e["id"]) == "craft:sew_cloak:%d" % loom.id)
+	_check(entries.size() == 1 and not entries[0]["enabled"] and "level 3" in str(entries[0]["reason"]), "a cloak waits for a better tailor (%s)" % str(entries))
+	var dealer := Pawn.new()
+	dealer.age = 30
+	Skills.practice_deed(null, dealer, "trading", "sale", 1.0)
+	_check(is_equal_approx(Skills.xp(dealer, "trading"), 0.07 * float(DataRegistry.get_def("skills", "trading")["deeds"]["sale"])), "a sale teaches trading as many minutes as the data says (%.2f xp)" % Skills.xp(dealer, "trading"))
 
 	# Buying tools at a shop's rack.
 	world.lots.append({ "id": "lot_7", "kind": "shop", "name": "Shop", "template": "shop", "facing": "south", "rect": Rect2i(50, 14, 10, 8), "public": true, "town": "t1" })
@@ -1791,7 +1812,7 @@ func _test_skills() -> void:
 	anna.skills = { "woodcutting": Skills.xp_for_level(5) }
 	_check(sim.interaction_blocker(anna, ben, "lesson") == "", "someone who knows more can give a lesson")
 	var taught := Skills.give_lesson(sim, anna, ben)
-	_check(Skills.xp(ben, "woodcutting") >= 40.0 and "taught" in taught, "and the other learns (%s)" % taught)
+	_check(Skills.xp(ben, "woodcutting") >= float(Skills.rules()["lesson_xp"]) and "taught" in taught, "and the other learns (%s)" % taught)
 	ben.skills = { "woodcutting": Skills.xp_for_level(5) }
 	_check("anything to teach" in sim.interaction_blocker(anna, ben, "lesson"), "but not between equals (%s)" % sim.interaction_blocker(anna, ben, "lesson"))
 
@@ -1812,7 +1833,9 @@ func _test_skills() -> void:
 	var racks := 0
 	var forges := 0
 	var benches := 0
+	var looms := 0
 	for placed in region.objects:
+		looms += 1 if placed.def_id == "loom" else 0
 		racks += 1 if placed.def_id == "tool_rack" else 0
 		forges += 1 if placed.def_id == "forge" else 0
 		benches += 1 if placed.def_id == "workbench" else 0
@@ -1826,7 +1849,7 @@ func _test_skills() -> void:
 				if placed.def_id == "tool_rack" and (lot["rect"] as Rect2i).has_point(placed.tile):
 					shops_with_racks += 1
 					break
-	_check(smithies >= 3 and workshops >= 2 and forges >= 2 * smithies and benches >= 2 * workshops and racks >= smithies + workshops + shops_with_racks and shops_with_racks >= 5, "the towns have smithies, workshops and tool racks in their shops (%d smithies, %d workshops, %d forges, %d benches, %d racks, %d shops with one)" % [smithies, workshops, forges, benches, racks, shops_with_racks])
+	_check(smithies >= 3 and workshops >= 2 and forges >= 2 * smithies and benches >= 2 * workshops and racks >= smithies + workshops + shops_with_racks and shops_with_racks >= 5 and looms >= 2 * workshops, "the towns have smithies, workshops with looms, and tool racks in their shops (%d smithies, %d workshops, %d forges, %d benches, %d looms, %d racks, %d shops with one)" % [smithies, workshops, forges, benches, looms, racks, shops_with_racks])
 	var region_folk := NpcGenerator.create(region)
 	var skilled_folk := 0
 	var adults := 0
