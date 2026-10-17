@@ -69,14 +69,24 @@ var _hint_label: Label
 var _help_panel: PanelContainer
 
 const SKILL_ROWS := 5
-const PALETTE_WIDTH := 700.0   # the build palette wraps to rows this wide
 const DETAILS_TOP := 100.0   # below the bar at the top
 const BOTTOM_ROOM := 170.0   # what the panels along the bottom take
+## The least screen the HUD is laid out for: a bigger interface size stops growing there (see UiRoot).
+const MIN_ROOM := Vector2(1000, 600)
+## A palette button, and the room between them.
+const ITEM_SIZE := Vector2(80, 74)
+const ITEM_GAP := 4.0
+## The most rows of the palette shown at once, and the most of the screen's height it may take.
+const PALETTE_ROWS := 2
+const PALETTE_SHARE := 0.22
 
 var _needs_panel: PanelContainer   # the details on the left: dreams, skills, thoughts, friends
 var _control_panel: PanelContainer  # the bottom one: picture, name, mood, needs
 var _bottom: HBoxContainer
 var _bottom_right: VBoxContainer
+var _folk_panel: PanelContainer
+var _needs_grid: GridContainer
+var _bottom_gaps: Array[Control] = []
 var _details_button: Button
 var _details_open := false
 var _big_portrait: PawnPortrait
@@ -139,6 +149,7 @@ var _build_menu := ActionMenu.new()
 func _ready() -> void:
 	layer = 10
 	_root = UiRoot.new()
+	_root.min_size = MIN_ROOM
 	add_child(_root)
 	_build_top_bar()
 	_build_clock_panel()
@@ -156,6 +167,7 @@ func _ready() -> void:
 	GameClock.speed_changed.connect(_on_speed_changed)
 	refresh_clock()
 	_on_speed_changed(GameClock.speed_level)
+	_root.resized.connect(_fit_bottom)
 
 
 ## Where the person you control is: a town's name, or "Open country".
@@ -287,6 +299,7 @@ func set_household(household: Household) -> void:
 		if baby.is_infant():
 			_household_row.add_child(_baby_chip(baby))
 	set_selected(household.selected_id)
+	_fit_bottom.call_deferred()
 
 
 ## A smaller chip for a baby: it cannot be controlled, but its strip shows how it is cared for and
@@ -361,8 +374,11 @@ func _update_baby_chip(baby: Pawn) -> void:
 
 ## Shows the selected person's name, what they are doing and their need bars (hidden if null).
 func show_pawn(pawn: Pawn, activity: String, job: String = "", relations: Array[Dictionary] = [], dreams: Dictionary = {}, worn: String = "", pieces: Variant = null) -> void:
-	_control_panel.visible = pawn != null
-	_needs_panel.visible = pawn != null and _details_open
+	var was_shown := _control_panel.visible
+	_control_panel.visible = pawn != null and not _build_panel.visible
+	_needs_panel.visible = _control_panel.visible and _details_open
+	if _control_panel.visible != was_shown:
+		_fit_bottom()
 	if pawn == null:
 		return
 	var dressed := PawnArt.outfit_for(pawn, worn if worn != "" else "casual", pieces)
@@ -469,6 +485,7 @@ func show_message(text: String, seconds: float = 2.5) -> void:
 	_toast_label.text = text
 	_toast_panel.visible = text != ""
 	_toast_panel.reset_size()
+	_place_toast()
 	_toast_serial += 1
 	var serial := _toast_serial
 	await get_tree().create_timer(seconds).timeout
@@ -645,6 +662,13 @@ func _build_toast() -> void:
 	_toast_panel.visible = false
 
 
+## Keeps the message just above whatever runs along the bottom (the folk and their panel, or the palette).
+func _place_toast() -> void:
+	var lift := maxf(_bottom.get_combined_minimum_size().y, 120.0) + 24.0
+	_toast_panel.offset_bottom = -lift
+	_toast_panel.offset_top = -lift - _toast_panel.get_combined_minimum_size().y
+
+
 ## The parchment, with less room around the words than a dialog.
 func _toast_box() -> StyleBox:
 	var box := UiTheme.get_theme().get_stylebox("panel", "ParchmentPanel").duplicate() as StyleBoxTexture
@@ -751,6 +775,7 @@ func _build_needs_panel() -> void:
 
 	var grid := GridContainer.new()
 	grid.columns = 5
+	_needs_grid = grid
 	grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	grid.add_theme_constant_override("h_separation", 10)
 	grid.add_theme_constant_override("v_separation", 8)
@@ -865,6 +890,7 @@ func _build_bottom_bar() -> void:
 	_sims_panel(panel, 0.92, 8)
 	panel.size_flags_vertical = Control.SIZE_SHRINK_END
 	_bottom.add_child(panel)
+	_folk_panel = panel
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 2)
 	panel.add_child(box)
@@ -878,6 +904,7 @@ func _build_bottom_bar() -> void:
 	left_gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left_gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_bottom.add_child(left_gap)
+	_bottom_gaps.append(left_gap)
 	_control_panel = PanelContainer.new()
 	_control_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_sims_panel(_control_panel, 0.94, 12)
@@ -888,10 +915,26 @@ func _build_bottom_bar() -> void:
 	right_gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right_gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_bottom.add_child(right_gap)
+	_bottom_gaps.append(right_gap)
 	_bottom_right = VBoxContainer.new()
 	_bottom_right.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_bottom_right.size_flags_vertical = Control.SIZE_SHRINK_END
 	_bottom.add_child(_bottom_right)
+
+
+## Keeps the row along the bottom inside the screen: the needs fold into fewer columns when the
+## screen is narrow, the household is big or the interface is large.
+func _fit_bottom() -> void:
+	if _bottom == null or _needs_grid == null:
+		return
+	var room := _root.size.x - 20.0
+	for columns in [5, 4, 3, 2]:
+		_needs_grid.columns = columns
+		if _bottom.get_combined_minimum_size().x <= room:
+			break
+	_fit_needs_panel()
+	if _build_panel != null and _build_panel.visible:
+		_fit_palette.call_deferred()
 
 
 ## The look of the game's panels in play: rounded, a cool dark blue with a pale edge, as in The Sims.
@@ -966,7 +1009,19 @@ func _compact_wood() -> StyleBox:
 func set_build_mode(on: bool) -> void:
 	_build_button.set_pressed_no_signal(on)
 	_build_panel.visible = on
-	_hint_label.text = BUILD_HELP if on else HINT_TEXT
+	# Building takes the place of your folk and their panel along the bottom, as in The Sims, so the
+	# map above stays clear; the hints for the tool in hand go in the bar at the top.
+	_folk_panel.visible = not on
+	if on:
+		_control_panel.visible = false
+		_needs_panel.visible = false
+	else:
+		_control_panel.visible = _portrait_key != ""
+		_needs_panel.visible = _control_panel.visible and _details_open
+	for gap in _bottom_gaps:
+		gap.visible = not on
+	_hint_label.text = (_build_hint.text if _build_hint.text != "" else BUILD_HELP) if on else HINT_TEXT
+	_fit_bottom()
 	if not on:
 		clear_build_selection()
 		_build_menu.close()
@@ -1001,6 +1056,8 @@ func set_build_history(can_undo: bool, can_redo: bool) -> void:
 
 func set_build_hint(text: String) -> void:
 	_build_hint.text = text
+	if _build_panel.visible:
+		_hint_label.text = text if text != "" else BUILD_HELP
 
 
 ## Shows the palette entry for something the eyedropper took up, as chosen.
@@ -1043,16 +1100,16 @@ func _build_build_ui() -> void:
 	_bottom_right.add_theme_constant_override("separation", 6)
 	_build_button.toggled.connect(func(on: bool) -> void: build_toggled.emit(on))
 
+	# The palette sits in the row along the bottom, in the place of your folk and their panel, and
+	# takes all the width there is: a wider screen shows more in a row and so needs fewer rows.
 	_build_panel = PanelContainer.new()
-	_root.add_child(_build_panel)
-	_sims_panel(_build_panel, 0.96, 8)
-	_build_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM, Control.PRESET_MODE_MINSIZE, 10)
-	_build_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_build_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	_build_panel.offset_top -= 150.0   # sits above the bottom panels
-	_build_panel.offset_bottom -= 150.0
+	_sims_panel(_build_panel, 0.96, 6)
+	_build_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_build_panel.size_flags_vertical = Control.SIZE_SHRINK_END
+	_bottom.add_child(_build_panel)
+	_bottom.move_child(_build_panel, _bottom_right.get_index())
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 6)
+	box.add_theme_constant_override("separation", 4)
 	_build_panel.add_child(box)
 	_build_toolbar(box)
 	var tab_row := HBoxContainer.new()
@@ -1060,18 +1117,14 @@ func _build_build_ui() -> void:
 	box.add_child(tab_row)
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.custom_minimum_size = Vector2(PALETTE_WIDTH + 12.0, 0.0)
-	scroll.set("_palette_scroll", true)
 	box.add_child(scroll)
 	_palette_scroll = scroll
+	scroll.resized.connect(_fit_palette)
 	var items_holder := VBoxContainer.new()
+	items_holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(items_holder)
 	_palette_body = [tab_row, scroll]
-	_build_hint = _make_label("", "DimLabel")
-	_build_hint.add_theme_font_size_override("font_size", 12)
-	_build_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_build_hint.custom_minimum_size = Vector2(PALETTE_WIDTH, 0.0)
-	box.add_child(_build_hint)
+	_build_hint = _make_label("", "DimLabel")  # shown in the bar at the top while building
 
 	# One tab per object category (furniture, structure...), one for floors, one for roofs.
 	var tabs: Dictionary = {}  # tab name -> array of { kind, id, name }
@@ -1099,15 +1152,14 @@ func _build_build_ui() -> void:
 		tab_button.toggle_mode = true
 		tab_button.button_group = tab_group
 		tab_button.focus_mode = Control.FOCUS_NONE
-		tab_button.custom_minimum_size = Vector2(96, 30)
+		tab_button.custom_minimum_size = Vector2(0, 28)
 		_sims_button(tab_button)
 		tab_row.add_child(tab_button)
 		_build_tab_buttons[tab_name] = tab_button
 		var row := HFlowContainer.new()
-		row.add_theme_constant_override("h_separation", 4)
-		row.add_theme_constant_override("v_separation", 4)
+		row.add_theme_constant_override("h_separation", int(ITEM_GAP))
+		row.add_theme_constant_override("v_separation", int(ITEM_GAP))
 		row.visible = false
-		row.custom_minimum_size = Vector2(PALETTE_WIDTH, 0)
 		items_holder.add_child(row)
 		_build_tabs[tab_name] = row
 		for entry in tabs[tab_name]:
@@ -1121,10 +1173,9 @@ func _build_build_ui() -> void:
 				_show_build_tab(tab_name))
 	# what the search finds, from every tab at once
 	_search_row = HFlowContainer.new()
-	_search_row.add_theme_constant_override("h_separation", 4)
-	_search_row.add_theme_constant_override("v_separation", 4)
+	_search_row.add_theme_constant_override("h_separation", int(ITEM_GAP))
+	_search_row.add_theme_constant_override("v_separation", int(ITEM_GAP))
 	_search_row.visible = false
-	_search_row.custom_minimum_size = Vector2(PALETTE_WIDTH, 0)
 	items_holder.add_child(_search_row)
 	var gap := Control.new()
 	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1132,7 +1183,7 @@ func _build_build_ui() -> void:
 	_search_box = LineEdit.new()
 	_search_box.placeholder_text = "Search"
 	_search_box.clear_button_enabled = true
-	_search_box.custom_minimum_size = Vector2(150, 30)
+	_search_box.custom_minimum_size = Vector2(130, 28)
 	_search_box.text_changed.connect(_search_changed)
 	_search_box.text_submitted.connect(func(_text: String) -> void: _search_box.release_focus())
 	tab_row.add_child(_search_box)
@@ -1190,7 +1241,7 @@ func _build_toolbar(box: VBoxContainer) -> void:
 	bar.add_child(gap)
 	_fold_button = _toolbar_button("Catalog", "Show or hide what can be built, to see more of the map", true)
 	_fold_button.set_pressed_no_signal(true)
-	_fold_button.custom_minimum_size = Vector2(76, 30)
+	_fold_button.custom_minimum_size = Vector2(72, 28)
 	_fold_button.toggled.connect(func(open: bool) -> void:
 		for part in _palette_body:
 			part.visible = open)
@@ -1203,7 +1254,7 @@ func _toolbar_button(text: String, tip: String, toggle: bool) -> Button:
 	button.tooltip_text = tip
 	button.toggle_mode = toggle
 	button.focus_mode = Control.FOCUS_NONE
-	button.custom_minimum_size = Vector2(62, 30)
+	button.custom_minimum_size = Vector2(54, 28)
 	_sims_button(button)
 	return button
 
@@ -1214,7 +1265,7 @@ func _add_build_item(entry: Dictionary, row: Control) -> Button:
 	item.toggle_mode = true
 	item.button_group = _build_group
 	item.focus_mode = Control.FOCUS_NONE
-	item.custom_minimum_size = Vector2(90, 84)
+	item.custom_minimum_size = ITEM_SIZE
 	_sims_button(item)
 	item.clip_contents = true
 	item.set_meta("kind", str(entry["kind"]))
@@ -1227,18 +1278,18 @@ func _add_build_item(entry: Dictionary, row: Control) -> Button:
 	var icon := BuildIcon.new()
 	icon.kind = str(entry["kind"])
 	icon.id = str(entry["id"])
-	icon.position = Vector2(23, 3)
+	icon.position = Vector2((ITEM_SIZE.x - 44.0) / 2.0, 1)
 	item.add_child(icon)
 	var label := Label.new()
 	label.text = str(entry["name"]) + ("\n%s" % Economy.format(int(entry["cost"])) if int(entry.get("cost", 0)) > 0 else "")
-	label.position = Vector2(0, 45)
-	label.size = Vector2(90, 36)
+	label.position = Vector2(0, 42)
+	label.size = Vector2(ITEM_SIZE.x, ITEM_SIZE.y - 42.0)
 	label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	label.add_theme_constant_override("line_spacing", -3)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.clip_text = true
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.add_theme_font_size_override("font_size", 12)
+	label.add_theme_font_size_override("font_size", 11)
 	item.add_child(label)
 	var kind := str(entry["kind"])
 	var id := str(entry["id"])
@@ -1270,26 +1321,36 @@ func _search_changed(text: String) -> void:
 			_add_build_item(entry, _search_row)
 			found += 1
 	_search_row.visible = true
-	_palette_scroll.custom_minimum_size.y = _palette_height(maxi(1, ceili(float(found) / floorf(PALETTE_WIDTH / 94.0))))
+	_fit_palette()
 
 
-## The palette is as tall as its rows need, but never much more than a quarter of the screen: the map is
-## what you are building on.
-func _palette_height(rows: int) -> float:
-	return minf(float(rows) * 88.0, clampf(_root.size.y * 0.25, 132.0, 264.0))
+## How many palette buttons fit side by side in the width the palette has now.
+func _palette_columns() -> int:
+	var width := _palette_scroll.size.x - 12.0  # room for the scroll bar
+	return maxi(1, floori((width + ITEM_GAP) / (ITEM_SIZE.x + ITEM_GAP)))
+
+
+## The palette is as tall as its rows need, but no more than two rows and a small share of the screen,
+## so the map you are building on stays in view; the rest scrolls.
+func _fit_palette() -> void:
+	var shown: Control = _search_row if _search_row.visible else _build_tabs.get(_current_tab, null)
+	var count := shown.get_child_count() if shown != null else 0
+	var rows := maxi(1, ceili(float(count) / float(_palette_columns())))
+	var row_height := ITEM_SIZE.y + ITEM_GAP
+	var most := clampf(floorf(_root.size.y * PALETTE_SHARE / row_height), 1.0, float(PALETTE_ROWS))
+	var height := minf(float(rows), most) * row_height - ITEM_GAP
+	if absf(_palette_scroll.custom_minimum_size.y - height) > 0.5:
+		_palette_scroll.custom_minimum_size.y = height
 
 
 func _show_build_tab(tab_name: String) -> void:
 	_current_tab = tab_name
 	_search_row.visible = false
-	var rows := 1
-	if _build_tabs.has(tab_name):
-		rows = ceili(float((_build_tabs[tab_name] as Control).get_child_count()) / floorf(PALETTE_WIDTH / 94.0))
-	_palette_scroll.custom_minimum_size.y = _palette_height(rows)
 	for name in _build_tabs:
 		_build_tabs[name].visible = (name == tab_name)
 	for name in _build_tab_buttons:
 		_build_tab_buttons[name].set_pressed_no_signal(name == tab_name)
+	_fit_palette()
 
 
 # --- signals -------------------------------------------------------------------
