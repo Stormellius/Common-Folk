@@ -74,6 +74,7 @@ static func plan_object(sim: Simulation, def_id: String, tile: Vector2i) -> Dict
 	site.def_id = def_id
 	site.tile = tile
 	site.needs = Economy.materials(def_id).duplicate()
+	site.from_stock = (price["uses"] as Dictionary).duplicate()
 	site.minutes = base_minutes("object", def_id)
 	site.paid = int(price["coins"])
 	_reserve(sim.world, site.needs)
@@ -158,33 +159,106 @@ static func plan_room_roof(sim: Simulation, roof_id: String, tile: Vector2i) -> 
 		sim.household.add_stock(str(resource_id), -int(price["uses"][resource_id]))
 	_reserve(sim.world, price["needs"])
 	var each: Dictionary = DataRegistry.get_def("roofs", roof_id).get("materials", {})
+	var unspent: Dictionary = (price["uses"] as Dictionary).duplicate()
 	for cell in tiles:
 		var site := BuildSite.new()
 		site.kind = "roof"
 		site.def_id = roof_id
 		site.tile = cell
 		site.needs = each.duplicate()
+		for resource_id in each:  # the stock that went into the roof is shared out along its tiles
+			var share := mini(int(each[resource_id]), int(unspent.get(resource_id, 0)))
+			if share > 0:
+				site.from_stock[resource_id] = share
+				unspent[resource_id] = int(unspent[resource_id]) - share
 		site.minutes = base_minutes("roof", roof_id)
 		sim.world.add_site(site)
 	return { "ok": true, "message": "" }
 
 
-## Calls off a plan: what was carried to it and what was set aside come back to the stockpile, and
-## half the coin.
-static func cancel(sim: Simulation, site: BuildSite) -> void:
+## Whoever was at work on a plan stops and looks for something else to do.
+static func free_builder(sim: Simulation, site: BuildSite) -> void:
 	var builder := sim.person(site.builder) if site.builder != 0 else null
 	if builder != null and builder.job_kind == "build":
 		builder.job_site = 0
 		builder.job_stage = "decide"
+	site.builder = 0
+
+
+## Calls off a plan: what was carried to it and what was set aside come back to the stockpile, and
+## half the coin (all of it when `undoing`: the plan was only just made and never started).
+static func cancel(sim: Simulation, site: BuildSite, undoing: bool = false) -> void:
+	free_builder(sim, site)
+	var returning := {}
 	for resource_id in site.delivered:
-		sim.household.add_stock(str(resource_id), int(site.delivered[resource_id]))
+		returning[str(resource_id)] = int(site.delivered[resource_id])
 	var waiting := site.missing()
 	for resource_id in waiting:
 		var back := mini(int(waiting[resource_id]), int(sim.world.reserved.get(resource_id, 0)))
 		sim.world.reserved[resource_id] = int(sim.world.reserved.get(resource_id, 0)) - back
-		sim.household.add_stock(str(resource_id), back)
-	sim.household.coins += Economy.refund(site.paid)
+		returning[str(resource_id)] = int(returning.get(str(resource_id), 0)) + back
+	for resource_id in returning:
+		# undoing hands back all the coin, so only the stock that went into it comes back, not what the coin bought
+		var amount := mini(int(returning[resource_id]), int(site.from_stock.get(resource_id, 0))) if undoing else int(returning[resource_id])
+		if amount > 0:
+			sim.household.add_stock(str(resource_id), amount)
+	sim.household.coins += site.paid if undoing else Economy.refund(site.paid)
 	sim.world.remove_site(site.id)
+
+
+## What it takes to bring a plan that was called off back exactly as it was: { "kind", "def", "tile", "paid",
+## "needs", "from_stock", "minutes" } (see BuildEditor, which keeps it for undo).
+static func snapshot(site: BuildSite) -> Dictionary:
+	return { "kind": site.kind, "def": site.def_id, "tile": site.tile, "paid": site.paid, "needs": site.needs.duplicate(),
+		"from_stock": site.from_stock.duplicate(), "minutes": site.minutes }
+
+
+## Puts a plan that was just called off back: it takes back the coin and the materials that came back,
+## so nothing is gained or lost. Returns why it cannot be, or "".
+static func restore_plan(sim: Simulation, saved: Dictionary) -> String:
+	var world := sim.world
+	var tile: Vector2i = saved["tile"]
+	var kind := str(saved["kind"])
+	if world.site_at(tile, kind) != null:
+		return ""  # already there
+	match kind:
+		"object":
+			var why := sim.build_blocker(str(saved["def"]), tile, 0, {}, true)
+			if why != "":
+				return why
+		"floor":
+			if not world.can_build_at(tile):
+				return "outside your land"
+			if Levels.of(tile) == 1:
+				var upstairs := Levels.floor_blocker(world, tile)
+				if upstairs != "" and world.floor_at(tile) == "":
+					return upstairs
+			elif not world.terrain_walkable(tile.x, tile.y):
+				return "not solid ground"
+		"roof":
+			if world.roof_at(tile) != "":
+				return "it is roofed already"
+	var refund := Economy.refund(int(saved["paid"]))
+	if sim.household.coins < refund:
+		return "you have spent what it gave back"
+	var needs: Dictionary = saved["needs"]
+	for resource_id in needs:
+		if sim.household.stock_of(str(resource_id)) < int(needs[resource_id]):
+			return "the materials that came back have been used"
+	sim.household.coins -= refund
+	for resource_id in needs:
+		sim.household.add_stock(str(resource_id), -int(needs[resource_id]))
+	var site := BuildSite.new()
+	site.kind = kind
+	site.def_id = str(saved["def"])
+	site.tile = tile
+	site.needs = needs.duplicate()
+	site.from_stock = (saved["from_stock"] as Dictionary).duplicate()
+	site.minutes = int(saved["minutes"])
+	site.paid = int(saved["paid"])
+	_reserve(world, site.needs)
+	world.add_site(site)
+	return ""
 
 
 ## Calls off every plan on a tile. Returns how many there were.
@@ -512,7 +586,7 @@ static func finish(sim: Simulation, pawn: Pawn, site: BuildSite, rng: RandomNumb
 	match site.kind:
 		"object":
 			world.add_object(site.def_id, site.tile)
-			sim._reroute_blocked_walks()
+			sim.reroute_blocked_walks()
 		"floor":
 			world.set_floor(site.tile, site.def_id)
 		"roof":
