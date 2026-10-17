@@ -277,6 +277,21 @@ func _test_hud() -> void:
 	_check(shapes_ok and hud._undo_button.disabled and hud._redo_button.disabled, "and the shapes to draw with, and undo and redo (nothing to undo yet)")
 	hud.set_build_history(true, false)
 	_check(not hud._undo_button.disabled and hud._redo_button.disabled, "undo wakes up when there is something to undo")
+	# Going straight from one catalog entry to another (the first lets go while the second is pressed), wired as in the game.
+	hud.build_tool_chosen.connect(func(kind: String, _id: String) -> void: hud.set_build_tool("select" if kind == "none" else kind))
+	var first_item: Button = null
+	var second_item: Button = null
+	for button in hud._build_items:
+		if str(button.get_meta("id", "")) == "wall":
+			first_item = button
+		elif str(button.get_meta("id", "")) == "stone_wall":
+			second_item = button
+	first_item.button_pressed = true
+	second_item.button_pressed = true
+	_check(second_item.button_pressed and not first_item.button_pressed and chosen_tools.back() == "place:stone_wall" and not hud._build_tool_buttons["select"].button_pressed, "going from one catalog entry to another leaves the second in hand and pressed")
+	second_item.button_pressed = false
+	_check(hud._build_tool_buttons["select"].button_pressed, "and letting go of it puts the hand back on the toolbar")
+	chosen_tools.clear()  # the checks below count what the palette reports
 	hud._search_box.text = "bed"
 	hud._search_changed("bed")
 	var found_names: Array[String] = []

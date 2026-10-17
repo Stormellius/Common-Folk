@@ -981,12 +981,11 @@ func clear_build_selection() -> void:
 			button.set_pressed_no_signal(false)
 
 
-## The tool in hand changed (from the controller): shows it on the toolbar, and clears the palette unless it came from there.
+## The tool in hand changed (from the controller): shows it on the toolbar. The catalog is left alone: changing
+## from one entry to another un-presses the first while the second is being pressed, and that must not clear both.
 func set_build_tool(kind: String) -> void:
 	for tool_kind in _build_tool_buttons:
 		_build_tool_buttons[tool_kind].set_pressed_no_signal(tool_kind == kind)
-	if kind not in ["place", "floor", "roof"]:
-		clear_build_selection()
 
 
 func set_build_shape(shape: String) -> void:
@@ -1161,7 +1160,9 @@ func _build_toolbar(box: VBoxContainer) -> void:
 		var button := _toolbar_button(str(entry[1]), str(entry[2]), true)
 		button.button_group = tool_group
 		var kind := str(entry[0])
-		button.pressed.connect(func() -> void: build_tool_chosen.emit(kind, ""))
+		button.pressed.connect(func() -> void:
+			clear_build_selection()  # a tool from the toolbar replaces what was chosen from the catalog
+			build_tool_chosen.emit(kind, ""))
 		bar.add_child(button)
 		_build_tool_buttons[kind] = button
 	bar.add_child(VSeparator.new())
