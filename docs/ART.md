@@ -50,7 +50,7 @@ view as the pack, with the same thick dark outline.
 | Chapel and clinic | altar with candles, pew, grave (mound with a cross), sickbed, lantern post, watch post | `altar`, `pew`, `grave`, `sickbed`, `lantern_post`, `watch_post` |
 | Music and garden | lute on a rug, harp on a rug, drum on a rug, flower bed, herb bed, field plot at five stages of a crop | `lute`, `harp`, `drum`, `flower_bed`, `herb_bed`, `field_plot` |
 | Work sites | quarry face, jetty planks over water, a young tree and a felled one | `quarry_face`, `fishing_spot` |
-| Walls and doors | timber and stone walls (a 15-piece autotile each: use SpriteCook's tileset tool), doors open and shut, thatch and tile roofs (tileset) | `wall`, `stone_wall`, `door`, roofs |
+| Doors and stairs | doors open and shut, timber stairs and the landing above them (walls, roofs and straw are painted now: see below) | `door`, `stairs`, `stairs_top` |
 | Terrain | grass, dirt, cobble, forest floor, stone, water, with edges (tileset) | `data/tiles.json` (today a shader) |
 | Trees and rocks | pine, oak, birch, dead tree, boulders, flowers | terrain decoration |
 | Animals | rabbit, deer, boar, wolf, horse, donkey, ox, dog, cat, each walking in four directions (animation) | `data/animals.json` |
@@ -122,3 +122,10 @@ would be the next step up.
   (`Pawn.garments`), apply on top of whatever outfit they wear, give way to nightclothes in bed, underclothes at the basin and good clothes at
   weddings and services, and change how warm they are (`warm` on each garment).
 * Still to do when there are credits: clean garments for the other sets (elders, youth, child, maternity), hats, outer layers and underwear.
+
+## Painted walls, roofs and straw
+* `assets/source/sheet_walls_roofs.png` is nine seamless textures: straw, the tops and south faces of timber and stone walls, a
+  wattle-and-daub face, and thatch, clay tile and shingle roofs (daub and shingle are cut but not used yet).
+* `wall.<object id>` entries in `data/sprites.json` give a wall its `top` and `face` textures; `roof.<roof id>` and `floor.straw` are
+  like the other floors (`SpriteBank.draw_surface`). A wall's top is laid along it (turned a quarter for a wall running north to south),
+  its south face is the bottom strip of the face picture, and the code still draws the outlines, the lit rims and the eaves on top.

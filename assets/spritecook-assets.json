@@ -84,6 +84,11 @@
   {
    "asset_id": "b3d5f24e-3de7-4bfc-a285-f87b41f2067c",
    "label": "Garment on its own: adult_male boots"
+  },
+  {
+   "asset_id": "be6a7214-94a9-4d31-9e94-706486d28f29",
+   "label": "Sheet: wall, roof and straw textures (3x3, gpt-image-2 low)",
+   "file": "assets/source/sheet_walls_roofs.png"
   }
  ]
 }

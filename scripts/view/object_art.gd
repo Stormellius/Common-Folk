@@ -482,7 +482,10 @@ static func _wall(ci: CanvasItem, u: float, connections: int, cell: Vector2i, st
 	var top := Rect2(-24, -24, 48, 48.0 - (WALL_FACE if face_south else 0.0))
 	var along_x := (connections & 10) != 0
 	var along_y := (connections & 5) != 0
-	if along_x and along_y:  # a corner or crossing
+	var painted := _painted_wall(ci, u, "stone_wall" if stone else "wall", top, along_x, along_y, face_south, cell)
+	if painted:
+		pass  # its top and face are pictures; the edges below are still drawn
+	elif along_x and along_y:  # a corner or crossing
 		if stone:  # big quoin stones
 			_courses(ci, u, top, true, 2, 24.0, base.lightened(0.05), cell, 0.18, 1.5, true, 11)
 		else:  # a squared post where the timbers meet, bevelled, with a hint of end grain
@@ -502,7 +505,9 @@ static func _wall(ci: CanvasItem, u: float, connections: int, cell: Vector2i, st
 	if face_south:
 		var face := Rect2(-24, 24.0 - WALL_FACE, 48, WALL_FACE)
 		var shaded := base.darkened(0.42)
-		if stone:
+		if painted:
+			pass  # drawn with the top
+		elif stone:
 			_courses(ci, u, face, true, 2, 15.0, shaded, cell, 0.20, 1.2, true, 9)
 		else:  # upright boards
 			ci.draw_rect(_scaled_rect(face, u), shaded)
@@ -515,6 +520,24 @@ static func _wall(ci: CanvasItem, u: float, connections: int, cell: Vector2i, st
 		ci.draw_line(Vector2(-24, face.position.y) * u, Vector2(24, face.position.y) * u, base.lightened(0.28), maxf(1.0, 1.2 * u))  # the lit edge
 		ci.draw_line(Vector2(-24, 24) * u, Vector2(24, 24) * u, OUTLINE, maxf(1.0, 1.5 * u))
 	_wall_edges(ci, u, connections, base, top.end.y)
+
+
+## Draws a wall's top and south face from its painted textures (see SpriteBank.has_wall), or returns false
+## when it has none. The top's courses run along the wall, so a wall running north to south has its
+## texture turned a quarter round. A corner is shaded a little, so it reads as the post or quoin where walls meet.
+static func _painted_wall(ci: CanvasItem, u: float, def_id: String, top: Rect2, along_x: bool, along_y: bool,
+		face_south: bool, cell: Vector2i) -> bool:
+	if not SpriteBank.has_wall(def_id):
+		return false
+	var id := "wall." + def_id
+	var tile := Rect2(Vector2(-24, -24) * u, Vector2(48, 48) * u)
+	var tint := Color(0.86, 0.86, 0.86) if along_x and along_y else Color.WHITE
+	var share := top.size.y / 48.0
+	SpriteBank.draw_surface(ci, id, "top", tile, cell, Rect2(0, 0, 1, share), tint, along_y and not along_x)
+	if face_south:  # the bottom strip of the face picture, so its boards or stones are the size of the top's
+		var strip := WALL_FACE / 48.0
+		SpriteBank.draw_surface(ci, id, "face", tile, Vector2i(cell.x, 0), Rect2(0, 1.0 - strip, 1, strip), Color(0.78, 0.78, 0.78))
+	return true
 
 
 ## Dark outlines along the sides that do not join another wall, with a lit rim on the sides

@@ -8,7 +8,9 @@ extends RefCounted
 ## "object.<id>" entries: "files" (a picture is chosen from the list by the tile it stands on),
 ## "fit" (the box in tiles it is scaled to fit), "base" (where its bottom edge sits, in tiles below
 ## the tile's middle), "flip" (may be turned round), "shadow" (false for flat things).
-## "floor.<id>" entries: "file", and "tiles": how many tiles across the picture is.
+## "floor.<id>" and "roof.<id>" entries: "file", and "tiles": how many tiles across the picture is.
+## "wall.<object id>" entries: "top" and "face" (the wall's top seen from above, and its south face),
+## and "tiles".
 
 const SHADOW := Color(0, 0, 0, 0.20)
 
@@ -127,21 +129,54 @@ static func turned_texture(name: String, flip_x: bool, flip_y: bool) -> Texture2
 ## Draws a floor tile from its texture, taking the piece of the picture that belongs to `cell` so that
 ## neighbours join up. Returns false when there is none.
 static func draw_floor(ci: CanvasItem, floor_id: String, rect: Rect2, cell: Vector2i) -> bool:
+	return draw_surface(ci, "floor." + floor_id, "file", rect, cell)
+
+
+## Draws a roof tile from its texture, like a floor ("roof.<id>": "file", "tiles"). False when there is none.
+static func draw_roof(ci: CanvasItem, roof_id: String, rect: Rect2, cell: Vector2i) -> bool:
+	return draw_surface(ci, "roof." + roof_id, "file", rect, cell)
+
+
+## Whether a wall has painted textures ("wall.<object id>": "top", "face", "tiles").
+static func has_wall(def_id: String) -> bool:
 	if not enabled():
 		return false
-	var entry := DataRegistry.get_def("sprites", "floor." + floor_id)
+	var entry := DataRegistry.get_def("sprites", "wall." + def_id)
+	return not entry.is_empty() and texture(str(entry.get("top", ""))) != null and texture(str(entry.get("face", ""))) != null
+
+
+## Draws part of a surface's texture: `key` names the picture in the sprites entry `id`, `rect` is the
+## whole tile and `part` the share of it to fill (0..1 across and down), so a wall's top and its face can
+## each take their own strip of a tile. `turned` lays the picture a quarter round, its rows running down
+## the map. `tint` shades it. Returns false, drawing nothing, when there is no picture.
+static func draw_surface(ci: CanvasItem, id: String, key: String, rect: Rect2, cell: Vector2i,
+		part: Rect2 = Rect2(0, 0, 1, 1), tint: Color = Color.WHITE, turned: bool = false) -> bool:
+	if not enabled():
+		return false
+	var entry := DataRegistry.get_def("sprites", id)
 	if entry.is_empty():
 		return false
-	var name := str(entry["file"])
-	var picture := texture(name)
+	var picture := texture(str(entry.get(key, "")))
 	if picture == null:
 		return false
 	var tiles := maxi(1, int(entry.get("tiles", 4)))
-	var found := floor_piece(picture.get_size(), tiles, cell)
-	var turned := turned_texture(name, bool(found["x"]), bool(found["y"]))
-	if turned == null:
-		return false
-	ci.draw_texture_rect_region(turned, rect, found["region"])
+	var along := Vector2i(cell.y, cell.x) if turned else cell  # the picture's own across and down
+	var column := posmod(along.x, tiles)
+	var row := posmod(along.y, tiles)
+	var turned_x := posmod(floori(float(along.x) / float(tiles)), 2) == 1
+	var turned_y := posmod(floori(float(along.y) / float(tiles)), 2) == 1
+	var corner := Vector2(tiles - 1 - column if turned_x else column, tiles - 1 - row if turned_y else row)
+	var points := PackedVector2Array()
+	var uvs := PackedVector2Array()
+	for share in [part.position, Vector2(part.end.x, part.position.y), part.end, Vector2(part.position.x, part.end.y)]:
+		points.append(rect.position + share * rect.size)
+		var inside: Vector2 = Vector2(share.y, share.x) if turned else share
+		if turned_x:  # a mirrored repeat, so no seam shows where repeats meet
+			inside.x = 1.0 - inside.x
+		if turned_y:
+			inside.y = 1.0 - inside.y
+		uvs.append((corner + inside) / float(tiles))
+	ci.draw_polygon(points, PackedColorArray([tint, tint, tint, tint]), uvs, picture)
 	return true
 
 
