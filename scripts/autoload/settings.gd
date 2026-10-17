@@ -10,7 +10,7 @@ signal changed(key: String)
 const PATH := "user://settings.cfg"
 const DISPLAY_MODES := { "windowed": "Windowed", "fullscreen": "Fullscreen", "borderless": "Borderless window" }
 const WINDOW_SIZES: Array[Vector2i] = [Vector2i(1280, 720), Vector2i(1600, 900), Vector2i(1920, 1080), Vector2i(2560, 1440)]
-const UI_SCALES: Array[float] = [0.85, 1.0, 1.15, 1.3, 1.5]
+const UI_SCALES: Array[float] = [0.75, 0.85, 1.0, 1.15, 1.3, 1.5]
 
 var display_mode := "windowed"
 var window_size := Vector2i(1280, 720)
