@@ -136,6 +136,8 @@ static func draw(ci: CanvasItem, def_id: String, u: float, t: float, occupied: b
 			_brew_vat(ci, u)
 		"tanning_rack":
 			_tanning_rack(ci, u)
+		"loom":
+			_loom(ci, u)
 		_:
 			_crate(ci, u)
 
@@ -903,6 +905,22 @@ static func _tanning_rack(ci: CanvasItem, u: float) -> void:
 	for lace in [Vector2(-16, -10), Vector2(15, -11), Vector2(17, -2), Vector2(14, 10), Vector2(-14, 11), Vector2(-17, 1)]:
 		ci.draw_line(lace * u, (lace * 1.25) * u, Color(0.85, 0.80, 0.65), maxf(1.0, 0.9 * u))
 	ci.draw_circle(Vector2(-4, -2) * u, 4.0 * u, Color(0.58, 0.40, 0.24))
+
+
+## A frame loom: warp threads strung top to bottom, a band of woven cloth, and the shuttle.
+static func _loom(ci: CanvasItem, u: float) -> void:
+	_shadow(ci, u, 20.0)
+	_rect(ci, u, -20, -15, 40, 30, Color(0.40, 0.28, 0.17), 1.3)
+	_rect(ci, u, -17, -12, 34, 24, Color(0.30, 0.22, 0.14), 0.0)
+	for index in 9:
+		var x := -15.0 + index * 3.75
+		ci.draw_line(Vector2(x, -12) * u, Vector2(x, 12) * u, Color(0.90, 0.86, 0.74), maxf(1.0, 0.8 * u))
+	_rect(ci, u, -17, 2, 34, 10, Color(0.70, 0.62, 0.80), 0.0)  # the cloth woven so far
+	for row in 3:
+		ci.draw_line(Vector2(-17, 4 + row * 3) * u, Vector2(17, 4 + row * 3) * u, Color(0.58, 0.50, 0.68), maxf(1.0, 0.7 * u))
+	ci.draw_line(Vector2(-20, 0) * u, Vector2(20, 0) * u, Color(0.52, 0.38, 0.24), maxf(1.5, 2.6 * u))  # the beater
+	var shuttle := PackedVector2Array([Vector2(-6, -4), Vector2(0, -6), Vector2(6, -4), Vector2(0, -2)])
+	ci.draw_colored_polygon(_scaled(shuttle, u), Color(0.78, 0.64, 0.42))
 
 
 # --- little shapes -----------------------------------------------------------------

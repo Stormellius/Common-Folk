@@ -118,6 +118,12 @@ static func practice(sim: Simulation, pawn: Pawn, skill_id: String, minutes: flo
 	_add_xp(sim, pawn, skill_id, rate * minutes)
 
 
+## One deed that teaches a skill (a sale, a kill, nursing someone): worth the minutes of practice the
+## skill's "deeds" in data/skills.json give it, or `fallback`.
+static func practice_deed(sim: Simulation, pawn: Pawn, skill_id: String, deed: String, fallback: float) -> void:
+	practice(sim, pawn, skill_id, float(DataRegistry.get_def("skills", skill_id).get("deeds", {}).get(deed, fallback)))
+
+
 ## Gives xp directly (a lesson, an inherited trade).
 static func grant(sim: Simulation, pawn: Pawn, skill_id: String, points: float) -> void:
 	if DataRegistry.get_def("skills", skill_id).is_empty() or points <= 0.0:

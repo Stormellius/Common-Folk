@@ -13,5 +13,10 @@
   {"id": "bake_bread", "station": "oven", "skill": "cooking", "name": "Bake bread", "inputs": {"flour": 2, "wood": 1}, "outputs": {"bread": 3}, "minutes": 50},
   {"id": "brew_ale", "station": "brew_vat", "skill": "cooking", "name": "Brew ale", "inputs": {"grain": 3, "herbs": 1}, "outputs": {"ale": 3}, "minutes": 90, "min_level": 1},
   {"id": "tan_leather", "station": "tanning_rack", "skill": "herbalism", "name": "Tan leather", "inputs": {"hide": 2, "herbs": 1}, "outputs": {"leather": 2}, "minutes": 70},
-  {"id": "smelt_iron", "station": "forge", "skill": "smithing", "name": "Smelt iron", "inputs": {"stone": 4, "wood": 2}, "outputs": {"iron": 1}, "minutes": 120, "min_level": 1}
+  {"id": "smelt_iron", "station": "forge", "skill": "smithing", "name": "Smelt iron", "inputs": {"stone": 4, "wood": 2}, "outputs": {"iron": 1}, "minutes": 120, "min_level": 1},
+  {"id": "forge_sewing_kit", "station": "forge", "skill": "smithing", "name": "Forge a sewing kit", "inputs": {"wood": 1, "stone": 1}, "outputs": {"sewing_kit": 1}, "minutes": 50},
+  {"id": "spin_linen", "station": "loom", "skill": "tailoring", "name": "Spin and weave linen", "inputs": {"flax": 3}, "outputs": {"cloth": 1}, "minutes": 80},
+  {"id": "sew_shirt", "station": "loom", "skill": "tailoring", "name": "Sew a linen shirt", "inputs": {"cloth": 1}, "outputs": {"shirt": 1}, "minutes": 60},
+  {"id": "stitch_boots", "station": "loom", "skill": "tailoring", "name": "Stitch boots", "inputs": {"leather": 2}, "outputs": {"boots": 1}, "minutes": 100, "min_level": 1},
+  {"id": "sew_cloak", "station": "loom", "skill": "tailoring", "name": "Sew a cloak", "inputs": {"cloth": 2, "leather": 1}, "outputs": {"cloak": 1}, "minutes": 140, "min_level": 3}
 ]

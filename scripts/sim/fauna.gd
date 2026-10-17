@@ -468,7 +468,7 @@ static func step_hunt(sim: Simulation, pawn: Pawn, rng: RandomNumberGenerator) -
 		sim.health_notice.emit("%s lost the trail of %s." % [_first(pawn), animal.title()])
 		sim._end_job(pawn)
 		return
-	Skills.practice(sim, pawn, "hunting")
+	Skills.practice_deed(sim, pawn, "hunting", "stalk", 1.0)
 	var broken := Skills.wear(sim, pawn)
 	if broken != "":
 		sim.health_notice.emit(broken)
@@ -528,7 +528,7 @@ static func _kill(sim: Simulation, pawn: Pawn, animal: Animal, rng: RandomNumber
 	var title := animal.title()
 	sim.world.remove_animal(animal.id)
 	Mood.add_event(pawn, "hunted", GameClock.tick)
-	Skills.practice(sim, pawn, "hunting", 15.0)
+	Skills.practice_deed(sim, pawn, "hunting", "kill", 15.0)
 	sim.health_notice.emit("%s brought down %s: %s." % [_first(pawn), title, Economy.stock_text(brought)])
 	sim._end_job(pawn)
 
@@ -652,7 +652,7 @@ static func _ride_minute(sim: Simulation, pawn: Pawn, now: int) -> void:
 		return
 	if pawn.has_orders():
 		animal.alert_until = now
-		Skills.practice(sim, pawn, "husbandry", 0.6)
+		Skills.practice_deed(sim, pawn, "husbandry", "ride", 0.6)
 	elif pawn.job_kind == "" and now - animal.alert_until >= IDLE_DISMOUNT:
 		dismount(sim, pawn)
 	refresh_pace(sim, pawn)
@@ -728,7 +728,7 @@ static func step_pet(sim: Simulation, pawn: Pawn) -> void:
 			pawn.needs[need_id] = minf(Needs.FULL, float(pawn.needs[need_id]) + 5.0)
 	if pawn.job_minutes >= PET_MINUTES:
 		Mood.add_event(pawn, "petted", GameClock.tick, animal.display_name())
-		Skills.practice(sim, pawn, "husbandry", 8.0)
+		Skills.practice_deed(sim, pawn, "husbandry", "pet", 8.0)
 		sim._end_job(pawn)
 
 

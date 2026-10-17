@@ -47,6 +47,9 @@ func _play(world_seed: int, start_day: int) -> void:
 		var coins_at_start := 0
 		for villager in sim.town.pawns:
 			coins_at_start += villager.coins
+		var levels_at_start := {}
+		for pawn in sim.people():
+			levels_at_start[pawn.id] = _levels(pawn)
 		var lowest := {}
 		var total := 0.0
 		var samples := 0
@@ -69,5 +72,32 @@ func _play(world_seed: int, start_day: int) -> void:
 		for villager in sim.town.pawns:
 			coins_at_end += villager.coins
 			employed += 1 if villager.work_job != "" else 0
+		var gained := {}  # skill: levels gained by everyone alive at both ends
+		for pawn in sim.people():
+			var before: Dictionary = levels_at_start.get(pawn.id, {})
+			var after := _levels(pawn)
+			for skill_id in after:
+				var up := int(after[skill_id]) - int(before.get(skill_id, 0))
+				if up > 0:
+					gained[skill_id] = int(gained.get(skill_id, 0)) + up
 		print("seed %d (%s start), day %d: %d deaths (%d in town), %d people, average mood %.1f, worst mood %.1f, lowest needs %s" % [world_seed, start_id, start_day, deaths[0], town_deaths[0], sim.people().size(), total / maxf(1.0, samples), worst_mood, rounded])
 		print("    town: %d in work, pockets %d -> %d coin; household purse %d, standing %.0f, arrears %d%s" % [employed, coins_at_start, coins_at_end, household.coins, sim.realm.reputation, sim.realm.arrears, ("\n    " + "\n    ".join(causes)) if not causes.is_empty() else ""])
+		print("    skills: levels gained %s; household best %s" % [gained, _household_best(household)])
+
+
+## { skill: level } for every skill a person has begun.
+func _levels(pawn: Pawn) -> Dictionary:
+	var found := {}
+	for entry in Skills.known(pawn):
+		found[entry["id"]] = entry["level"]
+	return found
+
+
+## "Ada woodcutting 3, ..." for the player's people.
+func _household_best(household: Household) -> String:
+	var parts: Array[String] = []
+	for pawn in household.pawns:
+		var top := Skills.best(pawn)
+		if top != "":
+			parts.append("%s %s %d" % [pawn.display_name.get_slice(" ", 0), top, Skills.level(pawn, top)])
+	return ", ".join(parts)
