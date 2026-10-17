@@ -4098,6 +4098,16 @@ func _test_art() -> void:
 	_check((man["looks"] as Array).size() >= 3 and dark["id"] == "b" and fair["id"] == "c" and plain["id"] == "a", "adults have three body looks and each person gets the nearest to their hair and skin")
 	var maternity := SpriteBank.person_set("adult", "pregnant")
 	_check(not maternity.is_empty() and "winter" in maternity["outfits"] and "sleepwear" in maternity["outfits"] and SpriteBank.person_set("adult", "female")["id"] != maternity["id"], "there is a set of maternity pictures")
+	# Children and youths share one set for boys and girls, so girls are given long hair over it.
+	var girl_hair := true
+	for stage in ["child", "youth"]:
+		var shared := SpriteBank.person_set(stage, "female")
+		girl_hair = girl_hair and shared["id"] == SpriteBank.person_set(stage, "male")["id"]
+		for side in ["front", "back"]:
+			girl_hair = girl_hair and SpriteBank.girl_hair(shared, { "gender": "female" }, side) != null and SpriteBank.girl_hair(shared, { "gender": "male" }, side) == null
+	girl_hair = girl_hair and SpriteBank.girl_hair(SpriteBank.person_set("adult", "female"), { "gender": "female" }, "front") == null
+	_check(girl_hair, "painted girls and young women have long hair the boys don't, front and back (grown women have their own set)")
+	_check("sleepwear_top" in SpriteBank.person_set("child", "female").get("hair_under", []), "a girl's hair goes under the child's nightcap")
 	var painted_before := Settings.painted_characters
 	painted_before = true  # the default (a saved setting may differ)
 	Settings.painted_characters = false
