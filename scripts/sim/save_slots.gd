@@ -1,12 +1,16 @@
 class_name SaveSlots
 extends RefCounted
 ## Where saves live and what each one is: any number of named saves in user://saves/, plus the
-## quick save (F5) and the autosave. Next to every save is a small ".meta" file (whose family, the
-## date in the game, when it was saved) so the load list can be shown without reading whole saves.
+## quick save (F5) and the last few autosaves. Next to every save is a small ".meta" file (whose
+## family, the date in the game, when it was saved) so the load list can be shown without reading
+## whole saves, and, once it has been saved over, the copy it replaced (see SaveGame.BACKUP).
 
 const DIR := "user://saves"
 const QUICK := "user://savegame.json"
-const AUTO := "user://autosave.json"
+## The autosaves, newest first: each morning's pushes the others down and the oldest is dropped,
+## so a bad day (or a damaged file) still leaves the days before it to go back to.
+const AUTOS: Array[String] = ["user://autosave.json", "user://autosave_2.json", "user://autosave_3.json"]
+const AUTO := "user://autosave.json"  # the newest of them
 
 
 ## The file for a save called `slot_name`: the name with anything but letters, digits, spaces and
@@ -23,9 +27,11 @@ static func slot_path(slot_name: String) -> String:
 ## "modified" (unix time) }.
 static func all() -> Array[Dictionary]:
 	var found: Array[Dictionary] = []
-	for path in [QUICK, AUTO]:
+	if FileAccess.file_exists(QUICK):
+		found.append(_entry(QUICK, "quick"))
+	for path in AUTOS:
 		if FileAccess.file_exists(path):
-			found.append(_entry(path, "quick" if path == QUICK else "auto"))
+			found.append(_entry(path, "auto"))
 	var dir := DirAccess.open(DIR)
 	if dir != null:
 		for file_name in dir.get_files():
@@ -61,10 +67,20 @@ static func make_dir() -> Error:
 	return DirAccess.make_dir_recursive_absolute(DIR)
 
 
+## Makes room for a new autosave: each one moves down a place, and the oldest is dropped.
+static func shift_autosaves(paths: Array[String] = AUTOS) -> void:
+	remove(paths[-1])
+	for i in range(paths.size() - 1, 0, -1):
+		for suffix in ["", ".meta"]:
+			if FileAccess.file_exists(paths[i - 1] + suffix):
+				DirAccess.rename_absolute(paths[i - 1] + suffix, paths[i] + suffix)
+	remove(paths[0])  # a stale backup of the newest would only bring back an older day
+
+
 static func remove(save_path: String) -> void:
-	DirAccess.remove_absolute(save_path)
-	if FileAccess.file_exists(save_path + ".meta"):
-		DirAccess.remove_absolute(save_path + ".meta")
+	for suffix in ["", ".meta", SaveGame.BACKUP]:
+		if FileAccess.file_exists(save_path + suffix):
+			DirAccess.remove_absolute(save_path + suffix)
 
 
 static func _entry(path: String, kind: String) -> Dictionary:

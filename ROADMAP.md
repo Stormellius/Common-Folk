@@ -13,7 +13,7 @@ The game gets a proper front door and menus that look like they belong in it.
 - A medieval look for every menu and panel: dark carved wood with a gilt edge, parchment headings and a book-face serif font, all drawn by code like the rest of the art
 - A title screen over a living town at dusk: Continue, New Game, Load Game, Settings, Quit
 - New Game asks how you begin (the three starts), lets you type or roll a seed, and pick a lifespan (from milestone 13)
-- Saving to named slots, as many as you like, next to the quick save and the autosave. The load list shows the family, the date in the game and when it was saved, and can delete a save
+- Saving to named slots, as many as you like, next to the quick save and the last three autosaves. Saving over a save keeps the one it replaces, and a damaged save loads that copy instead; F9 skips past a save that will not load to the newest one that does. The load list shows the family, the date in the game and when it was saved, and can delete a save
 - Esc opens a pause menu: Resume, Save, Load, Settings, Main Menu, Quit
 - Settings, kept between runs in `user://settings.cfg`: windowed, fullscreen or borderless, the window size, vsync, interface scale, autosave on or off
 - The words in the interface use "folk"

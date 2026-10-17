@@ -18,11 +18,14 @@ extends RefCounted
 ## wrote every tile out as a number (the lots become one town, and the tiles are read as they come).
 
 const FORMAT_VERSION := 14
+const BACKUP := ".bak"
 
 
 ## Writes the save file. Returns OK or a Godot error code. `view` is anything the screen wants
-## remembered (the camera), handed back by load_from. The file is written next to the real one
-## and moved into place, so a crash in the middle never leaves a half-written save.
+## remembered (the camera), handed back by load_from. The file is written next to the real one,
+## read back to make sure all of it reached the disk, and only then moved into place, so a crash
+## or a full disk never leaves a half-written save. The save it replaces is kept as a backup
+## (path + BACKUP), which load_from falls back on if the newer file turns out to be damaged.
 static func save(path: String, world: WorldState, household: Household = null, view: Dictionary = {}, town: Household = null, events: EventDirector = null, realm: Realm = null) -> Error:
 	var data := {
 		"format": FORMAT_VERSION,
@@ -42,8 +45,19 @@ static func save(path: String, world: WorldState, household: Household = null, v
 	var file := FileAccess.open(temp_path, FileAccess.WRITE)
 	if file == null:
 		return FileAccess.get_open_error()
-	file.store_string(JSON.stringify(data))
+	var text := JSON.stringify(data)
+	file.store_string(text)
+	var write_error := file.get_error()
 	file.close()
+	if write_error == OK and FileAccess.get_file_as_string(temp_path) != text:
+		write_error = ERR_FILE_CORRUPT
+	if write_error != OK:  # the old save, if any, is left as it was
+		DirAccess.remove_absolute(temp_path)
+		return write_error
+	if FileAccess.file_exists(path):
+		if FileAccess.file_exists(path + BACKUP):
+			DirAccess.remove_absolute(path + BACKUP)
+		DirAccess.rename_absolute(path, path + BACKUP)
 	return DirAccess.rename_absolute(temp_path, path)
 
 
@@ -61,9 +75,20 @@ static func newest(paths: Array[String]) -> String:
 
 
 ## Loads a save and restores the clock. Returns
-## { "ok": bool, "error": String, "world": WorldState, "household": Household or null, "town": Household or null, "events": Dictionary, "view": Dictionary }.
-## The clock is only touched once the whole file has proved readable.
+## { "ok": bool, "error": String, "world": WorldState, "household": Household or null, "town": Household or null, "events": Dictionary, "view": Dictionary, "recovered": bool }.
+## The clock is only touched once the whole file has proved readable. If the save is damaged or
+## missing but the copy it replaced is still there, that copy is loaded instead ("recovered").
 static func load_from(path: String) -> Dictionary:
+	var result := _load_one(path)
+	if not result["ok"] and FileAccess.file_exists(path + BACKUP):
+		var backup := _load_one(path + BACKUP)
+		if backup["ok"]:
+			backup["recovered"] = true
+			return backup
+	return result
+
+
+static func _load_one(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
 		return { "ok": false, "error": "No save file found" }
 	var json := JSON.new()
@@ -90,4 +115,4 @@ static func load_from(path: String) -> Dictionary:
 	if parsed.get("town") is Dictionary:
 		town = Household.from_dict(parsed["town"], NpcGenerator.FIRST_ID)
 	var view: Variant = parsed.get("view", {})
-	return { "ok": true, "world": world, "household": household, "town": town, "events": parsed["events"] if parsed.get("events") is Dictionary else {}, "realm": Realm.from_dict(parsed["realm"] if parsed.get("realm") is Dictionary else {}), "view": view if view is Dictionary else {} }
+	return { "ok": true, "world": world, "household": household, "town": town, "events": parsed["events"] if parsed.get("events") is Dictionary else {}, "realm": Realm.from_dict(parsed["realm"] if parsed.get("realm") is Dictionary else {}), "view": view if view is Dictionary else {}, "recovered": false }
