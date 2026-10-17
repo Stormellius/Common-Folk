@@ -6493,12 +6493,45 @@ func _test_save_and_load() -> void:
 	var viewed := SaveGame.load_from(TEST_SAVE)
 	_check(viewed["ok"] and viewed["view"]["camera"] == [123.5, 456.0] and viewed["view"]["zoom"] == 1.5, "the camera is remembered")
 	_check(SaveGame.newest([TEST_SAVE, "user://nothing_here.json"]) == TEST_SAVE and SaveGame.newest(["user://nothing_here.json"]) == "", "the newest save is found, and none is reported as none")
+	DirAccess.remove_absolute(TEST_SAVE + SaveGame.BACKUP)  # these damaged files have nothing to fall back on
 	var before_tick := GameClock.tick
 	_write_file(TEST_SAVE, "{ \"format\": 4, \"world\": { \"width\": 0 }, \"clock\": { \"tick\": 99999 } }")
 	var empty_world := SaveGame.load_from(TEST_SAVE)
 	_check(not empty_world["ok"] and GameClock.tick == before_tick, "a save with no map is refused without touching the clock")
 	_write_file(TEST_SAVE, "{ \"format\": 4, \"world\": { \"wid")
 	_check(not SaveGame.load_from(TEST_SAVE)["ok"], "a cut-off file reports damage instead of crashing")
+
+	# Saving over a save keeps the one before it, and a damaged save falls back on that.
+	SaveSlots.remove(TEST_SAVE)
+	GameClock.reset()
+	GameClock.advance_ticks(10)
+	var first_tick := GameClock.tick
+	SaveGame.save(TEST_SAVE, world, household)
+	GameClock.advance_ticks(10)
+	_check(SaveGame.save(TEST_SAVE, world, household) == OK and FileAccess.file_exists(TEST_SAVE + SaveGame.BACKUP), "saving over a save keeps the one it replaces")
+	_check(not SaveGame.load_from(TEST_SAVE).get("recovered", true), "a sound save loads as itself")
+	_write_file(TEST_SAVE, "{ \"format\": 14, \"world\": { \"wid")
+	GameClock.reset()
+	var rescued := SaveGame.load_from(TEST_SAVE)
+	_check(rescued["ok"] and rescued["recovered"] and GameClock.tick == first_tick and rescued["household"].to_dict() == household.to_dict(), "a damaged save loads the copy before it instead")
+	DirAccess.remove_absolute(TEST_SAVE)
+	_check(SaveGame.load_from(TEST_SAVE)["recovered"], "and so does one lost while it was being replaced")
+	SaveSlots.remove(TEST_SAVE)
+	_check(not FileAccess.file_exists(TEST_SAVE + SaveGame.BACKUP), "deleting a save takes its backup with it")
+
+	# The autosaves move down a place each morning, and the oldest is dropped (test files here, so
+	# the real autosaves are left alone).
+	var autos: Array[String] = ["user://smoke_auto_1.json", "user://smoke_auto_2.json", "user://smoke_auto_3.json"]
+	for day in 4:
+		SaveSlots.shift_autosaves(autos)
+		SaveGame.save(autos[0], world, household)
+		SaveSlots.write_meta(autos[0], { "name": "Autosave", "day": day })
+	var days: Array[int] = []
+	for auto_path in autos:
+		days.append(int(SaveSlots.read_meta(auto_path).get("day", -1)))
+		SaveSlots.remove(auto_path)
+	_check(days == [3, 2, 1], "the last three autosaves are kept, newest first")
+	_check(SaveSlots.AUTOS[0] == SaveSlots.AUTO and SaveSlots.AUTOS.size() == 3, "the newest autosave is still where it always was")
 	_write_file(TEST_SAVE, "{ \"format\": 99, \"world\": {} }")
 	_check("different version" in str(SaveGame.load_from(TEST_SAVE)["error"]), "a save from a newer game says so")
 
