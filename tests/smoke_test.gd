@@ -4018,6 +4018,8 @@ func _test_art() -> void:
 			for layer in layers:
 				for side in ["front", "back"]:
 					names.append("%s/%s_%s" % [entry["dir"], layer, side])
+		elif str(entry["id"]).begins_with("wall."):
+			names = [entry.get("top", ""), entry.get("face", "")]
 		elif entry.has("variants"):
 			names = []
 			for variant in entry["variants"]:
@@ -4044,6 +4046,12 @@ func _test_art() -> void:
 		elif id.begins_with("floor."):
 			ids_ok = ids_ok and DataRegistry.has_def("floors", id.trim_prefix("floor."))
 			shapes_ok = shapes_ok and int(entry.get("tiles", 4)) >= 1
+		elif id.begins_with("roof."):
+			ids_ok = ids_ok and DataRegistry.has_def("roofs", id.trim_prefix("roof."))
+			shapes_ok = shapes_ok and int(entry.get("tiles", 4)) >= 1
+		elif id.begins_with("wall."):
+			ids_ok = ids_ok and DataRegistry.has_def("objects", id.trim_prefix("wall."))
+			shapes_ok = shapes_ok and int(entry.get("tiles", 4)) >= 1
 		elif id.begins_with("animal."):
 			ids_ok = ids_ok and DataRegistry.has_def("animals", id.trim_prefix("animal."))
 		elif id.begins_with("people."):
@@ -4055,7 +4063,7 @@ func _test_art() -> void:
 			ids_ok = ids_ok and parts.size() == 3 and DataRegistry.has_def("life_stages", parts[1]) and DataRegistry.has_def("clothing", parts[2]) and not (entry["variants"] as Array).is_empty()
 		else:
 			ids_ok = false
-	_check(ids_ok and shapes_ok, "and each is for an object, floor or person (a life stage in an outfit) that exists, with a sensible size and place")
+	_check(ids_ok and shapes_ok, "and each is for an object, floor, wall, roof or person (a life stage in an outfit) that exists, with a sensible size and place")
 	var decor_ok := true
 	for def_id in ["chair", "chest", "crates", "sacks", "jar", "rug", "tuft"]:
 		var def := DataRegistry.get_def("objects", def_id)

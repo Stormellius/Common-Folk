@@ -1366,6 +1366,85 @@
      916
     ]
    }
+  },
+  {
+   "source": "assets/source/sheet_walls_roofs.png",
+   "out": "assets/art",
+   "pad": 2,
+   "textures": {
+    "floors/straw": {
+     "box": [
+      12,
+      12,
+      332,
+      332
+     ]
+    },
+    "walls/timber_top": {
+     "box": [
+      352,
+      12,
+      672,
+      332
+     ]
+    },
+    "walls/stone_top": {
+     "box": [
+      692,
+      12,
+      1012,
+      332
+     ]
+    },
+    "walls/timber_face": {
+     "box": [
+      12,
+      352,
+      332,
+      672
+     ]
+    },
+    "walls/stone_face": {
+     "box": [
+      352,
+      352,
+      672,
+      672
+     ]
+    },
+    "walls/daub_face": {
+     "box": [
+      692,
+      352,
+      1012,
+      672
+     ]
+    },
+    "roofs/thatch": {
+     "box": [
+      12,
+      692,
+      332,
+      1012
+     ]
+    },
+    "roofs/tile": {
+     "box": [
+      352,
+      692,
+      672,
+      1012
+     ]
+    },
+    "roofs/shingle": {
+     "box": [
+      692,
+      692,
+      1012,
+      1012
+     ]
+    }
+   }
   }
  ]
 }
