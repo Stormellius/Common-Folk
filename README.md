@@ -24,12 +24,14 @@ You control one of your folk. Left-click a person (or their portrait, or press T
 | C, Home | Centre on the selected person, on your home town |
 | T, M | Visit the next town, show the whole map |
 | Space, 1 to 4 | Pause, speed |
-| B | Build mode: plan things (right-click or Esc puts the tool away) |
+| B | Build mode: a hand to select and move things, plus walls, floors, roofs and furniture (see below) |
 | R | Roofs: by the zoom, always shown, hidden |
 | G, H | Grid, list of keys |
 | F5 / F9 | Quick save / load the newest save |
 | F11 | Window or borderless full screen |
 | N, Esc | New game, menu |
+
+**Build mode** (B) works like the Sims': the hand is in your hand to begin with. Click a thing, a floor tile or a plan to select it, drag it to move it (nothing costs anything to move), drag over bare ground to select an area and move or take down all of it at once, and press Delete to take it down. Right-click a thing for a little menu (move, take down, copy its style, take the roof off), and right-click or Esc with a tool in hand puts it back; right-click never gives your folk orders while you build. The row above the catalog has the hand, **Remove**, **Pick** (the eyedropper), **Unroof**, the shapes **Free** (drag a trail), **Box** (a rectangle: walls round the edge, floor all over; Shift-drag does the same) and **Fill** (floor a whole closed room in one click), and **Undo** / **Redo** (Ctrl+Z, Ctrl+Y) for everything you plan, move or take down. The catalog has a search box and folds away with **Catalog** to show more of the map. Placing still only makes plans: leave build mode and have someone build them.
 
 ## What is in the game
 
@@ -83,7 +85,7 @@ godot --path . -- --seed=1234 --day=50 --hour=12 --zoom=0.5 --look=240,160 --spe
 | `walk`, `menu`, `needs` | Send the selected person to a tile, open the right-click menu on a tile, set needs (`--needs=rest:10`) |
 | `weather` | `clear`, `cloudy`, `rain` or `snow` |
 | `load=1`, `title=1`, `screen` | Load the newest save, show the title anyway, open a menu (`pause`, `save`, `load`, `settings`, `new`, `name`, `game_over`) |
-| `build`, `demohouse`, `together` | Start in build mode (`place:wall`, `floor:planks`, `remove`, `move`), build a small room, start a two-person interaction |
+| `build`, `select`, `demohouse`, `together` | Start in build mode (`select`, `place:wall`, `floor:planks`, `remove`, `pick`), select tiles of the demo house with the hand (`--select=2,2;5,2`), build a small room, start a two-person interaction |
 | `fall`, `ghost`, `dying`, `fire` | See Death come, a ghost walk, someone starving, something alight |
 | `shot=path.png` | Save a screenshot a moment after starting and quit |
 

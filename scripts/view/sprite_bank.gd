@@ -89,9 +89,45 @@ static func draw_object_icon(ci: CanvasItem, def_id: String, box: Rect2) -> bool
 	return true
 
 
+## Which piece of a floor picture belongs to `cell`: { "x", "y" (whether this repeat is turned about its
+## edge), "region" (the piece, in the picture of that turning) }. The picture repeats mirrored so that it never
+## shows a seam where one repeat meets the next.
+static func floor_piece(picture_size: Vector2, tiles: int, cell: Vector2i) -> Dictionary:
+	var piece := picture_size / float(tiles)
+	var column := posmod(cell.x, tiles)
+	var row := posmod(cell.y, tiles)
+	var turned_x := posmod(floori(float(cell.x) / float(tiles)), 2) == 1
+	var turned_y := posmod(floori(float(cell.y) / float(tiles)), 2) == 1
+	# A turned repeat reads the picture backwards, which is the same as reading the turned picture forwards.
+	return { "x": turned_x, "y": turned_y, "region": Rect2(Vector2(column, row) * piece, piece) }
+
+
+## A picture turned about its vertical and/or horizontal middle (made once, then kept).
+static func turned_texture(name: String, flip_x: bool, flip_y: bool) -> Texture2D:
+	if not flip_x and not flip_y:
+		return texture(name)
+	var key := "%s|%s%s" % [name, "x" if flip_x else "", "y" if flip_y else ""]
+	if _textures.has(key):
+		return _textures[key]
+	var original := texture(name)
+	var made: Texture2D = null
+	if original != null:
+		var image := original.get_image()
+		if image != null:
+			if image.is_compressed():
+				image.decompress()
+			if flip_x:
+				image.flip_x()
+			if flip_y:
+				image.flip_y()
+			image.generate_mipmaps()
+			made = ImageTexture.create_from_image(image)
+	_textures[key] = made
+	return made
+
+
 ## Draws a floor tile from its texture, taking the piece of the picture that belongs to `cell` so that
-## neighbours join up. The picture repeats mirrored (each repeat turned about its edge), so that it
-## never shows a seam where one repeat meets the next. Returns false when there is none.
+## neighbours join up. Returns false when there is none.
 static func draw_floor(ci: CanvasItem, floor_id: String, rect: Rect2, cell: Vector2i) -> bool:
 	return draw_surface(ci, "floor." + floor_id, "file", rect, cell)
 

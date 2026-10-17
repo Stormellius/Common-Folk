@@ -16,6 +16,9 @@ var delivered: Dictionary = {}
 ## How many game minutes of work it takes an unskilled builder, and how far it has got, 0 to 1.
 var minutes := 20
 var progress := 0.0
+## What of its materials came out of the player's own stock when it was planned (the rest was bought): all
+## that undoing it puts back. Not saved: undo does not outlive the game.
+var from_stock: Dictionary = {}
 ## The person working on it (0 for nobody), and the coin paid for it (half comes back if it is cancelled).
 var builder := 0
 var paid := 0

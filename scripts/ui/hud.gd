@@ -9,7 +9,7 @@ extends CanvasLayer
 
 const SPEED_LABELS: Array[String] = ["II", "1x", "3x", "10x", "30x"]
 const HINT_TEXT := "Right-click: actions   B: build   I: details   H: help   Esc: menu"
-const BUILD_HELP := "Left-click: build (drag for walls and floors)    Right-click or Esc: put the tool away    Esc again or B: leave build mode"
+const BUILD_HELP := "Build mode    B or Esc: leave    Ctrl+Z: undo    H: help"
 ## The help panel (H): [keys, what they do].
 const HELP_LINES: Array = [
 	["Left-click", "Pick one of your folk"],
@@ -21,6 +21,7 @@ const HELP_LINES: Array = [
 	["Space, 1 to 4", "Pause, speed"],
 	["T, M, Home", "Next town, whole map, your home"],
 	["B", "Build mode (plans, then someone builds)"],
+	["In build mode", "Drag a thing to move it, Del takes it down, Ctrl+Z / Ctrl+Y undo and redo, Shift-drag a box"],
 	["R", "Roofs: by the zoom, shown, hidden"],
 	["G", "Grid"],
 	["F5 / F9", "Quick save / load the newest save"],
@@ -38,6 +39,12 @@ signal action_chosen(id: String)
 signal build_toggled(on: bool)
 ## A palette entry was picked: kind is "place", "floor", "move" or "remove", or "none" when it was put away.
 signal build_tool_chosen(kind: String, id: String)
+## The shape for drawing walls and floors was chosen: "free", "box" or "fill".
+signal build_shape_chosen(shape: String)
+signal build_undo_requested
+signal build_redo_requested
+## An entry of the menu that the hand opens on a built thing was picked (its id comes from BuildController).
+signal build_action_chosen(id: String)
 ## The Menu button was pressed.
 signal level_requested(level: int)
 signal menu_requested
@@ -114,6 +121,19 @@ var _build_tabs: Dictionary = {}    # tab name -> HBoxContainer of item buttons
 var _build_tab_buttons: Dictionary = {}  # tab name -> Button
 var _build_items: Array[Button] = []
 var _palette_scroll: ScrollContainer
+var _build_group := ButtonGroup.new()
+var _build_entries: Array[Dictionary] = []   # every palette entry: { kind, id, name, cost, tab, hint }
+var _build_tool_buttons: Dictionary = {}     # tool kind -> Button (the hand, remove, pick, unroof)
+var _build_shape_buttons: Dictionary = {}    # "free", "box", "fill" -> Button
+var _undo_button: Button
+var _redo_button: Button
+var _search_box: LineEdit
+var _search_row: HFlowContainer
+var _current_tab := ""
+var _build_hint: Label
+var _palette_body: Array[Control] = []   # the tabs and the things on them, which can be folded away
+var _fold_button: Button
+var _build_menu := ActionMenu.new()
 
 
 func _ready() -> void:
@@ -129,6 +149,8 @@ func _ready() -> void:
 	_build_help_panel()
 	_root.add_child(_action_menu)  # last, so it sits above the other panels
 	_action_menu.action_chosen.connect(func(id: String) -> void: action_chosen.emit(id))
+	_root.add_child(_build_menu)
+	_build_menu.action_chosen.connect(func(id: String) -> void: build_action_chosen.emit(id))
 	GameClock.ticked.connect(func(_tick: int) -> void: refresh_clock())
 	GameClock.time_set.connect(refresh_clock)
 	GameClock.speed_changed.connect(_on_speed_changed)
@@ -947,12 +969,58 @@ func set_build_mode(on: bool) -> void:
 	_hint_label.text = BUILD_HELP if on else HINT_TEXT
 	if not on:
 		clear_build_selection()
+		_build_menu.close()
+		_search_box.text = ""
+		_search_changed("")
 
 
 ## Un-presses every palette entry without sending a signal.
 func clear_build_selection() -> void:
 	for button in _build_items:
-		button.set_pressed_no_signal(false)
+		if is_instance_valid(button):
+			button.set_pressed_no_signal(false)
+
+
+## The tool in hand changed (from the controller): shows it on the toolbar, and clears the palette unless it came from there.
+func set_build_tool(kind: String) -> void:
+	for tool_kind in _build_tool_buttons:
+		_build_tool_buttons[tool_kind].set_pressed_no_signal(tool_kind == kind)
+	if kind not in ["place", "floor", "roof"]:
+		clear_build_selection()
+
+
+func set_build_shape(shape: String) -> void:
+	for shape_name in _build_shape_buttons:
+		_build_shape_buttons[shape_name].set_pressed_no_signal(shape_name == shape)
+
+
+func set_build_history(can_undo: bool, can_redo: bool) -> void:
+	_undo_button.disabled = not can_undo
+	_redo_button.disabled = not can_redo
+
+
+func set_build_hint(text: String) -> void:
+	_build_hint.text = text
+
+
+## Shows the palette entry for something the eyedropper took up, as chosen.
+func select_build_item(kind: String, id: String) -> void:
+	clear_build_selection()
+	for button in _build_items:
+		if is_instance_valid(button) and str(button.get_meta("kind", "")) == kind and str(button.get_meta("id", "")) == id and button.get_parent() != _search_row:
+			button.set_pressed_no_signal(true)
+			if _search_box.text.strip_edges() == "":
+				_show_build_tab(str(button.get_meta("tab", _current_tab)))
+			return
+
+
+func open_build_menu(screen_position: Vector2, title: String, actions: Array[Dictionary]) -> void:
+	_action_menu.close()
+	_build_menu.open(_root.from_screen(screen_position), title, actions)
+
+
+func close_build_menu() -> void:
+	_build_menu.close()
 
 
 func _build_build_ui() -> void:
@@ -986,6 +1054,7 @@ func _build_build_ui() -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 6)
 	_build_panel.add_child(box)
+	_build_toolbar(box)
 	var tab_row := HBoxContainer.new()
 	tab_row.add_theme_constant_override("separation", 3)
 	box.add_child(tab_row)
@@ -997,8 +1066,14 @@ func _build_build_ui() -> void:
 	_palette_scroll = scroll
 	var items_holder := VBoxContainer.new()
 	scroll.add_child(items_holder)
+	_palette_body = [tab_row, scroll]
+	_build_hint = _make_label("", "DimLabel")
+	_build_hint.add_theme_font_size_override("font_size", 12)
+	_build_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_build_hint.custom_minimum_size = Vector2(PALETTE_WIDTH, 0.0)
+	box.add_child(_build_hint)
 
-	# One tab per object category (furniture, structure...), one for floors, one for tools.
+	# One tab per object category (furniture, structure...), one for floors, one for roofs.
 	var tabs: Dictionary = {}  # tab name -> array of { kind, id, name }
 	for object_def in DataRegistry.get_list("objects"):
 		if not bool(object_def.get("buildable", true)):
@@ -1016,12 +1091,7 @@ func _build_build_ui() -> void:
 		for roof_def in DataRegistry.get_list("roofs"):
 			tabs["Roofs"].append({ "kind": "roof", "id": str(roof_def["id"]), "name": str(roof_def.get("name", roof_def["id"])), "cost": 0,
 				"hint": "Click inside a closed room to roof it all: %s a tile" % Economy.stock_text(roof_def.get("materials", {})) })
-	tabs["Tools"] = [
-		{ "kind": "move", "id": "", "name": "Move" },
-		{ "kind": "remove", "id": "", "name": "Remove" },
-	]
-	var group := ButtonGroup.new()
-	group.allow_unpress = true
+	_build_group.allow_unpress = true
 	var tab_group := ButtonGroup.new()
 	for tab_name in tabs:
 		var tab_button := Button.new()
@@ -1041,53 +1111,181 @@ func _build_build_ui() -> void:
 		items_holder.add_child(row)
 		_build_tabs[tab_name] = row
 		for entry in tabs[tab_name]:
-			var item := Button.new()
-			item.toggle_mode = true
-			item.button_group = group
-			item.focus_mode = Control.FOCUS_NONE
-			item.custom_minimum_size = Vector2(90, 84)
-			_sims_button(item)
-			item.clip_contents = true
-			if entry.has("hint"):
-				item.tooltip_text = "%s  -  %s" % [str(entry["name"]), str(entry["hint"])]
-			else:
-				item.tooltip_text = str(entry["name"]) + ("  -  %s" % (Economy.cost_text(str(entry["id"])) if str(entry["kind"]) == "place" else Economy.format(int(entry["cost"]))) if int(entry.get("cost", 0)) > 0 else "")
-			var icon := BuildIcon.new()
-			icon.kind = str(entry["kind"])
-			icon.id = str(entry["id"])
-			icon.position = Vector2(23, 3)
-			item.add_child(icon)
-			var label := Label.new()
-			label.text = str(entry["name"]) + ("\n%s" % Economy.format(int(entry["cost"])) if int(entry.get("cost", 0)) > 0 else "")
-			label.position = Vector2(0, 45)
-			label.size = Vector2(90, 36)
-			label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-			label.add_theme_constant_override("line_spacing", -3)
-			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			label.clip_text = true
-			label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			label.add_theme_font_size_override("font_size", 12)
-			item.add_child(label)
-			var kind := str(entry["kind"])
-			var id := str(entry["id"])
-			item.toggled.connect(func(on: bool) -> void: build_tool_chosen.emit(kind if on else "none", id if on else ""))
-			row.add_child(item)
-			_build_items.append(item)
+			entry["tab"] = tab_name
+			_build_entries.append(entry)
+			_add_build_item(entry, row)
 		tab_button.toggled.connect(func(on: bool) -> void:
 			if on:
+				_search_box.text = ""
+				_search_changed("")
 				_show_build_tab(tab_name))
+	# what the search finds, from every tab at once
+	_search_row = HFlowContainer.new()
+	_search_row.add_theme_constant_override("h_separation", 4)
+	_search_row.add_theme_constant_override("v_separation", 4)
+	_search_row.visible = false
+	_search_row.custom_minimum_size = Vector2(PALETTE_WIDTH, 0)
+	items_holder.add_child(_search_row)
+	var gap := Control.new()
+	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tab_row.add_child(gap)
+	_search_box = LineEdit.new()
+	_search_box.placeholder_text = "Search"
+	_search_box.clear_button_enabled = true
+	_search_box.custom_minimum_size = Vector2(150, 30)
+	_search_box.text_changed.connect(_search_changed)
+	_search_box.text_submitted.connect(func(_text: String) -> void: _search_box.release_focus())
+	tab_row.add_child(_search_box)
 	if not tabs.is_empty():
 		_build_tab_buttons[tabs.keys()[0]].set_pressed_no_signal(true)
 		_show_build_tab(tabs.keys()[0])
+	set_build_tool("select")
+	set_build_shape("free")
+	set_build_history(false, false)
 	_build_panel.visible = false
 
 
+## The row above the palette: what is in hand, the shape for drawing, undo and redo.
+func _build_toolbar(box: VBoxContainer) -> void:
+	var bar := HBoxContainer.new()
+	bar.add_theme_constant_override("separation", 3)
+	box.add_child(bar)
+	var tools := [
+		["select", "Hand", "Click to select, drag to move, Del to take down; drag over the ground to select an area. Right-click for more."],
+		["remove", "Remove", "Click or drag to take things down (a plan is called off; half the coin comes back)"],
+		["pick", "Pick", "Click something to take up its style and put more of it down"],
+		["unroof", "Unroof", "Click a roofed room to take its roof off"],
+	]
+	var tool_group := ButtonGroup.new()
+	for entry in tools:
+		var button := _toolbar_button(str(entry[1]), str(entry[2]), true)
+		button.button_group = tool_group
+		var kind := str(entry[0])
+		button.pressed.connect(func() -> void: build_tool_chosen.emit(kind, ""))
+		bar.add_child(button)
+		_build_tool_buttons[kind] = button
+	bar.add_child(VSeparator.new())
+	var shapes := [
+		["free", "Free", "Drag a trail of walls, floors or things taken down"],
+		["box", "Box", "Drag a rectangle: walls round the edge, floors all over. Holding Shift does the same."],
+		["fill", "Fill", "One click floors a whole closed room (or the whole floor you click)"],
+	]
+	var shape_group := ButtonGroup.new()
+	for entry in shapes:
+		var button := _toolbar_button(str(entry[1]), str(entry[2]), true)
+		button.button_group = shape_group
+		var shape_name := str(entry[0])
+		button.pressed.connect(func() -> void: build_shape_chosen.emit(shape_name))
+		bar.add_child(button)
+		_build_shape_buttons[shape_name] = button
+	bar.add_child(VSeparator.new())
+	_undo_button = _toolbar_button("Undo", "Take back the last thing you did (Ctrl+Z)", false)
+	_undo_button.pressed.connect(func() -> void: build_undo_requested.emit())
+	bar.add_child(_undo_button)
+	_redo_button = _toolbar_button("Redo", "Do it again (Ctrl+Y, or Ctrl+Shift+Z)", false)
+	_redo_button.pressed.connect(func() -> void: build_redo_requested.emit())
+	bar.add_child(_redo_button)
+	var gap := Control.new()
+	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar.add_child(gap)
+	_fold_button = _toolbar_button("Catalog", "Show or hide what can be built, to see more of the map", true)
+	_fold_button.set_pressed_no_signal(true)
+	_fold_button.custom_minimum_size = Vector2(76, 30)
+	_fold_button.toggled.connect(func(open: bool) -> void:
+		for part in _palette_body:
+			part.visible = open)
+	bar.add_child(_fold_button)
+
+
+func _toolbar_button(text: String, tip: String, toggle: bool) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.tooltip_text = tip
+	button.toggle_mode = toggle
+	button.focus_mode = Control.FOCUS_NONE
+	button.custom_minimum_size = Vector2(62, 30)
+	_sims_button(button)
+	return button
+
+
+## One button of the palette: the picture, the name and what it costs.
+func _add_build_item(entry: Dictionary, row: Control) -> Button:
+	var item := Button.new()
+	item.toggle_mode = true
+	item.button_group = _build_group
+	item.focus_mode = Control.FOCUS_NONE
+	item.custom_minimum_size = Vector2(90, 84)
+	_sims_button(item)
+	item.clip_contents = true
+	item.set_meta("kind", str(entry["kind"]))
+	item.set_meta("id", str(entry["id"]))
+	item.set_meta("tab", str(entry.get("tab", "")))
+	if entry.has("hint"):
+		item.tooltip_text = "%s  -  %s" % [str(entry["name"]), str(entry["hint"])]
+	else:
+		item.tooltip_text = str(entry["name"]) + ("  -  %s" % (Economy.cost_text(str(entry["id"])) if str(entry["kind"]) == "place" else Economy.format(int(entry["cost"]))) if int(entry.get("cost", 0)) > 0 else "")
+	var icon := BuildIcon.new()
+	icon.kind = str(entry["kind"])
+	icon.id = str(entry["id"])
+	icon.position = Vector2(23, 3)
+	item.add_child(icon)
+	var label := Label.new()
+	label.text = str(entry["name"]) + ("\n%s" % Economy.format(int(entry["cost"])) if int(entry.get("cost", 0)) > 0 else "")
+	label.position = Vector2(0, 45)
+	label.size = Vector2(90, 36)
+	label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	label.add_theme_constant_override("line_spacing", -3)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.clip_text = true
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_font_size_override("font_size", 12)
+	item.add_child(label)
+	var kind := str(entry["kind"])
+	var id := str(entry["id"])
+	item.toggled.connect(func(on: bool) -> void: build_tool_chosen.emit(kind if on else "none", id if on else ""))
+	row.add_child(item)
+	_build_items.append(item)
+	return item
+
+
+## Typing in the search box lists every matching thing from every tab; emptying it goes back to the tab.
+func _search_changed(text: String) -> void:
+	var wanted := text.strip_edges().to_lower()
+	for old in _search_row.get_children():
+		_build_items.erase(old)
+		_search_row.remove_child(old)
+		old.queue_free()
+	if wanted == "":
+		_search_row.visible = false
+		if _current_tab != "":
+			_show_build_tab(_current_tab)
+		return
+	for name in _build_tabs:
+		_build_tabs[name].visible = false
+	for name in _build_tab_buttons:
+		_build_tab_buttons[name].set_pressed_no_signal(false)
+	var found := 0
+	for entry in _build_entries:
+		if wanted in str(entry["name"]).to_lower() or wanted in str(entry["id"]).to_lower() or wanted in str(entry["tab"]).to_lower():
+			_add_build_item(entry, _search_row)
+			found += 1
+	_search_row.visible = true
+	_palette_scroll.custom_minimum_size.y = _palette_height(maxi(1, ceili(float(found) / floorf(PALETTE_WIDTH / 94.0))))
+
+
+## The palette is as tall as its rows need, but never much more than a quarter of the screen: the map is
+## what you are building on.
+func _palette_height(rows: int) -> float:
+	return minf(float(rows) * 88.0, clampf(_root.size.y * 0.25, 132.0, 264.0))
+
+
 func _show_build_tab(tab_name: String) -> void:
-	# The palette is as tall as its tab needs, but never taller than a third of the screen.
+	_current_tab = tab_name
+	_search_row.visible = false
 	var rows := 1
 	if _build_tabs.has(tab_name):
 		rows = ceili(float((_build_tabs[tab_name] as Control).get_child_count()) / floorf(PALETTE_WIDTH / 94.0))
-	_palette_scroll.custom_minimum_size.y = minf(float(rows) * 88.0, maxf(_root.size.y * 0.38, 170.0))
+	_palette_scroll.custom_minimum_size.y = _palette_height(rows)
 	for name in _build_tabs:
 		_build_tabs[name].visible = (name == tab_name)
 	for name in _build_tab_buttons:

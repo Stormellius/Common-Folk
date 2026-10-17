@@ -28,6 +28,7 @@ func _ready() -> void:
 	_section("actions", _test_actions)
 	_section("needs", _test_needs)
 	_section("building", _test_building)
+	_section("build_tools", _test_build_tools)
 	_section("town", _test_town)
 	_section("region", _test_region)
 	_section("economy", _test_economy)
@@ -270,7 +271,25 @@ func _test_hud() -> void:
 	_check(not hud._build_panel.visible, "the build palette starts hidden")
 	hud.set_build_mode(true)
 	_check(hud._build_panel.visible and hud._build_button.button_pressed and toggles.is_empty(), "turning build mode on shows the palette without a feedback loop")
-	_check(hud._build_tabs.has("Furniture") and hud._build_tabs.has("Structure") and hud._build_tabs.has("Floors") and hud._build_tabs.has("Tools"), "the palette has tabs for furniture, structure, floors and tools")
+	_check(hud._build_tabs.has("Furniture") and hud._build_tabs.has("Structure") and hud._build_tabs.has("Floors") and hud._build_tabs.has("Roofs"), "the palette has tabs for furniture, structure, floors and roofs")
+	_check(hud._build_tool_buttons.has("select") and hud._build_tool_buttons.has("remove") and hud._build_tool_buttons.has("pick") and hud._build_tool_buttons["select"].button_pressed, "the toolbar has the hand (in hand to begin with), remove and pick")
+	var shapes_ok: bool = hud._build_shape_buttons.has("free") and hud._build_shape_buttons.has("box") and hud._build_shape_buttons.has("fill") and hud._build_shape_buttons["free"].button_pressed
+	_check(shapes_ok and hud._undo_button.disabled and hud._redo_button.disabled, "and the shapes to draw with, and undo and redo (nothing to undo yet)")
+	hud.set_build_history(true, false)
+	_check(not hud._undo_button.disabled and hud._redo_button.disabled, "undo wakes up when there is something to undo")
+	hud._search_box.text = "bed"
+	hud._search_changed("bed")
+	var found_names: Array[String] = []
+	for found_button in hud._search_row.get_children():
+		found_names.append(str(found_button.get_meta("id", "")))
+	_check(hud._search_row.visible and "bed" in found_names and "wall" not in found_names, "searching the palette lists what matches from every tab")
+	hud._search_box.text = ""
+	hud._search_changed("")
+	_check(not hud._search_row.visible and hud._build_tabs[hud._current_tab].visible, "and clearing the search brings the tab back")
+	hud._fold_button.button_pressed = false
+	var folded: bool = not hud._palette_scroll.visible and hud._undo_button.is_visible_in_tree()
+	hud._fold_button.button_pressed = true
+	_check(folded and hud._palette_scroll.visible, "the catalog folds away to leave the toolbar, and comes back")
 	var wall_button: Button = null
 	for button in hud._build_items:
 		if button.tooltip_text.begins_with("Timber wall"):
@@ -4096,6 +4115,42 @@ func _test_art() -> void:
 	Settings.painted_characters = true
 	_check(off and on and painted_before, "painted people are a setting, on by default")
 	_check(not ObjectArt.is_animated("hearth") == SpriteBank.has_object("hearth") and ObjectArt.is_animated("watch_post") == not SpriteBank.has_object("watch_post"), "a painted fireplace stands still, and so does everything else painted")
+	_check_floor_pieces()
+
+
+## A floor picture repeats mirrored: every tile must take a piece that lies inside the picture it is read
+## from, and neighbouring tiles must meet on the very same line of the original picture (no gap, no seam).
+func _check_floor_pieces() -> void:
+	var size := Vector2(64, 64)
+	var tiles := 4
+	var inside := true
+	var seamless := true
+	for y in range(-9, 10):
+		for x in range(-9, 10):
+			var here := SpriteBank.floor_piece(size, tiles, Vector2i(x, y))
+			var region: Rect2 = here["region"]
+			inside = inside and region.size == Vector2(16, 16) and region.position.x >= 0.0 and region.position.y >= 0.0 and region.end.x <= size.x and region.end.y <= size.y
+			var east := SpriteBank.floor_piece(size, tiles, Vector2i(x + 1, y))
+			var south := SpriteBank.floor_piece(size, tiles, Vector2i(x, y + 1))
+			seamless = seamless and is_equal_approx(_source_line(here, size, true, true), _source_line(east, size, true, false))
+			seamless = seamless and is_equal_approx(_source_line(here, size, false, true), _source_line(south, size, false, false))
+	_check(inside, "every floor tile takes a whole piece from inside its picture, in any direction from the origin")
+	_check(seamless, "and neighbouring floor tiles meet on the same line of the picture, so the repeat shows no seam")
+	var texture := SpriteBank.texture("floors/planks")
+	var turned := SpriteBank.turned_texture("floors/planks", true, true)
+	_check(texture != null and turned != null and turned.get_size() == texture.get_size() and SpriteBank.turned_texture("floors/planks", true, true) == turned, "a turned floor picture is made once, the same size as the original")
+
+
+## Where in the original picture a floor tile's piece starts or ends along one axis (a turned picture reads backwards).
+static func _source_line(piece: Dictionary, size: Vector2, horizontal: bool, far_side: bool) -> float:
+	var region: Rect2 = piece["region"]
+	var turned := bool(piece["x"]) if horizontal else bool(piece["y"])
+	var start := region.position.x if horizontal else region.position.y
+	var stop := region.end.x if horizontal else region.end.y
+	var length := size.x if horizontal else size.y
+	if turned:
+		return length - (stop if far_side else start)
+	return stop if far_side else start
 
 
 func _test_clothing() -> void:
@@ -5422,12 +5477,259 @@ func _test_building() -> void:
 	var cleared := [false]
 	controller.tool_cleared.connect(func() -> void: cleared[0] = true)
 	click.call(Vector2i(3, 3), true, MOUSE_BUTTON_RIGHT)
-	_check(controller.tool.is_empty() and cleared[0], "right-click puts the tool away")
+	_check(str(controller.tool["kind"]) == "select" and cleared[0], "right-click puts the tool away, back into the hand")
 	var escape := InputEventKey.new()
 	escape.keycode = KEY_ESCAPE
 	escape.pressed = true
 	controller._unhandled_input(escape)
 	_check(not controller.active, "Esc with no tool leaves build mode")
+	controller.queue_free()
+
+
+func _test_build_tools() -> void:
+	print("Build mode: select, move, remove, undo")
+	var setup := _building_setup()
+	var world: WorldState = setup["world"]
+	var sim: Simulation = setup["sim"]
+	var household: Household = sim.household
+	var tile := Vector2i(8, 8)
+
+	# What is on a tile, topmost first.
+	sim.build_floor("planks", Vector2i(4, 4))
+	sim.build_place("bed", tile)
+	var on_object := BuildEditor.target_at(sim, tile)
+	var on_floor := BuildEditor.target_at(sim, Vector2i(4, 4))
+	_check(str(on_object["type"]) == "object" and str(on_object["def"]) == "bed" and str(on_floor["type"]) == "floor" and BuildEditor.target_at(sim, Vector2i(11, 3)).is_empty(), "the hand finds an object, a floor, or nothing on a tile")
+	_check(BuildEditor.describe(sim, on_object) == world.object_at(tile).display_name() and "floor" in BuildEditor.describe(sim, on_floor), "and can say what it is")
+	sim.build_place("well", Vector2i(10, 9)) if false else world.add_object("well", Vector2i(10, 9))
+	var well := BuildEditor.target_at(sim, Vector2i(10, 9))
+	_check(BuildEditor.remove_refusal(well) != "" and BuildEditor.move_refusal(well) != "" and not bool(BuildEditor.remove(sim, well)["ok"]), "what is not the player's to move or take down is refused")
+	_check(BuildEditor.move_refusal({ "type": "object", "def": "stairs", "tile": Vector2i(5, 5), "id": 0 }) != "", "stairs are taken down, never moved")
+
+	# Planning, undo and redo: the coin comes back whole.
+	var coins := household.coins
+	var planned := BuildEditor.plan(sim, "object", "table", Vector2i(10, 3))
+	var spent := coins - household.coins
+	_check(bool(planned["ok"]) and world.site_at(Vector2i(10, 3), "object") != null and spent > 0 and sim.build_history.can_undo(), "planning is remembered")
+	_check(bool(BuildEditor.undo(sim)["ok"]) and world.site_at(Vector2i(10, 3), "object") == null and household.coins == coins, "undo calls it off and gives back all the coin")
+	_check(sim.build_history.can_redo() and bool(BuildEditor.redo(sim)["ok"]) and world.site_at(Vector2i(10, 3), "object") != null and household.coins == coins - spent, "redo plans it again")
+	BuildEditor.undo(sim)
+	sim.build_history.begin()
+	for x in range(3, 8):
+		BuildEditor.plan(sim, "floor", "flagstone", Vector2i(x, 6))
+	sim.build_history.end()
+	var laid := world.sites.size()
+	BuildEditor.undo(sim)
+	_check(laid == 5 and world.sites.is_empty(), "a whole drag is one step to undo")
+	BuildEditor.plan(sim, "object", "chest", Vector2i(12, 3))
+	BuildEditor.undo(sim)
+	BuildEditor.plan(sim, "object", "chest", Vector2i(13, 3))
+	_check(not sim.build_history.can_redo(), "doing something new closes off the redo")
+	BuildEditor.undo(sim)
+
+	# Taking down, and putting back.
+	coins = household.coins
+	var bed := BuildEditor.target_at(sim, tile)
+	_check(bool(BuildEditor.remove(sim, bed)["ok"]) and world.object_at(tile) == null and household.coins > coins, "taking an object down gives half its cost back")
+	_check(bool(BuildEditor.undo(sim)["ok"]) and world.object_at(tile) != null and world.object_at(tile).def_id == "bed" and household.coins == coins, "and undo puts it back for the same coin")
+	BuildEditor.remove(sim, BuildEditor.target_at(sim, Vector2i(4, 4)))
+	_check(world.floor_at(Vector2i(4, 4)) == "", "a floor tile comes up")
+	BuildEditor.undo(sim)
+	_check(world.floor_at(Vector2i(4, 4)) == "planks" and household.coins == coins, "and goes back down")
+	BuildEditor.plan(sim, "object", "table", Vector2i(10, 3))
+	coins = household.coins
+	var plan_target := BuildEditor.target_at(sim, Vector2i(10, 3))
+	_check(str(plan_target["type"]) == "plan" and "Planned" in BuildEditor.describe(sim, plan_target) and bool(BuildEditor.remove(sim, plan_target)["ok"]) and world.sites.is_empty(), "a plan is called off")
+	BuildEditor.undo(sim)
+	_check(world.site_at(Vector2i(10, 3), "object") != null and household.coins == coins, "and undo plans it again for what it cost")
+	BuildEditor.undo(sim)  # the planning itself
+
+	# Moving: one thing, a row of walls shifted along itself, floors, and plans.
+	var before_move := household.coins
+	_check(bool(BuildEditor.move(sim, [BuildEditor.target_at(sim, tile)], Vector2i(2, 0))["ok"]) and world.object_at(tile) == null and world.object_at(Vector2i(10, 8)) != null, "an object can be picked up and set down")
+	_check(household.coins == before_move and bool(BuildEditor.undo(sim)["ok"]) and world.object_at(tile) != null and world.object_at(Vector2i(10, 8)) == null, "for nothing, and undo sets it back")
+	world.add_object("bench", Vector2i(9, 8)) if false else sim.build_place("bench", Vector2i(9, 8))
+	_check("in the way" in BuildEditor.move(sim, [BuildEditor.target_at(sim, tile)], Vector2i(1, 0))["message"], "it cannot be set down on something else, and says why")
+	_check("your land" in BuildEditor.move(sim, [BuildEditor.target_at(sim, tile)], Vector2i(10, 0))["message"], "nor off your land")
+	BuildEditor.remove(sim, BuildEditor.target_at(sim, Vector2i(9, 8)))
+	for x in range(4, 9):
+		sim.build_place("wall", Vector2i(x, 5))
+	var row: Array[Dictionary] = []
+	for x in range(4, 9):
+		row.append(BuildEditor.target_at(sim, Vector2i(x, 5)))
+	_check(bool(BuildEditor.move(sim, row, Vector2i(1, 0))["ok"]) and world.object_at(Vector2i(4, 5)) == null and world.object_at(Vector2i(9, 5)) != null and world.object_at(Vector2i(5, 5)) != null, "a row of walls can slide along itself")
+	BuildEditor.undo(sim)
+	_check(world.object_at(Vector2i(4, 5)) != null and world.object_at(Vector2i(9, 5)) == null, "and slide back")
+	for x in range(4, 9):
+		BuildEditor.remove(sim, BuildEditor.target_at(sim, Vector2i(x, 5)))
+	sim.build_floor("planks", Vector2i(5, 4))
+	var laid_floors: Array[Dictionary] = [BuildEditor.target_at(sim, Vector2i(4, 4)), BuildEditor.target_at(sim, Vector2i(5, 4))]
+	_check(bool(BuildEditor.move(sim, laid_floors, Vector2i(0, 2))["ok"]) and world.floor_at(Vector2i(4, 4)) == "" and world.floor_at(Vector2i(4, 6)) == "planks" and world.floor_at(Vector2i(5, 6)) == "planks", "laid floor moves too")
+	_check("floor there already" in BuildEditor.move(sim, [BuildEditor.target_at(sim, Vector2i(4, 6))], Vector2i(1, 0))["message"] or BuildEditor.move_blocker(sim, [BuildEditor.target_at(sim, Vector2i(4, 6))], Vector2i(1, 0)) == "", "a floor is not set down on another")
+	BuildEditor.undo(sim)
+	BuildEditor.plan(sim, "object", "table", Vector2i(10, 3))
+	var site_id := world.site_at(Vector2i(10, 3), "object").id
+	_check(bool(BuildEditor.move(sim, [BuildEditor.target_at(sim, Vector2i(10, 3))], Vector2i(0, 2))["ok"]) and world.get_site(site_id).tile == Vector2i(10, 5), "a plan can be moved before it is built")
+	BuildEditor.undo(sim)
+	BuildEditor.undo(sim)
+
+	# Shapes.
+	_check(BuildEditor.box_tiles(Vector2i(2, 2), Vector2i(5, 4), true).size() == 10 and BuildEditor.box_tiles(Vector2i(5, 4), Vector2i(2, 2), false).size() == 12, "a box of walls is its outline, a box of floor is all of it, from any corner")
+	var open_fill := BuildEditor.fill_tiles(sim, Vector2i(11, 4))
+	_check(str(open_fill["reason"]) != "" and (open_fill["tiles"] as Array).is_empty(), "the paint bucket will not flood open ground")
+	for cell in BuildEditor.box_tiles(Vector2i(10, 2), Vector2i(13, 5), true):
+		sim.build_place("wall", cell)
+	var closed_fill := BuildEditor.fill_tiles(sim, Vector2i(11, 3))
+	_check(str(closed_fill["reason"]) == "" and (closed_fill["tiles"] as Array).size() == 4, "but fills a closed room (%d tiles)" % (closed_fill["tiles"] as Array).size())
+	for cell in closed_fill["tiles"]:
+		world.set_floor(cell, "straw")
+	_check((BuildEditor.fill_tiles(sim, Vector2i(11, 3))["tiles"] as Array).size() == 4, "and a room already floored")
+
+	# Roofs come off, and go back.
+	for cell in closed_fill["tiles"]:
+		world.set_roof(cell, "thatch")
+	var stock_before := household.stock_of("wood")
+	_check(BuildEditor.roof_tiles(sim, Vector2i(11, 3)).size() == 4 and bool(BuildEditor.unroof(sim, Vector2i(11, 3))["ok"]) and not world.roofs.has(Vector2i(11, 3)), "a room's roof can be taken off")
+	_check(not bool(BuildEditor.unroof(sim, Vector2i(11, 3))["ok"]), "once")
+	BuildEditor.undo(sim)
+	_check(world.roofs.has(Vector2i(11, 3)) and world.roofs.has(Vector2i(12, 4)) and household.stock_of("wood") == stock_before, "and undo roofs it again")
+
+	_test_build_mouse()
+
+
+## The hand, the tools and the keys, as the mouse and keyboard reach them.
+func _test_build_mouse() -> void:
+	var setup := _building_setup()
+	var world: WorldState = setup["world"]
+	var sim: Simulation = setup["sim"]
+	var controller := BuildController.new()
+	add_child(controller)
+	controller.bind(sim)
+	controller.set_active(true)
+	var warnings: Array[String] = []
+	controller.message.connect(func(text: String) -> void: warnings.append(text))
+	var menus: Array = []
+	controller.menu_requested.connect(func(_at: Vector2, title: String, actions: Array[Dictionary]) -> void: menus.append({ "title": title, "actions": actions }))
+	var picked: Array[String] = []
+	controller.picked_style.connect(func(kind: String, id: String) -> void: picked.append("%s:%s" % [kind, id]))
+	var at := func(tile: Vector2i) -> Vector2:
+		return (Vector2(tile) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE
+	var click := func(tile: Vector2i, pressed: bool, button: int = MOUSE_BUTTON_LEFT) -> void:
+		var event := InputEventMouseButton.new()
+		event.button_index = button
+		event.pressed = pressed
+		event.position = at.call(tile)
+		controller._unhandled_input(event)
+	var drag := func(tile: Vector2i) -> void:
+		var event := InputEventMouseMotion.new()
+		event.position = at.call(tile)
+		controller._unhandled_input(event)
+	var press_key := func(code: Key, with_ctrl: bool = false, with_shift: bool = false) -> void:
+		var event := InputEventKey.new()
+		event.keycode = code
+		event.pressed = true
+		event.ctrl_pressed = with_ctrl
+		event.shift_pressed = with_shift
+		controller._unhandled_input(event)
+	var drag_from_to := func(from: Vector2i, to: Vector2i) -> void:
+		click.call(from, true)
+		drag.call(to)
+		click.call(to, false)
+
+	_check(str(controller.tool["kind"]) == "select" and controller.selection.is_empty(), "build mode starts with the hand in hand")
+	sim.build_place("bed", Vector2i(8, 8))
+	click.call(Vector2i(8, 8), true)
+	click.call(Vector2i(8, 8), false)
+	_check(controller.selection.size() == 1 and str(controller.selection[0]["def"]) == "bed", "clicking a thing selects it")
+	drag_from_to.call(Vector2i(8, 8), Vector2i(10, 7))
+	_check(world.object_at(Vector2i(8, 8)) == null and world.object_at(Vector2i(10, 7)) != null and controller.selection[0]["tile"] == Vector2i(10, 7), "dragging it moves it, and it stays selected")
+	press_key.call(KEY_Z, true)
+	_check(world.object_at(Vector2i(8, 8)) != null and world.object_at(Vector2i(10, 7)) == null, "Ctrl+Z puts it back")
+	press_key.call(KEY_Y, true)
+	_check(world.object_at(Vector2i(10, 7)) != null, "Ctrl+Y does it again")
+	click.call(Vector2i(10, 7), true)
+	click.call(Vector2i(10, 7), false)
+	press_key.call(KEY_DELETE)
+	_check(world.object_at(Vector2i(10, 7)) == null and controller.selection.is_empty(), "Delete takes down what is selected")
+	press_key.call(KEY_Z, true)
+	_check(world.object_at(Vector2i(10, 7)) != null, "and Ctrl+Z brings it back")
+
+	# An area: pick everything in it, move it all, take it all down.
+	sim.build_place("chest", Vector2i(4, 3))
+	sim.build_floor("planks", Vector2i(5, 3))
+	sim.build_place("chair", Vector2i(6, 3))
+	drag_from_to.call(Vector2i(3, 2), Vector2i(7, 4))
+	_check(controller.selection.size() == 3, "dragging over the ground selects an area (%d)" % controller.selection.size())
+	drag_from_to.call(Vector2i(5, 3), Vector2i(5, 5))
+	_check(world.object_at(Vector2i(4, 5)) != null and world.object_at(Vector2i(6, 5)) != null and world.floor_at(Vector2i(5, 5)) == "planks" and world.object_at(Vector2i(4, 3)) == null, "and a drag from one of them carries them all")
+	press_key.call(KEY_DELETE)
+	_check(world.object_at(Vector2i(4, 5)) == null and world.object_at(Vector2i(6, 5)) == null and world.floor_at(Vector2i(5, 5)) == "", "Delete takes them all down")
+	press_key.call(KEY_Z, true)
+	_check(world.object_at(Vector2i(4, 5)) != null and world.object_at(Vector2i(6, 5)) != null and world.floor_at(Vector2i(5, 5)) == "planks", "and one Ctrl+Z restores them all")
+
+	# Right-click: never the people; with the hand, a menu; with a tool, back to the hand.
+	click.call(Vector2i(9, 2), true, MOUSE_BUTTON_RIGHT)
+	_check(menus.is_empty() and controller.selection.is_empty(), "right-clicking bare ground opens nothing")
+	click.call(Vector2i(10, 7), true, MOUSE_BUTTON_RIGHT)
+	var ids: Array[String] = []
+	if not menus.is_empty():
+		for action in menus[0]["actions"]:
+			ids.append(str(action["id"]))
+	_check(menus.size() == 1 and menus[0]["title"] == "Straw bed" and "move" in ids and "remove" in ids and "pick" in ids, "right-clicking a thing opens a menu of what to do with it (%s)" % str(ids))
+	controller.perform("move")
+	click.call(Vector2i(12, 8), true)
+	_check(world.object_at(Vector2i(12, 8)) != null and world.object_at(Vector2i(10, 7)) == null, "choosing Move carries it to where you next click")
+	click.call(Vector2i(12, 8), true, MOUSE_BUTTON_RIGHT)
+	controller.perform("pick")
+	_check(picked == ["place:bed"] and str(controller.tool["kind"]) == "place" and str(controller.tool["id"]) == "bed", "Copy takes up the style: the bed is in hand")
+	var cleared := [false]
+	controller.tool_cleared.connect(func() -> void: cleared[0] = true)
+	click.call(Vector2i(9, 2), true, MOUSE_BUTTON_RIGHT)
+	_check(str(controller.tool["kind"]) == "select" and cleared[0] and menus.size() == 2, "right-click with a tool puts it away, and opens no menu")
+	controller.set_tool("pick")
+	click.call(Vector2i(6, 5), true)
+	click.call(Vector2i(6, 5), false)
+	_check(picked.back() == "place:chair" and str(controller.tool["id"]) == "chair", "the eyedropper takes the style of what it clicks")
+	controller.set_tool("pick")
+	click.call(Vector2i(5, 5), true)
+	click.call(Vector2i(5, 5), false)
+	_check(picked.back() == "floor:planks", "or a floor's")
+
+	# Walls in a box, floors in a fill, one undo each.
+	controller.set_tool("place", "wall")
+	controller.set_shape("box")
+	drag_from_to.call(Vector2i(10, 3), Vector2i(13, 5))
+	var walls := 0
+	for cell in BuildEditor.box_tiles(Vector2i(10, 3), Vector2i(13, 5), false):
+		walls += 1 if world.site_at(cell, "object") != null else 0
+	_check(walls == 10 and world.site_at(Vector2i(11, 4), "object") == null, "a dragged box of walls is planned round its edge")
+	controller.set_tool("floor", "straw")
+	drag_from_to.call(Vector2i(11, 4), Vector2i(12, 5))
+	_check(world.site_at(Vector2i(11, 4), "floor") != null and world.site_at(Vector2i(12, 5), "floor") != null and world.site_at(Vector2i(10, 4), "floor") == null, "a box of floor is planned all over, with the box chosen")
+	controller.set_shape("free")
+	controller.undo()
+	controller.undo()
+	_check(world.sites.is_empty(), "and each drag undoes in one go")
+	_complete_plans(sim, setup["pawn"])
+	for cell in BuildEditor.box_tiles(Vector2i(10, 3), Vector2i(13, 5), true):
+		sim.build_place("wall", cell)
+	controller.set_tool("floor", "straw")
+	controller.set_shape("fill")
+	click.call(Vector2i(11, 4), true)
+	click.call(Vector2i(11, 4), false)
+	_check(world.site_at(Vector2i(11, 4), "floor") != null and world.site_at(Vector2i(12, 4), "floor") != null, "the paint bucket plans the floor of a whole closed room")
+	controller.set_shape("free")
+
+	# Esc steps back: let go, then the hand, then out.
+	controller.set_tool("place", "chair")
+	press_key.call(KEY_ESCAPE)
+	_check(str(controller.tool["kind"]) == "select" and controller.active, "Esc puts the tool away first")
+	click.call(Vector2i(12, 8), true)
+	click.call(Vector2i(12, 8), false)
+	press_key.call(KEY_ESCAPE)
+	_check(controller.selection.is_empty() and controller.active, "then lets go of the selection")
+	press_key.call(KEY_ESCAPE)
+	_check(not controller.active, "then leaves build mode")
 	controller.queue_free()
 
 
