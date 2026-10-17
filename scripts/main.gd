@@ -132,7 +132,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	match event.keycode:
 		KEY_ESCAPE:
-			_open_pause()
+			if hud.skills_board.visible:
+				hud.skills_board.visible = false
+			else:
+				_open_pause()
 		KEY_H:
 			hud.toggle_help()
 		KEY_I:
@@ -151,6 +154,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			build.toggle()
 		KEY_G:
 			tile_cursor.toggle_grid()
+		KEY_K:
+			hud.toggle_skills(sim)
 		KEY_R:
 			hud.show_message(roof_layer.cycle())
 			roof_upper.mode = roof_layer.mode
@@ -190,6 +195,7 @@ func _unhandled_input(event: InputEvent) -> void:
 ## zoom = camera zoom, look = tile to center the camera on (x,y), speed = 0 (paused) to 4,
 ## walk = tile (x,y) to send the selected person to at the start,
 ## menu = tile (x,y) to open the right-click menu on at the start,
+## board = 1 opens the household's skills board (the K key) at the start,
 ## needs = need values for the selected person, such as rest:10,hunger:30,
 ## select = x,y[;x,y] tiles of the demo house to select with the hand (with build=select), centering on the house,
 ## build = start in build mode with a tool, such as place:wall, floor:planks, remove or move,
@@ -365,6 +371,8 @@ func _apply_launch_options() -> void:
 		var spot := _launch_option("menu").split(",")
 		if spot.size() == 2:
 			_on_context_menu_requested(Vector2(700, 260), Vector2i(int(spot[0]), int(spot[1])))
+	if _launch_option("board") != "" and sim != null:
+		hud.toggle_skills(sim)
 	if _launch_option("weather") != "":
 		weather.force(_launch_option("weather"))
 	if _launch_option("zoom") != "":

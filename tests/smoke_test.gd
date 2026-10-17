@@ -50,6 +50,7 @@ func _ready() -> void:
 	_section("upstairs", _test_upstairs)
 	_section("traits", _test_trait_effects)
 	_section("garments", _test_garments)
+	_section("perks, wool and warm clothes", _test_perks_and_wool)
 	_section("events", _test_events)
 	_section("realm", _test_realm)
 	_section("faith_and_illness", _test_faith_and_illness)
@@ -1391,7 +1392,7 @@ func _interaction_entries(sim: Simulation, from: Pawn, to: Pawn) -> Dictionary:
 func _test_work_sites() -> void:
 	print("Work sites, resources and materials")
 	var ids := Economy.resource_ids()
-	_check(str(ids.slice(0, 8)) == str(["wood", "stone", "grain", "fish", "herbs", "ring", "meat", "hide"]) and ids.size() == 21, "there are five resources to gather, rings, meat, hides, flax, eight made goods and four traded (%d)" % ids.size())
+	_check(str(ids.slice(0, 8)) == str(["wood", "stone", "grain", "fish", "herbs", "ring", "meat", "hide"]) and ids.size() == 22, "there are five resources to gather, rings, meat, hides, flax, wool, eight made goods and four traded (%d)" % ids.size())
 	_check(Economy.resource_price("wood") == 2 and Economy.sell_price("wood", 10) == 14 and Economy.sell_price("wood", 10, 1.3) == 18, "the shop pays a share of the price, and more on a market day")
 
 	# The region has sites at every town's edge.
@@ -2609,7 +2610,7 @@ func _test_animals() -> void:
 	print("Animals: game, mounts, pack animals and pets")
 	var wild := Fauna.kinds("wild")
 	var tame := Fauna.kinds("domestic")
-	_check(wild == ["rabbit", "deer", "boar", "wolf"] and tame == ["horse", "donkey", "ox", "dog", "cat"], "the wilds hold rabbits, deer, boar and wolves; the towns horses, donkeys, oxen, dogs and cats (%s %s)" % [str(wild), str(tame)])
+	_check(wild == ["rabbit", "deer", "boar", "wolf"] and tame == ["horse", "donkey", "ox", "sheep", "dog", "cat"], "the wilds hold rabbits, deer, boar and wolves; the towns horses, donkeys, oxen, sheep, dogs and cats (%s %s)" % [str(wild), str(tame)])
 	var data_ok := true
 	for kind in wild:
 		var def := Fauna.def_of(kind)
@@ -6870,3 +6871,73 @@ func _test_garments() -> void:
 	_check(SpriteBank.garment_in(elder, "worker_top", "top") == "casual_top", "a set without work clothes wears the everyday ones")
 	var offered := Clothing.available(anna, "top").map(func(def: Dictionary) -> String: return str(def["id"]))
 	_check("tunic_top" in offered, "the wardrobe offers a woman's garments that her pictures have")
+
+
+func _test_perks_and_wool() -> void:
+	print("Perks, wool and warm clothes")
+	var game := _open_field()
+	var sim: Simulation = game["sim"]
+	var world: WorldState = game["world"]
+	var anna: Pawn = game["anna"]
+	var ben: Pawn = game["ben"]
+	var notices: Array[String] = []
+	sim.health_notice.connect(func(text: String) -> void: notices.append(text))
+
+	# Perks at Journeyman and Master.
+	var every_skill_has_two := true
+	for skill_id in Skills.skill_ids():
+		every_skill_has_two = every_skill_has_two and Skills.perks(skill_id, 5).size() == 1 and Skills.perks(skill_id, 9).size() == 1
+	_check(every_skill_has_two, "every skill has a perk at Journeyman (5) and at Master (9)")
+	anna.skills["woodcutting"] = Skills.xp_for_level(4)
+	var before := Skills.effect(anna, "woodcutting", "yield")
+	Skills.grant(sim, anna, "woodcutting", Skills.xp_for_level(5) - Skills.xp_for_level(4))
+	var after := Skills.effect(anna, "woodcutting", "yield")
+	_check(is_equal_approx(before, 0.4) and is_equal_approx(after, 0.5 + float(Skills.perks("woodcutting", 5)[0]["effects"]["yield"])), "reaching Journeyman adds the perk on top of the level (%.2f -> %.2f)" % [before, after])
+	_check(notices.any(func(t: String) -> bool: return "New: " in t and "journeyman" in t), "and the household is told what it brings (%s)" % str(notices))
+	_check("* " in Skills.perks_text(anna, "woodcutting") and Skills.perks_text(anna, "woodcutting").count("* ") == 1, "the perks list marks the one she has reached")
+
+	# The skills board.
+	var teacher := Pawn.new()
+	teacher.display_name = "Old Tom"
+	teacher.age = 50
+	teacher.skills["tailoring"] = Skills.xp_for_level(6)
+	sim.town.add_pawn(teacher)
+	var board := Skills.board(sim)
+	var tailoring: Dictionary = board.filter(func(r: Dictionary) -> bool: return r["id"] == "tailoring")[0]
+	var woodcutting: Dictionary = board.filter(func(r: Dictionary) -> bool: return r["id"] == "woodcutting")[0]
+	_check(board.size() == Skills.skill_ids().size() and tailoring["people"].size() == 2 and str(tailoring["teacher"].get("name", "")) == "Old Tom" and int(woodcutting["people"][0]["level"]) == 5 and woodcutting["teacher"].is_empty(), "the skills board shows each of the household in every skill and who in town could teach it")
+	var shown := SkillsBoard.new()
+	shown.fill(sim)
+	_check(shown.get_child_count() > 0, "and the board fills in")
+	shown.free()
+
+	# Warm clothes.
+	GameClock.set_time(50, 2)  # a winter night, out of doors
+	anna.tile = Vector2i(60, 25)
+	ben.tile = Vector2i(62, 25)
+	sim.household.stock = { "cloak": 1, "boots": 2 }
+	var wear: Dictionary = Clothing.rules()["outer_wear"]
+	_check(is_equal_approx(Clothing.outer_warmth(sim, anna), float(wear["cloak"]) + float(wear["boots"])) and is_equal_approx(Clothing.outer_warmth(sim, ben), float(wear["boots"])), "one cloak keeps the first of the household warm; two pairs of boots cover both")
+	var cloaked := float(Clothing.drain_multipliers(sim, anna, {}).get("warmth", 1.0))
+	sim.household.stock = {}
+	var bare := float(Clothing.drain_multipliers(sim, anna, {}).get("warmth", 1.0))
+	_check(cloaked < bare, "and warmth drains more slowly in them (%.2f against %.2f)" % [cloaked, bare])
+	GameClock.set_time(20, 13)  # a summer afternoon
+	sim.household.stock = { "cloak": 1 }
+	_check(Clothing.outer_warmth(sim, anna) == 0.0, "but they do nothing in the summer sun")
+
+	# Sheep give wool.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 3
+	var sheep := Fauna.spawn(world, "sheep", Vector2i(30, 30), rng, "household")
+	sheep.owner = "household"
+	sim.household.stock = { "grain": 10 }
+	var wool := 0
+	for day in 4:
+		GameClock.set_time(60 + day, 0)
+		Fauna.new_day(sim, rng)
+		wool = sim.household.stock_of("wool")
+	_check(wool >= 2 and sim.household.stock_of("grain") == 8, "a sheep eats grain every other day and gives wool (%d wool, %d grain left)" % [wool, sim.household.stock_of("grain")])
+	_check(not DataRegistry.get_def("recipes", "spin_wool").is_empty() and DataRegistry.get_def("recipes", "spin_wool")["outputs"].has("cloth"), "and the loom spins wool into cloth")
+	GameClock.reset()
+

@@ -79,10 +79,34 @@ static func rank_name(level_number: int) -> String:
 
 
 ## What a skill does at the person's level for one kind of effect (0 when it has none): the
-## skill's per-level number times their level.
+## skill's per-level number times their level, and whatever the perks they have reached add.
 static func effect(pawn: Pawn, skill_id: String, key: String) -> float:
-	var per_level := float(DataRegistry.get_def("skills", skill_id).get("effects", {}).get(key, 0.0))
-	return per_level * float(level(pawn, skill_id))
+	var def := DataRegistry.get_def("skills", skill_id)
+	var current := level(pawn, skill_id)
+	var total := float(def.get("effects", {}).get(key, 0.0)) * float(current)
+	for perk in def.get("perks", []):
+		if current >= int(perk.get("level", 99)):
+			total += float(perk.get("effects", {}).get(key, 0.0))
+	return total
+
+
+## The perks of a skill (data/skills.json "perks": a step up at a rank, such as Journeyman and
+## Master) that come at exactly `level_number`, or all of them with -1.
+static func perks(skill_id: String, level_number: int = -1) -> Array[Dictionary]:
+	var found: Array[Dictionary] = []
+	for perk in DataRegistry.get_def("skills", skill_id).get("perks", []):
+		if level_number == -1 or int(perk.get("level", -1)) == level_number:
+			found.append(perk)
+	return found
+
+
+## "Clean felling (5): More wood from every tree." for each of a skill's perks, marked when reached.
+static func perks_text(pawn: Pawn, skill_id: String) -> String:
+	var lines: Array[String] = []
+	for perk in perks(skill_id):
+		var reached := pawn != null and level(pawn, skill_id) >= int(perk.get("level", 99))
+		lines.append("%s%s (%d): %s" % ["* " if reached else "", str(perk.get("name", "")), int(perk.get("level", 0)), str(perk.get("text", ""))])
+	return "\n".join(lines)
 
 
 ## The skills a person has begun, best first: [{ "id", "level", "xp" }].
@@ -139,7 +163,10 @@ static func _add_xp(sim: Simulation, pawn: Pawn, skill_id: String, points: float
 	if after > before and sim != null:
 		Mood.add_event(pawn, "skill_up", GameClock.tick)
 		if sim.household.get_pawn(pawn.id) != null:
-			sim.health_notice.emit("%s's %s is now %d (%s)." % [pawn.display_name.get_slice(" ", 0), name_of(skill_id).to_lower(), after, rank_name(after).to_lower()])
+			var gained := ""
+			for perk in perks(skill_id, after):
+				gained += " New: %s, %s" % [str(perk.get("name", "")), str(perk.get("text", "")).to_lower()]
+			sim.health_notice.emit("%s's %s is now %d (%s).%s" % [pawn.display_name.get_slice(" ", 0), name_of(skill_id).to_lower(), after, rank_name(after).to_lower(), gained])
 
 
 ## 1 normally; more when a master of this skill is working close by. Looked up every ten minutes
@@ -283,6 +310,37 @@ static func find_work(sim: Simulation, rng: RandomNumberGenerator, limit: int = 
 			sim.hire(pawn, chosen["lot"], chosen["job"])
 			staffed["%s|%s" % [chosen["lot"], chosen["job"]]] = int(staffed.get("%s|%s" % [chosen["lot"], chosen["job"]], 0)) + 1
 			hired += 1
+
+
+# --- the household's skills board ------------------------------------------------------
+
+## Every skill, with where each of the household stands in it and the best teacher in their home
+## town: [{ "id", "name", "people": [{ "name", "level", "rank", "progress", "talent" }],
+## "teacher": { "name", "level" } or {} }]. A teacher must know enough to give lessons and more
+## than anyone at home.
+static func board(sim: Simulation) -> Array[Dictionary]:
+	var town_id := ""
+	for pawn in sim.household.pawns:
+		town_id = str(sim.world.town_of_lot(pawn.home_lot).get("id", ""))
+		if town_id != "":
+			break
+	var rows: Array[Dictionary] = []
+	for skill_id in skill_ids():
+		var people: Array[Dictionary] = []
+		var best_home := 0
+		for pawn in sim.household.pawns:
+			var lvl := level(pawn, skill_id)
+			best_home = maxi(best_home, lvl)
+			people.append({ "name": pawn.display_name.get_slice(" ", 0), "level": lvl, "rank": rank_name(lvl), "progress": progress(pawn, skill_id), "talent": skill_id in pawn.talents })
+		var teacher := {}
+		for other in sim.town.pawns:
+			if other.age < 14 or other.is_dying() or (town_id != "" and str(sim.world.town_of_lot(other.home_lot).get("id", "")) != town_id):
+				continue
+			var lvl := level(other, skill_id)
+			if lvl >= int(rules().get("lesson_min_level", 2)) and lvl > best_home and lvl > int(teacher.get("level", 0)):
+				teacher = { "name": other.display_name, "level": lvl }
+		rows.append({ "id": skill_id, "name": name_of(skill_id), "people": people, "teacher": teacher })
+	return rows
 
 
 # --- lessons ----------------------------------------------------------------------------

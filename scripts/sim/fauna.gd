@@ -827,6 +827,10 @@ static func new_day(sim: Simulation, rng: RandomNumberGenerator) -> Array[String
 	var today := GameClock.get_day_number()
 	for animal: Animal in kept_by(sim).duplicate():
 		var def := animal.def()
+		if animal.hungry_days == 0:
+			var made := _produce(sim, animal, today, rng)
+			if made != "":
+				notices.append(made)
 		if today - animal.fed_day < int(def.get("ration_days", 1)):
 			continue
 		var ate := ""
@@ -853,6 +857,29 @@ static func new_day(sim: Simulation, rng: RandomNumberGenerator) -> Array[String
 			animal.hungry_days = 0
 	_restock(sim.world, rng)
 	return notices
+
+
+## A well-fed animal that gives something ("produces" in data/animals.json: a sheep's wool) gives it every
+## "produce_days", more with the household's best hand at animal care. Returns a notice, or "".
+static func _produce(sim: Simulation, animal: Animal, today: int, rng: RandomNumberGenerator) -> String:
+	var def := animal.def()
+	var gives: Dictionary = def.get("produces", {})
+	var every := maxi(1, int(def.get("produce_days", 1)))
+	if gives.is_empty() or (today + animal.id) % every != 0:
+		return ""
+	var keeper: Pawn = null
+	for pawn in sim.household.pawns:
+		if keeper == null or Skills.level(pawn, "husbandry") > Skills.level(keeper, "husbandry"):
+			keeper = pawn
+	var brought := {}
+	for item_id in gives:
+		var amount := Skills.yield_amount(keeper, "husbandry", int(gives[item_id]), rng) if keeper != null else int(gives[item_id])
+		if amount > 0:
+			sim.household.add_stock(str(item_id), amount)
+			brought[str(item_id)] = amount
+	if keeper != null:
+		Skills.practice_deed(sim, keeper, "husbandry", "shear", 20.0)
+	return "%s gave %s." % [animal.display_name(), Economy.stock_text(brought)] if not brought.is_empty() else ""
 
 
 ## Where the wilds have thinned, a few come back from beyond the map's edge of sight.

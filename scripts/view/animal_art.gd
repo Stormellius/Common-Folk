@@ -50,6 +50,9 @@ static func draw(ci: CanvasItem, kind: String, coat: int, facing: Vector2i, u: f
 	PawnArt._ellipse(ci, Vector2(-length * 0.04, -width * 0.12) * u, Vector2(length * 0.38, width * 0.26) * u, coat_color.darkened(0.12))
 	PawnArt._ellipse(ci, Vector2(-length * 0.08, -width * 0.22) * u, Vector2(length * 0.28, width * 0.12) * u, Color(1, 1, 1, 0.10))
 
+	if bool(art.get("fleece", false)):  # curls of wool all over the back
+		for curl in [Vector2(-0.30, -0.25), Vector2(-0.05, -0.30), Vector2(0.20, -0.22), Vector2(-0.20, 0.10), Vector2(0.08, 0.05), Vector2(0.28, 0.12), Vector2(-0.32, 0.30), Vector2(0.0, 0.32)]:
+			PawnArt._ellipse(ci, Vector2(curl.x * length, curl.y * width) * u, Vector2(length * 0.13, width * 0.17) * u, coat_color.lightened(0.10))
 	if bool(art.get("saddle", false)):
 		var seat := PackedVector2Array([Vector2(-5, -width * 0.42), Vector2(4, -width * 0.38), Vector2(4, width * 0.38), Vector2(-5, width * 0.42)])
 		ci.draw_colored_polygon(_scaled(seat, u), SADDLE)

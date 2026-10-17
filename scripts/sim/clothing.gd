@@ -177,5 +177,22 @@ static func worn(sim: Simulation, pawn: Pawn) -> String:
 static func drain_multipliers(sim: Simulation, pawn: Pawn, multipliers: Dictionary) -> Dictionary:
 	var merged := multipliers.duplicate()
 	var covered := warmth_of(worn(sim, pawn)) if pawn.garments.is_empty() else warmth_of_pieces(pieces(sim, pawn))
-	merged["warmth"] = float(merged.get("warmth", 1.0)) * covered
+	merged["warmth"] = float(merged.get("warmth", 1.0)) * covered * (1.0 - outer_warmth(sim, pawn))
 	return merged
+
+
+## What the household's tailored outer wear (data/wardrobe.json "outer_wear": a cloak, boots) keeps in
+## when it is cold enough for warm clothes: one of each piece in the stockpile goes to each person, in
+## the household's order, so three cloaks cover the first three. Nothing for the town's own folk.
+static func outer_warmth(sim: Simulation, pawn: Pawn) -> float:
+	var wear: Dictionary = rules().get("outer_wear", {})
+	if wear.is_empty() or chill(sim, pawn) < float(rules().get("warm_from", 1.15)):
+		return 0.0
+	var place := sim.household.pawns.find(pawn)
+	if place < 0:
+		return 0.0
+	var kept := 0.0
+	for item_id in wear:
+		if sim.household.stock_of(str(item_id)) > place:
+			kept += float(wear[item_id])
+	return kept

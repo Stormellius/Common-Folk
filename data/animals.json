@@ -13,6 +13,8 @@
 
   {"id": "ox", "name": "Ox", "type": "domestic", "price": 60, "ride": 0.0, "carry": 1.0, "move_ticks": 4.0, "eats": ["grain"], "ration_days": 1, "wander": 0.01, "art": {"body": [28, 15], "head": 7.5, "colors": ["#6d5036", "#8b6a47"], "belly": "#a58762", "ears": "point", "tail": "thin", "horns": true, "panniers": true, "neck": 2.0}},
 
+  {"id": "sheep", "name": "Sheep", "type": "domestic", "price": 28, "ride": 0.0, "carry": 0.0, "move_ticks": 3.0, "eats": ["grain"], "ration_days": 2, "wander": 0.03, "produces": {"wool": 1}, "produce_days": 2, "art": {"body": [20, 13], "head": 4.6, "colors": ["#e9e3d3", "#d9d0bd", "#3b3531"], "belly": "#f2ede2", "ears": "floppy", "tail": "tuft", "fleece": true}},
+
   {"id": "dog", "name": "Dog", "type": "domestic", "pet": true, "price": 20, "helps_hunt": 0.12, "move_ticks": 1.8, "eats": ["meat", "fish", "grain"], "ration_days": 2, "wander": 0.12, "art": {"body": [15, 8], "head": 5.0, "colors": ["#9a6a3a", "#2e2a28", "#c8b48c", "#7c7060"], "belly": "#e6dcc8", "ears": "floppy", "tail": "curl"}},
 
   {"id": "cat", "name": "Cat", "type": "domestic", "pet": true, "price": 8, "move_ticks": 2.2, "eats": ["fish", "meat", "grain"], "ration_days": 2, "wander": 0.1, "art": {"body": [11, 6], "head": 4.2, "colors": ["#c9803a", "#8a8a90", "#2a2a2e", "#a58a62"], "belly": "#efe6d4", "ears": "point", "tail": "long"}}

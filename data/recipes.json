@@ -16,6 +16,7 @@
   {"id": "smelt_iron", "station": "forge", "skill": "smithing", "name": "Smelt iron", "inputs": {"stone": 4, "wood": 2}, "outputs": {"iron": 1}, "minutes": 120, "min_level": 1},
   {"id": "forge_sewing_kit", "station": "forge", "skill": "smithing", "name": "Forge a sewing kit", "inputs": {"wood": 1, "stone": 1}, "outputs": {"sewing_kit": 1}, "minutes": 50},
   {"id": "spin_linen", "station": "loom", "skill": "tailoring", "name": "Spin and weave linen", "inputs": {"flax": 3}, "outputs": {"cloth": 1}, "minutes": 80},
+  {"id": "spin_wool", "station": "loom", "skill": "tailoring", "name": "Spin and weave wool", "inputs": {"wool": 3}, "outputs": {"cloth": 2}, "minutes": 100},
   {"id": "sew_shirt", "station": "loom", "skill": "tailoring", "name": "Sew a linen shirt", "inputs": {"cloth": 1}, "outputs": {"shirt": 1}, "minutes": 60},
   {"id": "stitch_boots", "station": "loom", "skill": "tailoring", "name": "Stitch boots", "inputs": {"leather": 2}, "outputs": {"boots": 1}, "minutes": 100, "min_level": 1},
   {"id": "sew_cloak", "station": "loom", "skill": "tailoring", "name": "Sew a cloak", "inputs": {"cloth": 2, "leather": 1}, "outputs": {"cloak": 1}, "minutes": 140, "min_level": 3}
