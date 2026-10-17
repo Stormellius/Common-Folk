@@ -189,6 +189,18 @@ func remove_site(id: int) -> void:
 		tile_changed.emit(site.tile)
 
 
+## Sets a plan down somewhere else.
+func move_site(id: int, to_tile: Vector2i) -> bool:
+	var site: BuildSite = _site_by_id.get(id)
+	if site == null:
+		return false
+	var from_tile := site.tile
+	site.tile = to_tile
+	tile_changed.emit(from_tile)
+	tile_changed.emit(to_tile)
+	return true
+
+
 func get_site(id: int) -> BuildSite:
 	return _site_by_id.get(id)
 
@@ -291,6 +303,26 @@ func move_object(id: int, to_tile: Vector2i) -> bool:
 	tile_changed.emit(from_tile)
 	tile_changed.emit(to_tile)
 	return true
+
+
+## Picks up several objects and sets them all down at once (object id -> its new tile), so that one may
+## take the place another has just left. The caller has checked that the new tiles are free.
+func relocate_objects(moves: Dictionary) -> void:
+	var touched: Array[Vector2i] = []
+	var lifted: Array[PlacedObject] = []
+	for id in moves:
+		var placed := get_object(int(id))
+		if placed != null:
+			if _object_at_tile.get(placed.tile) == placed:
+				_object_at_tile.erase(placed.tile)
+			touched.append(placed.tile)
+			lifted.append(placed)
+	for placed in lifted:
+		placed.tile = moves[placed.id]
+		_object_at_tile[placed.tile] = placed
+		touched.append(placed.tile)
+	for tile in touched:
+		tile_changed.emit(tile)
 
 
 ## Which of the four neighbors hold an object of the same `connects` group, as a bitmask:

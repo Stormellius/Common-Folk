@@ -63,9 +63,19 @@ func _ready() -> void:
 	hud.pawn_chosen.connect(_on_pawn_chosen)
 	hud.build_toggled.connect(build.set_active)
 	hud.build_tool_chosen.connect(build.set_tool)
+	hud.build_shape_chosen.connect(build.set_shape)
+	hud.build_undo_requested.connect(build.undo)
+	hud.build_redo_requested.connect(build.redo)
+	hud.build_action_chosen.connect(build.perform)
 	hud.menu_requested.connect(_open_pause)
 	build.mode_changed.connect(hud.set_build_mode)
 	build.tool_cleared.connect(hud.clear_build_selection)
+	build.tool_changed.connect(hud.set_build_tool)
+	build.shape_changed.connect(hud.set_build_shape)
+	build.hint_changed.connect(hud.set_build_hint)
+	build.history_changed.connect(hud.set_build_history)
+	build.picked_style.connect(hud.select_build_item)
+	build.menu_requested.connect(hud.open_build_menu)
 	build.message.connect(func(text: String) -> void: hud.show_message(text))
 	menus.new_game_requested.connect(_on_new_game_requested)
 	menus.land_confirmed.connect(_finish_new_game)
@@ -181,6 +191,7 @@ func _unhandled_input(event: InputEvent) -> void:
 ## walk = tile (x,y) to send the selected person to at the start,
 ## menu = tile (x,y) to open the right-click menu on at the start,
 ## needs = need values for the selected person, such as rest:10,hunger:30,
+## select = x,y[;x,y] tiles of the demo house to select with the hand (with build=select), centering on the house,
 ## build = start in build mode with a tool, such as place:wall, floor:planks, remove or move,
 ## load = load the newest save right away (as F9 does),
 ## dying = the selected person is minutes from starving (to see the death and the hand-over),
@@ -342,6 +353,14 @@ func _apply_launch_options() -> void:
 		build.set_active(true)
 		var spec := _launch_option("build").split(":")
 		build.set_tool(spec[0], spec[1] if spec.size() > 1 else "")
+	if _launch_option("select") != "" and sim != null and build.active:
+		var origin := world.lot.position + Vector2i(world.lot.size.x - 11, 2)  # where --demohouse puts its house
+		var picked := _launch_option("select").split(";")
+		for pair in picked:
+			var offset := pair.split(",")
+			if offset.size() == 2:
+				build.select_tile(origin + Vector2i(int(offset[0]), int(offset[1])), true)
+		camera.position = (Vector2(origin) + Vector2(4.5, 3.5)) * MapView.TILE_SIZE
 	if _launch_option("menu") != "" and sim != null:
 		var spot := _launch_option("menu").split(",")
 		if spot.size() == 2:

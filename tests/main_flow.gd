@@ -26,6 +26,22 @@ func _ready() -> void:
 	_check(main.world.world_seed == 4242 and main.world.titles.size() > 0 and main.world.lifespan == "short" and GameClock.speed_level == 0 and main.build.active, "with the chosen seed, start and lifespan, paused in build mode on bare land")
 	GameClock.set_speed(1)
 
+	# Right-click in build mode never gives one of your folk an order; with build mode off it does.
+	var menu_asked := [0]
+	main.pawn_layer.context_menu_requested.connect(func(_at: Vector2, _tile: Vector2i) -> void: menu_asked[0] += 1)
+	var right_click := InputEventMouseButton.new()
+	right_click.button_index = MOUSE_BUTTON_RIGHT
+	right_click.pressed = true
+	right_click.position = Vector2(576, 120)
+	main.get_viewport().push_input(right_click)
+	_check(main.build.active and menu_asked[0] == 0 and not hud._action_menu.visible, "right-click in build mode opens no menu for the people")
+	main.build.set_active(false)
+	main.get_viewport().push_input(right_click)
+	_check(menu_asked[0] == 1, "but with build mode off it still does")
+	hud.close_action_menu()
+	main.build.set_active(true)
+	_check(str(main.build.tool["kind"]) == "select" and hud._build_tool_buttons["select"].button_pressed, "build mode opens with the hand in hand, and the toolbar shows it")
+
 	# Time passes slowly, but people walk at a human pace: a walk across the yard takes seconds.
 	var walker: Pawn = main.sim.household.selected()
 	GameClock.set_speed(1)

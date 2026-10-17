@@ -33,7 +33,7 @@ func _process(_delta: float) -> void:
 		_signature = -1
 	var sig := sim.world.sites.size() * 1000003
 	for site in sim.world.sites:
-		sig += site.id * 31 + roundi(site.progress * 40.0) * 7 + int(site.delivered.size()) * 13 + sim.world.reserved.size()
+		sig += site.id * 31 + site.tile.x * 17 + site.tile.y * 19 + roundi(site.progress * 40.0) * 7 + int(site.delivered.size()) * 13 + sim.world.reserved.size()
 		for resource_id in site.delivered:
 			sig += int(site.delivered[resource_id]) * 101
 	if sig != _signature:

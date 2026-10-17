@@ -142,6 +142,14 @@ Folk are born, grow up, grow old and die, as in the Sims, with a medieval face o
 - **Painted people (preview)**: every life stage in underclothes and the sheet's outfits, front and back; off by default until there are more looks
 - **Clothing** (`data/clothing.json`, `data/wardrobe.json`): eight outfits chosen by what a person is doing and how cold it is (nightclothes in bed, underclothes washing, good clothes for a wedding or church, a winter coat or warm clothes in the cold, work clothes at a job); each keeps a share of their warmth. The code-drawn people change to match, and the panel says what they wear. Swimwear is ready for when there is swimming
 
+## Build mode, the Sims way (done)
+
+- **The hand** (`BuildController`, `BuildEditor`): build mode starts with the hand in hand. Click selects an object, a floor tile or a plan; shift-click adds; dragging over ground selects an area; dragging a selected thing moves it (and everything else selected, all together, so a row of walls can slide along itself); Delete takes it down. Moving is free; objects, laid floors and plans (not stairs, not the village's own things, not a floor upstairs) can be moved. A right-click opens a menu for what is under it (move, take down, copy its style, take the roof off); with a tool in hand a right-click puts it back. Build mode never opens the folk's action menu
+- **Tools and shapes**: Remove, Pick (the eyedropper takes up the style of an object, floor, plan or roof), Unroof (the whole roof off a room, half the materials back), and Free / Box / Fill for walls, floors and taking down. Box is the outline of a rectangle for walls and the whole of it for floors; Fill floors a closed room, or the connected stretch of one floor, in a click. Shift-drag is a box
+- **Undo and redo** (`BuildHistory`): every click or drag is one step, undone with Ctrl+Z and redone with Ctrl+Y. A plan that is undone gives back all the coin (calling it off still gives half); taking a thing down and undoing puts it back for the same coin; moves go back; roofs go back. Kept only while the game is open
+- **Fixes**: laid floors drew nothing in the middle of an area (repeats were mirrored with a negative rectangle); right-click in build mode opened a person's menu; the Move and Remove tools hid at the end of a tab and could not move floors
+- **The catalog**: a search box over every tab, a **Catalog** button that folds it away, a shorter palette, and the hint for the tool in hand under it
+
 ## Later
 
 - More painted art, one sheet at a time: everything in the "What is missing" table of [docs/ART.md](docs/ART.md), and a full set of people (both sexes, several looks, side views, a walk cycle)

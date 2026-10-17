@@ -72,6 +72,8 @@ var _has_infants := true  # whether anyone is a baby, worked out each minute; ba
 ## The dead Death has just led away, for the view to show their going: { "tile", "tick", "name",
 ## "death_at" (where Death stood, in tiles, or null) }. Kept an hour or so, never saved.
 var departures: Array[Dictionary] = []
+## What the player has built, moved and taken down in build mode, for undo and redo (never saved).
+var build_history := BuildHistory.new()
 
 
 var _rng := RandomNumberGenerator.new()  # for townspeople's wandering (not part of the world seed's output)
@@ -944,15 +946,16 @@ func _pay_shift(pawn: Pawn) -> void:
 # message says why not. Nothing costs anything yet: materials come with the economy.
 
 ## Why `def_id` cannot go on `tile` right now, or "" if it can. `ignoring` is an object that is
-## being moved and so does not count as being in the way.
-func build_blocker(def_id: String, tile: Vector2i, ignoring: int = 0) -> String:
+## being moved and so does not count as being in the way, nor is any of the objects (ids) in `group`,
+## which are being moved with it. Moving, or `free`, costs nothing.
+func build_blocker(def_id: String, tile: Vector2i, ignoring: int = 0, group: Dictionary = {}, free: bool = false) -> String:
 	var def := DataRegistry.get_def("objects", def_id)
 	if def.is_empty() or not bool(def.get("buildable", true)):
 		return "that can't be built"
 	if not world.can_build_at(tile):
 		return "outside your land"
 	var there := world.object_at(tile)
-	if there != null and there.id != ignoring:
+	if there != null and there.id != ignoring and not group.has(there.id):
 		return "the %s is in the way" % there.display_name().to_lower()
 	if Levels.of(tile) == 1 and world.floors.has(tile) == false:
 		return "there is no floor there yet"
@@ -967,7 +970,7 @@ func build_blocker(def_id: String, tile: Vector2i, ignoring: int = 0) -> String:
 		for pawn in people():
 			if tile == pawn.tile or tile == pawn.committed_tile():
 				return "%s is standing there" % _first_name(pawn)
-	var price := Economy.build_price(def_id, household.stock) if ignoring == 0 else { "coins": 0, "uses": {} }  # moving is free
+	var price := Economy.build_price(def_id, household.stock) if ignoring == 0 and not free and group.is_empty() else { "coins": 0, "uses": {} }  # moving is free
 	if int(price["coins"]) > household.coins:
 		var uses := Economy.stock_text(price["uses"])
 		return "it costs %s%s and you have %s" % [Economy.format(int(price["coins"])), (" and " + uses) if uses != "" else "", Economy.format(household.coins)]
@@ -983,7 +986,7 @@ func build_place(def_id: String, tile: Vector2i) -> Dictionary:
 	for resource_id in price["uses"]:
 		household.add_stock(str(resource_id), -int(price["uses"][resource_id]))
 	world.add_object(def_id, tile)
-	_reroute_blocked_walks()
+	reroute_blocked_walks()
 	return { "ok": true, "message": "" }
 
 
@@ -997,9 +1000,9 @@ func build_move(object_id: int, to_tile: Vector2i) -> Dictionary:
 	var blocker := build_blocker(placed.def_id, to_tile, placed.id)
 	if blocker != "":
 		return { "ok": false, "message": "Can't move it here: %s" % blocker }
-	_release_user(placed)
+	release_object_user(placed)
 	world.move_object(object_id, to_tile)
-	_reroute_blocked_walks()
+	reroute_blocked_walks()
 	return { "ok": true, "message": "" }
 
 
@@ -1013,10 +1016,10 @@ func build_remove(tile: Vector2i) -> Dictionary:
 	if placed != null and not bool(placed.def().get("buildable", true)):
 		return { "ok": false, "message": "The %s can't be taken down" % placed.display_name().to_lower() }
 	if placed != null:
-		_release_user(placed)
+		release_object_user(placed)
 		household.coins += Economy.refund(Economy.object_cost(placed.def_id))
 		world.remove_object(placed.id)
-		_reroute_blocked_walks()
+		reroute_blocked_walks()
 		return { "ok": true, "message": "" }
 	var old_floor := world.floor_at(tile)
 	if Levels.of(tile) == 1 and old_floor != "":
@@ -1051,7 +1054,7 @@ func build_floor(floor_id: String, tile: Vector2i) -> Dictionary:
 
 
 ## Whoever is using or heading for an object stops before it goes away or moves.
-func _release_user(placed: PlacedObject) -> void:
+func release_object_user(placed: PlacedObject) -> void:
 	var user := person(placed.user_id) if placed.user_id != 0 else null
 	if user != null:
 		if user.job_stage == "walking":
@@ -1062,7 +1065,7 @@ func _release_user(placed: PlacedObject) -> void:
 
 ## After a wall goes up, anyone whose planned route now runs into it finds another way
 ## to the same goal (or gives up if there is none).
-func _reroute_blocked_walks() -> void:
+func reroute_blocked_walks() -> void:
 	for pawn in people():
 		var blocked := false
 		for cell in pawn.path:
@@ -1298,9 +1301,9 @@ func _credit_owner(payer: Pawn, placed: PlacedObject, price: int) -> void:
 
 ## The tax collector takes something away: whoever was using it stops.
 func seize(placed: PlacedObject) -> void:
-	_release_user(placed)
+	release_object_user(placed)
 	world.remove_object(placed.id)
-	_reroute_blocked_walks()
+	reroute_blocked_walks()
 
 
 ## Digs a grave: in the chapel yard if there is room, otherwise on the nearest open grass to where
