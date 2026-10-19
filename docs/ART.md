@@ -129,3 +129,29 @@ would be the next step up.
 * `wall.<object id>` entries in `data/sprites.json` give a wall its `top` and `face` textures; `roof.<roof id>` and `floor.straw` are
   like the other floors (`SpriteBank.draw_surface`). A wall's top is laid along it (turned a quarter for a wall running north to south),
   its south face is the bottom strip of the face picture, and the code still draws the outlines, the lit rims and the eaves on top.
+
+## Layered people: body, hair and clothes apart, and moving in parts
+* A painted person is a stack of pictures of the same size: **hair behind** the head and shoulders, the **bare body**, the garments (bottom,
+  shoes, top), and the **hair over** the face. Any of them can change without the others: skin is a tint on the body (and the body is the one
+  nearest to the chosen skin), the hair is a style and a colour (the style pictures are grey and tinted, and go grey and then white with the
+  years), the clothes are whatever the wardrobe says. The family screen has Skin, Hair (colour), and Hair style (with Bald) as separate rows.
+* `tools/split_hair.py` makes the layers from the painted bodies (needs numpy and opencv): it finds the hair by colour, closes the head again
+  with skin and an outline where the hair was, keeps the hair's shading as grey, and splits it into the part over the head (`hair_<style>_<view>.png`)
+  and the part behind it (`hairb_<style>_<view>.png`); bare bodies are `bare_<look>_<view>.png`. `tools/hair_styles.json` says how far down the hair
+  can reach, where the chin is, which looks have a style of their own (the others only differ in colour) and what each style is called;
+  `data/hairstyles.json` is the result. Old men keep their beards and side tufts (no hair layers yet) and are drawn from their painted bodies.
+* A style can be made "for" one sex (long hair for the girls of the child and youth sets); someone who chose nothing gets one of the styles
+  that suit them, by who they are. `look["hairdo"]` is the chosen style (`"none"` is bald); the old `hair_style` still serves the drawn people.
+* New hair needs no new code: a grey picture the size of the body, named `hair_<style>_front.png` / `_back.png` (and `hairb_...` for the part behind),
+  and an entry in `data/hairstyles.json`. When SpriteCook can be reached, ask for a body with no hair and then for each style on it.
+
+### Moving the parts (`PersonRig`)
+* `tools/make_rigs.py` reads the shape of a bare body to find where it can be cut: the neck, the shoulders, where the arms hang free of the
+  body and where the legs part (`data/rigs.json`, fractions of the picture, one entry per set; it also lists which layers go in one piece
+  between the legs: skirts, dresses, long coats). Every layer is cut in the same places, so any hair and any clothes move with any body.
+* `PersonRig.draw` draws each layer in parts (legs, torso, head, arms; hair in two; skirts and tops with a hem that swings), each a textured
+  quad moved by `PersonRig.motion`: a walk cycle (a foot lifts and swings while the other pushes back, the arms the other way, the body bobs and
+  leans), at work (both arms raised toward the viewer and brought down with the tool), talking (a nod and one hand lifted) and close to someone
+  (a sway). Standing people are drawn whole, breathing, which costs less.
+* `PawnView` says what they are doing (`outfit["act"]`, from the tool in use and the pose); `tests/pawn_gallery.tscn -- --anim=1 --painted=1`
+  draws every step of the walk, work and talk for a few people.

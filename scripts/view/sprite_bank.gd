@@ -311,8 +311,56 @@ static func layer_for(entry: Dictionary, outfit_id: String) -> String:
 	return "casual" if "casual" in entry["outfits"] else ""
 
 
-## Draws a person from layers: the body (its skin tinted toward theirs) with the outfit over it. Same
-## walk bounce and bed pose as draw_person. False when there is no set for them.
+## The hair styles a set of people can wear: [{ "id", "name" }], each a picture of the hair on its own (grey, to be
+## tinted any colour), or [] for a set whose bodies are painted with their hair (see tools/split_hair.py).
+static func hair_styles(set_id: String) -> Array:
+	var entry := DataRegistry.get_def("hairstyles", "hair." + set_id.trim_prefix("people."))
+	return entry.get("styles", []) if not entry.is_empty() else []
+
+
+## The folder the hair pictures of a set are in: its own, or another set's whose heads are in the same place (maternity
+## pictures wear the women's hair).
+static func hair_folder(entry: Dictionary) -> String:
+	var data := DataRegistry.get_def("hairstyles", "hair." + str(entry.get("id", "")).trim_prefix("people."))
+	return str(data.get("hair_dir", entry.get("dir", "")))
+
+
+## The hair style someone wears: the one chosen (`look["hairdo"]`, "none" for none), else one that goes with who they
+## are: the styles made for their sex (data/hairstyles.json says "for": "female" of long hair for the girls) and one
+## of those picked by who the person is.
+static func hairdo_for(styles: Array, look: Dictionary, gender: String, seed_value: int) -> String:
+	var wanted := str(look.get("hairdo", ""))
+	if wanted == "none":
+		return ""
+	for style: Dictionary in styles:
+		if str(style["id"]) == wanted:
+			return wanted
+	var fitting: Array[String] = []
+	for style: Dictionary in styles:
+		if str(style.get("for", gender)) == gender:
+			fitting.append(str(style["id"]))
+	if fitting.is_empty():
+		return str(styles[0]["id"])
+	return fitting[posmod(seed_value >> 3, fitting.size())]
+
+
+## The body in a set that is closest to a person's skin (the hair is chosen apart from it).
+static func pick_body(entry: Dictionary, look: Dictionary) -> Dictionary:
+	var skin := Color(str(look.get("skin", "#e0ac80")))
+	var best: Dictionary = (entry["looks"] as Array)[0]
+	var best_score := INF
+	for candidate: Dictionary in entry["looks"]:
+		var score := _gap(skin, Color(str(candidate["skin"])))
+		if score < best_score:
+			best_score = score
+			best = candidate
+	return best
+
+
+## Draws a person from layers: the body (its skin tinted toward theirs), their hair (behind the head and over it, tinted
+## to their hair colour) and the clothes, each a picture of its own, so any of them can change without the others.
+## Walks and works in parts (see PersonRig); in bed shows head and shoulders over the blanket. False when there is no
+## set for them.
 static func draw_layered_person(ci: CanvasItem, look: Dictionary, facing: Vector2i, u: float, phase: float, lying: bool, outfit: Dictionary, breath: float, stage: String, seed_value: int) -> bool:
 	var entry := {}
 	if float(outfit.get("bump", 0.0)) > 0.3 and str(outfit.get("gender", "")) == "female":  # heavy with child: maternity pictures
@@ -321,29 +369,45 @@ static func draw_layered_person(ci: CanvasItem, look: Dictionary, facing: Vector
 		entry = person_set(stage, str(outfit.get("gender", "male")))
 	if entry.is_empty():
 		return false
-	var chosen_look := pick_look(entry, look)
+	var styles := hair_styles(str(entry["id"]))
+	var layered := not styles.is_empty()
 	var kind := PawnArt.facing_kind(facing)
 	var side := "back" if kind == PawnArt.NORTH and not lying else "front"
 	var folder := "%s/" % str(entry["dir"])
-	var body := texture(folder + str(chosen_look["body"]) + "_" + side)
+	var chosen_look := pick_body(entry, look) if layered else pick_look(entry, look)
+	var body := texture(folder + ("bare_" + str(chosen_look["id"]) if layered else str(chosen_look["body"])) + "_" + side)
+	if body == null and layered:  # no bare picture yet: the body as painted, hair and all
+		layered = false
+		chosen_look = pick_look(entry, look)
+		body = texture(folder + str(chosen_look["body"]) + "_" + side)
 	if body == null:
 		return false
-	var cloths: Array[Texture2D] = []
-	var hair := girl_hair(entry, outfit, side)
+	var hair_over: Texture2D = null
+	var hair_behind: Texture2D = null
+	if layered:
+		var hairdo := hairdo_for(styles, look, str(outfit.get("gender", "")), seed_value)
+		if hairdo != "":
+			var hair_dir := hair_folder(entry) + "/"
+			hair_over = texture(hair_dir + "hair_" + hairdo + "_" + side)
+			hair_behind = texture(hair_dir + "hairb_" + hairdo + "_" + side)
+	else:
+		hair_over = girl_hair(entry, outfit, side)
+	var rig := PersonRig.rig_for(str(entry["id"]))
+	var cloths: Array = []  # { "tex", "name" }, the lower ones first so the top lies over them
 	var hair_under := false  # under a garment that covers the head (a nightcap), else over the clothes
-	if outfit.has("pieces") and entry.has("garments"):  # separate garments, the lower ones first so the top lies over them
+	if outfit.has("pieces") and entry.has("garments"):
 		for slot in ["bottom", "feet", "top"]:
 			var garment_id := garment_in(entry, str((outfit["pieces"] as Dictionary).get(slot, "")), slot)
 			if garment_id != "":
 				var piece := texture(folder + "g_" + garment_id + "_" + side)
 				if piece != null:
-					cloths.append(piece)
+					cloths.append({ "tex": piece, "name": garment_id, "slot": slot })
 					hair_under = hair_under or garment_id in entry.get("hair_under", [])
 	else:
 		var layer_id := layer_for(entry, str(outfit.get("clothes", "casual")))
 		var whole: Texture2D = texture(folder + layer_id + "_" + side) if layer_id != "" else null
 		if whole != null:
-			cloths.append(whole)
+			cloths.append({ "tex": whole, "name": layer_id, "slot": "" })
 	var fallen := bool(outfit.get("fallen", false))
 	var swing := sin(phase) if phase != 0.0 and not lying else 0.0
 	var squash := 1.0 + 0.045 * absf(swing) if phase != 0.0 else 1.0 + 0.012 * sin(breath)
@@ -360,7 +424,22 @@ static func draw_layered_person(ci: CanvasItem, look: Dictionary, facing: Vector
 	var tint := Color(shade, shade, shade)
 	if outfit.get("ill", false):
 		tint = tint.lerp(PawnArt.ILL_TINT, 0.30)
-	var hair_tint := Color(str(chosen_look.get("hair", "#4a3220"))) * body_tint * tint  # as the body's own hair is drawn
+	var hair_tint: Color
+	if layered:  # their own colour, going grey and then white with the years
+		hair_tint = Color(str(look.get("hair", "#4a3220"))).lerp(Color(0.88, 0.88, 0.88), float(outfit.get("grey", 0.0))) * tint
+	else:
+		hair_tint = Color(str(chosen_look.get("hair", "#4a3220"))) * body_tint * tint  # as the body's own hair is drawn
+	var layers: Array = []
+	if hair_behind != null:
+		layers.append({ "tex": hair_behind, "tint": hair_tint, "mode": "upper" })
+	layers.append({ "tex": body, "tint": body_tint * tint, "mode": "full" })
+	if hair_over != null and hair_under:
+		layers.append({ "tex": hair_over, "tint": hair_tint, "mode": "upper" })
+	for cloth: Dictionary in cloths:
+		# a top hangs below the hip and a skirt goes in one piece between the legs: neither is split with them
+		layers.append({ "tex": cloth["tex"], "tint": tint, "mode": "skirt" if str(cloth["slot"]) == "top" or PersonRig.is_skirt(rig, str(cloth["name"])) else "full" })
+	if hair_over != null and not hair_under:
+		layers.append({ "tex": hair_over, "tint": hair_tint, "mode": "upper" })
 	var feet := 14.0 * u - absf(swing) * 1.6 * u
 	var sway := swing * 1.1 * u
 	ci.draw_colored_polygon(PawnArt._ellipse_points(Vector2(2.0 * u, 13.0 * u), Vector2(12.0 * u, 5.0 * u)), SHADOW)
@@ -369,21 +448,17 @@ static func draw_layered_person(ci: CanvasItem, look: Dictionary, facing: Vector
 	if lying and not fallen:  # in bed: head and shoulders over the blanket
 		var shown := 0.58
 		rect = Rect2(-width * 0.5, -25.0 * u, width, height * shown)
-		var source := Rect2(Vector2.ZERO, Vector2(body.get_width(), body.get_height() * shown))
-		ci.draw_texture_rect_region(body, rect, source, body_tint * tint)
-		var layers := cloths.duplicate()
-		if hair != null:
-			layers.insert(0 if hair_under else layers.size(), hair)
-		for layer: Texture2D in layers:
-			ci.draw_texture_rect_region(layer, rect, Rect2(Vector2.ZERO, Vector2(layer.get_width(), layer.get_height() * shown)), hair_tint if layer == hair else tint)
+		for layer: Dictionary in layers:
+			var picture: Texture2D = layer["tex"]
+			ci.draw_texture_rect_region(picture, rect, Rect2(Vector2.ZERO, Vector2(picture.get_width(), picture.get_height() * shown)), layer["tint"])
 		return true
-	ci.draw_texture_rect(body, rect, false, body_tint * tint)
-	if hair != null and hair_under:
-		ci.draw_texture_rect(hair, rect, false, hair_tint)
-	for cloth in cloths:
-		ci.draw_texture_rect(cloth, rect, false, tint)
-	if hair != null and not hair_under:
-		ci.draw_texture_rect(hair, rect, false, hair_tint)
+	var act := str(outfit.get("act", ""))
+	if not rig.is_empty() and not fallen and not bool(outfit.get("mounted", false)) and (phase != 0.0 or act != ""):
+		var base := Transform2D(Vector2(flip, 0.0), Vector2(0.0, 1.0), Vector2(sway, 0.0))
+		PersonRig.draw(ci, layers, rig, base, Rect2(Vector2(-width * 0.5, top), Vector2(width, height)), PersonRig.motion(phase, act, float(outfit.get("clock", 0.0)), u))
+		return true
+	for layer: Dictionary in layers:
+		ci.draw_texture_rect(layer["tex"], rect, false, layer["tint"])
 	return true
 
 

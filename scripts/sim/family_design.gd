@@ -2,7 +2,7 @@ class_name FamilyDesign
 extends RefCounted
 ## The family a player draws up on the new-game screen before the world is made: a family name and up to five
 ## people, each with a name, gender, age, looks and traits. A design is a plain dictionary
-## { "family": String, "members": [ { given, gender, age, skin, hair, hair_style, traits } ] } so the menu can
+## { "family": String, "members": [ { given, gender, age, skin, hair, hair_style, hairdo, traits } ] } so the menu can
 ## edit it freely; HouseholdGenerator turns it into the household (its random needs and the rest are still rolled).
 
 const MAX_MEMBERS := 5
@@ -35,6 +35,7 @@ static func from_pawn(pawn: Pawn) -> Dictionary:
 		"skin": str(pawn.look.get("skin", "#e0ac80")),
 		"hair": str(pawn.look.get("hair", "#4a3220")),
 		"hair_style": int(pawn.look.get("hair_style", 0)),
+		"hairdo": str(pawn.look.get("hairdo", "")),
 		"traits": traits,
 	}
 
@@ -75,6 +76,7 @@ static func apply(pawn: Pawn, member: Dictionary, family: String) -> void:
 		"top": str(pawn.look.get("top", "#6a7a4a")),
 		"bottom": str(pawn.look.get("bottom", "#4a3d32")),
 		"hair_style": int(member.get("hair_style", 0)),
+		"hairdo": str(member.get("hairdo", "")),
 	}
 	var chosen: Array[String] = []
 	for trait_id in member.get("traits", []):

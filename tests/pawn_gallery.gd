@@ -14,6 +14,7 @@ const STAGE_AGES := [["baby", 0], ["toddler", 3], ["child", 8], ["youth", 15], [
 var _people: Array[Pawn] = []
 var _stages := false
 var _outfits := false
+var _anim := false
 
 
 func _ready() -> void:
@@ -47,6 +48,8 @@ func _ready() -> void:
 			_stages = true
 		elif arg == "--outfits=1":
 			_outfits = true
+		elif arg == "--anim=1":
+			_anim = true
 		elif arg == "--painted=1":
 			Settings.painted_characters = true
 	if _stages:
@@ -74,6 +77,18 @@ func _ready() -> void:
 			mother.pregnant_since = 0
 			mother.pregnancy_minutes = 1000
 			_people.append(mother)
+	if _anim:
+		_people.clear()
+		for spec in [["male", 30], ["female", 30], ["male", 15], ["female", 8], ["female", 68]]:
+			var pawn := Pawn.new()
+			pawn.id = _people.size() + 1
+			pawn.gender = spec[0]
+			pawn.age = spec[1]
+			pawn.adult = pawn.age >= 18
+			pawn.class_id = "peasant"
+			pawn.display_name = "%s %d" % [spec[0], spec[1]]
+			pawn.look = looks[_people.size() % looks.size()].duplicate()
+			_people.append(pawn)
 	if _outfits:
 		_people.clear()
 		for spec in [["male", 30, "peasant"], ["female", 30, "burgher"], ["male", 15, "peasant"], ["female", 8, "peasant"], ["male", 70, "peasant"], ["female", 68, "gentry"]]:
@@ -100,6 +115,9 @@ func _draw() -> void:
 		return
 	if _outfits:
 		_draw_outfits(font)
+		return
+	if _anim:
+		_draw_anim(font)
 		return
 	for n in _people.size():
 		var pawn := _people[n]
@@ -148,3 +166,33 @@ func _draw_outfits(font: Font) -> void:
 				PawnArt.draw(self, pawn.look, FACINGS[f * 2], 1.0, 0.0, false, outfit)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		row += 1
+
+
+## Each person walking (eight steps of the cycle, seen from the front) and then at work, talking and standing.
+func _draw_anim(font: Font) -> void:
+	for n in _people.size():
+		var pawn := _people[n]
+		var outfit := PawnArt.outfit_for(pawn)
+		var scale := SCALE * 0.9 * PawnArt.stage_scale(str(outfit["stage"]))
+		var y := 70.0 + n * 150.0
+		for step in 8:
+			draw_set_transform(Vector2(40.0 + step * 74.0, y), 0.0, Vector2.ONE * scale)
+			PawnArt.draw(self, pawn.look, Vector2i(0, 1), 1.0, TAU * step / 8.0 + 0.2, false, outfit)
+		for step in 4:
+			var working := outfit.duplicate()
+			working["act"] = "work"
+			working["clock"] = step * 0.22
+			draw_set_transform(Vector2(660.0 + step * 74.0, y), 0.0, Vector2.ONE * scale)
+			PawnArt.draw(self, pawn.look, Vector2i(0, 1), 1.0, 0.0, false, working, 0.0)
+		for step in 2:
+			var talking := outfit.duplicate()
+			talking["act"] = "talk"
+			talking["clock"] = 0.5 + step * 0.9
+			draw_set_transform(Vector2(980.0 + step * 74.0, y), 0.0, Vector2.ONE * scale)
+			PawnArt.draw(self, pawn.look, Vector2i(0, 1), 1.0, 0.0, false, talking, 0.0)
+		draw_set_transform(Vector2(1160.0, y), 0.0, Vector2.ONE * scale)
+		PawnArt.draw(self, pawn.look, Vector2i(0, 1), 1.0, 0.0, false, outfit, 0.0)
+		draw_set_transform(Vector2(1240.0, y), 0.0, Vector2.ONE * scale)
+		PawnArt.draw(self, pawn.look, Vector2i(0, -1), 1.0, 1.1, false, outfit, 0.0)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		draw_string(font, Vector2(8, y + 62), pawn.display_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.9))

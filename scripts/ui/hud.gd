@@ -8,7 +8,7 @@ extends CanvasLayer
 ## the title screen, saving, loading and settings are in Menus.
 
 const SPEED_LABELS: Array[String] = ["II", "1x", "3x", "10x", "30x"]
-const HINT_TEXT := "Right-click: actions   B: build   I: details   H: help   Esc: menu"
+const HINT_TEXT := "H: keys"
 const BUILD_HELP := "Build mode    B or Esc: leave    Ctrl+Z: undo    H: help"
 ## The help panel (H): [keys, what they do].
 const HELP_LINES: Array = [
@@ -225,13 +225,13 @@ func _show_goods(stock: Dictionary) -> void:
 		if int(stock.get(tool_id, 0)) > 0:
 			words.append("%d %s" % [int(stock[tool_id]), Skills.tool_name(tool_id).to_lower()])
 	_stock_label.text = ", ".join(words) if not words.is_empty() else ("" if _goods_row.get_child_count() > 0 else "Nothing stockpiled")
-	_stock_label.visible = _stock_label.text != ""
+	_stock_label.visible = _stock_label.text != "" and _details_open
 
 
 ## The animals the household keeps, under the stockpile (nothing shown when there are none).
 func set_animals(text: String) -> void:
 	_animals_label.text = text
-	_animals_label.visible = text != ""
+	_animals_label.visible = text != "" and _details_open
 
 
 ## "Building: 5 planned, 1 at work" under the animals (nothing shown when nothing is planned).
@@ -243,7 +243,7 @@ func set_building(text: String) -> void:
 ## Class, land title, next tax day, guild: the lines under the purse.
 func set_realm(text: String) -> void:
 	_realm_label.text = text
-	_realm_label.visible = text != ""
+	_realm_label.visible = text != "" and _details_open
 
 
 ## Names of the town events going on, shown under the clock.
@@ -272,25 +272,25 @@ func set_household(household: Household) -> void:
 		chip.toggle_mode = true
 		chip.button_group = group
 		chip.focus_mode = Control.FOCUS_NONE
-		chip.custom_minimum_size = Vector2(80, 70)
+		chip.custom_minimum_size = Vector2(66, 62)
 		_sims_button(chip)
 		chip.tooltip_text = pawn.display_name
 		var portrait := PawnPortrait.new()
 		portrait.look = pawn.look
 		portrait.outfit = PawnArt.outfit_for(pawn)
-		portrait.position = Vector2(18, 3)
+		portrait.position = Vector2(11, 1)
 		chip.add_child(portrait)
 		var label := Label.new()
 		label.text = pawn.display_name.get_slice(" ", 0)
-		label.position = Vector2(0, 47)
-		label.size = Vector2(80, 18)
+		label.position = Vector2(0, 42)
+		label.size = Vector2(66, 18)
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		label.add_theme_font_size_override("font_size", 13)
+		label.add_theme_font_size_override("font_size", 12)
 		chip.add_child(label)
 		var mark := ColorRect.new()  # green, amber or red: the worst of their needs
-		mark.position = Vector2(8, 64)
-		mark.size = Vector2(64, 3)
+		mark.position = Vector2(7, 58)
+		mark.size = Vector2(52, 3)
 		mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		chip.add_child(mark)
 		_chip_marks[pawn.id] = mark
@@ -400,6 +400,8 @@ func show_pawn(pawn: Pawn, activity: String, job: String = "", relations: Array[
 	_needs_traits.text = ", ".join(trait_names) if not trait_names.is_empty() else " "
 	_needs_activity.text = activity
 	_needs_job.text = job if job != "" else "Out of work"
+	_needs_traits.visible = _details_open
+	_needs_job.visible = _details_open or job != ""  # work is worth a line; the traits wait for the details
 	_mood_bar.value = pawn.mood
 	_mood_fill.bg_color = BAND_COLORS[Needs.band(pawn.mood)]
 	_mood_label.text = Mood.band_name(pawn.mood).capitalize()
@@ -476,6 +478,7 @@ func set_selected(id: int) -> void:
 
 func set_info(text: String) -> void:
 	_info_label.text = text
+	_info_label.visible = _details_open and text != ""
 
 
 ## H: shows or hides the list of keys.
@@ -504,7 +507,7 @@ func show_message(text: String, seconds: float = 2.5) -> void:
 
 func _build_top_bar() -> void:
 	var panel := PanelContainer.new()
-	_sims_panel(panel, 0.88, 8)
+	_sims_panel(panel, 0.80, 6)
 	_root.add_child(panel)
 	panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT, Control.PRESET_MODE_MINSIZE, 10)
 	var column := VBoxContainer.new()
@@ -516,7 +519,7 @@ func _build_top_bar() -> void:
 	var menu := Button.new()
 	menu.text = "Menu"
 	menu.focus_mode = Control.FOCUS_NONE
-	menu.custom_minimum_size = Vector2(70, 28)
+	menu.custom_minimum_size = Vector2(64, 26)
 	_sims_button(menu)
 	menu.pressed.connect(func() -> void: menu_requested.emit())
 	row.add_child(menu)
@@ -524,7 +527,7 @@ func _build_top_bar() -> void:
 	_details_button.text = "Details"
 	_details_button.toggle_mode = true
 	_details_button.focus_mode = Control.FOCUS_NONE
-	_details_button.custom_minimum_size = Vector2(80, 28)
+	_details_button.custom_minimum_size = Vector2(72, 26)
 	_sims_button(_details_button)
 	_details_button.toggled.connect(func(on: bool) -> void: set_details_open(on))
 	row.add_child(_details_button)
@@ -535,6 +538,7 @@ func _build_top_bar() -> void:
 	row.add_child(_hint_label)
 	_info_label = _make_label("", "")
 	_info_label.add_theme_font_size_override("font_size", 13)
+	_info_label.visible = false
 	column.add_child(_info_label)
 
 
@@ -570,8 +574,8 @@ func _build_help_panel() -> void:
 func _build_clock_panel() -> void:
 	var panel := PanelContainer.new()
 	_root.add_child(panel)
-	_sims_panel(panel)
-	panel.custom_minimum_size = Vector2(240, 0)
+	_sims_panel(panel, 0.84, 9)
+	panel.custom_minimum_size = Vector2(200, 0)
 	panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 10)
 	panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	var box := VBoxContainer.new()
@@ -582,7 +586,7 @@ func _build_clock_panel() -> void:
 	top.add_theme_constant_override("separation", 8)
 	box.add_child(top)
 	_time_label = _make_label("", "HeaderLabel")
-	_time_label.add_theme_font_size_override("font_size", 30)
+	_time_label.add_theme_font_size_override("font_size", 26)
 	top.add_child(_time_label)
 	var date_box := VBoxContainer.new()
 	date_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -613,17 +617,17 @@ func _build_clock_panel() -> void:
 	_stock_label = _make_label("", "DimLabel")
 	_stock_label.add_theme_font_size_override("font_size", 12)
 	_stock_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_stock_label.custom_minimum_size = Vector2(214, 0)
+	_stock_label.custom_minimum_size = Vector2(180, 0)
 	_goods_row = HFlowContainer.new()
 	_goods_row.add_theme_constant_override("h_separation", 8)
 	_goods_row.add_theme_constant_override("v_separation", 2)
-	_goods_row.custom_minimum_size = Vector2(214, 0)
+	_goods_row.custom_minimum_size = Vector2(180, 0)
 	box.add_child(_goods_row)
 	box.add_child(_stock_label)
 	_animals_label = _make_label("", "DimLabel")
 	_animals_label.add_theme_font_size_override("font_size", 12)
 	_animals_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_animals_label.custom_minimum_size = Vector2(214, 0)
+	_animals_label.custom_minimum_size = Vector2(180, 0)
 	box.add_child(_animals_label)
 	_building_label = _make_label("", "DimLabel")
 	_building_label.add_theme_font_size_override("font_size", 12)
@@ -633,7 +637,7 @@ func _build_clock_panel() -> void:
 	_realm_label.add_theme_font_size_override("font_size", 12)
 	_realm_label.visible = false
 	_realm_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_realm_label.custom_minimum_size = Vector2(214, 0)
+	_realm_label.custom_minimum_size = Vector2(180, 0)
 	box.add_child(_realm_label)
 
 	var row := HBoxContainer.new()
@@ -647,7 +651,8 @@ func _build_clock_panel() -> void:
 		button.button_group = group
 		button.focus_mode = Control.FOCUS_NONE  # so Space is never swallowed by a focused button
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.custom_minimum_size = Vector2(0, 30)
+		button.custom_minimum_size = Vector2(0, 24)
+		button.add_theme_font_size_override("font_size", 13)
 		_sims_button(button)
 		button.pressed.connect(_on_speed_button_pressed.bind(level))
 		row.add_child(button)
@@ -735,24 +740,24 @@ func _build_needs_panel() -> void:
 	# The bottom panel: a picture with the plumbob, name and doings, the mood, and the needs in a grid.
 	var row := HBoxContainer.new()
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_theme_constant_override("separation", 14)
+	row.add_theme_constant_override("separation", 10)
 	_control_panel.add_child(row)
 	var picture := Control.new()
-	picture.custom_minimum_size = Vector2(92, 104)
+	picture.custom_minimum_size = Vector2(66, 80)
 	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(picture)
 	_big_portrait = PawnPortrait.new()
-	_big_portrait.scale = Vector2(2.0, 2.0)
-	_big_portrait.position = Vector2(2, 20)
+	_big_portrait.scale = Vector2(1.5, 1.5)
+	_big_portrait.position = Vector2(0, 14)
 	picture.add_child(_big_portrait)
 
 	var who := VBoxContainer.new()
 	who.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	who.add_theme_constant_override("separation", 1)
-	who.custom_minimum_size = Vector2(230, 0)
+	who.custom_minimum_size = Vector2(190, 0)
 	row.add_child(who)
 	_needs_name = _make_label("", "HeaderLabel")
-	_needs_name.add_theme_font_size_override("font_size", 22)
+	_needs_name.add_theme_font_size_override("font_size", 19)
 	who.add_child(_needs_name)
 	_needs_age = _make_label("", "")
 	_needs_age.add_theme_font_size_override("font_size", 14)
@@ -776,7 +781,7 @@ func _build_needs_panel() -> void:
 	_mood_bar = _make_bar(100.0)
 	_mood_fill = _mood_bar.get_theme_stylebox("fill").duplicate() as StyleBoxFlat
 	_mood_bar.add_theme_stylebox_override("fill", _mood_fill)
-	_mood_bar.custom_minimum_size = Vector2(110, 11)
+	_mood_bar.custom_minimum_size = Vector2(90, 9)
 	mood_row.add_child(_mood_bar)
 	_mood_label = _make_label("", "DimLabel")
 	mood_row.add_child(_mood_label)
@@ -785,8 +790,8 @@ func _build_needs_panel() -> void:
 	grid.columns = 5
 	_needs_grid = grid
 	grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	grid.add_theme_constant_override("h_separation", 10)
-	grid.add_theme_constant_override("v_separation", 8)
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 4)
 	grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(grid)
 	for need_id in Needs.active_ids():
@@ -795,12 +800,12 @@ func _build_needs_panel() -> void:
 		cell.add_theme_constant_override("separation", 1)
 		grid.add_child(cell)
 		var label := _make_label(str(DataRegistry.get_def("needs", need_id).get("name", need_id)), "")
-		label.add_theme_font_size_override("font_size", 13)
+		label.add_theme_font_size_override("font_size", 12)
 		cell.add_child(label)
 		var bar := _make_bar(Needs.FULL)
 		var fill := bar.get_theme_stylebox("fill").duplicate() as StyleBoxFlat
 		bar.add_theme_stylebox_override("fill", fill)
-		bar.custom_minimum_size = Vector2(72, 10)
+		bar.custom_minimum_size = Vector2(58, 8)
 		cell.add_child(bar)
 		_need_rows[need_id] = { "bar": bar, "fill": fill }
 
@@ -820,12 +825,12 @@ func _build_needs_panel() -> void:
 	_dream_title.add_theme_font_size_override("font_size", 15)
 	_dream_title.add_theme_color_override("font_color", Color(0.92, 0.82, 0.58))
 	_dream_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_dream_title.custom_minimum_size = Vector2(214, 0)
+	_dream_title.custom_minimum_size = Vector2(180, 0)
 	_dream_title.mouse_filter = Control.MOUSE_FILTER_STOP
 	box.add_child(_dream_title)
 	_dream_step = _make_label("", "DimLabel")
 	_dream_step.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_dream_step.custom_minimum_size = Vector2(214, 0)
+	_dream_step.custom_minimum_size = Vector2(180, 0)
 	box.add_child(_dream_step)
 	_dream_bar = _make_bar(1.0)
 	_dream_bar.custom_minimum_size = Vector2(214, 8)
@@ -834,7 +839,7 @@ func _build_needs_panel() -> void:
 	box.add_child(_wish_text)
 	_dream_done = _make_label("", "DimLabel")
 	_dream_done.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_dream_done.custom_minimum_size = Vector2(214, 0)
+	_dream_done.custom_minimum_size = Vector2(180, 0)
 	box.add_child(_dream_done)
 
 	_section(box, "Skills")
@@ -853,7 +858,7 @@ func _build_needs_panel() -> void:
 		_skill_rows.append({ "row": skill_row, "name": skill_name, "bar": skill_bar })
 	_skill_note = _make_label("", "DimLabel")
 	_skill_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_skill_note.custom_minimum_size = Vector2(214, 0)
+	_skill_note.custom_minimum_size = Vector2(180, 0)
 	box.add_child(_skill_note)
 
 	_section(box, "Thoughts")
@@ -895,16 +900,13 @@ func _build_bottom_bar() -> void:
 	_bottom.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE, Control.PRESET_MODE_MINSIZE, 10)
 	_bottom.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	var panel := PanelContainer.new()
-	_sims_panel(panel, 0.92, 8)
+	_sims_panel(panel, 0.80, 6)
 	panel.size_flags_vertical = Control.SIZE_SHRINK_END
 	_bottom.add_child(panel)
 	_folk_panel = panel
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 2)
 	panel.add_child(box)
-	var heading := _make_label("Your folk", "CapsLabel")
-	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(heading)
 	_household_row = HBoxContainer.new()
 	_household_row.add_theme_constant_override("separation", 4)
 	box.add_child(_household_row)
@@ -915,7 +917,7 @@ func _build_bottom_bar() -> void:
 	_bottom_gaps.append(left_gap)
 	_control_panel = PanelContainer.new()
 	_control_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_sims_panel(_control_panel, 0.94, 12)
+	_sims_panel(_control_panel, 0.84, 8)
 	_control_panel.size_flags_vertical = Control.SIZE_SHRINK_END
 	_control_panel.visible = false
 	_bottom.add_child(_control_panel)
@@ -1000,6 +1002,10 @@ func toggle_details() -> void:
 func set_details_open(on: bool) -> void:
 	_details_open = on
 	_details_button.set_pressed_no_signal(on)
+	for label: Label in [_stock_label, _animals_label, _realm_label, _info_label]:  # the finer print shows with the details
+		label.visible = on and label.text != ""
+	_needs_traits.visible = on
+	_needs_job.visible = on or _needs_job.text != "Out of work"
 	_needs_panel.visible = on and _control_panel.visible
 	_fit_needs_panel()
 
@@ -1089,17 +1095,17 @@ func close_build_menu() -> void:
 
 func _build_build_ui() -> void:
 	_build_button = Button.new()
-	_build_button.text = "Build  (B)"
+	_build_button.text = "Build (B)"
 	_build_button.toggle_mode = true
 	_build_button.focus_mode = Control.FOCUS_NONE
-	_build_button.custom_minimum_size = Vector2(120, 44)
+	_build_button.custom_minimum_size = Vector2(100, 34)
 	_sims_button(_build_button)
 	_bottom_right.add_child(_build_button)
 	_level_button = Button.new()
 	_level_button.text = "Ground floor"
 	_level_button.tooltip_text = "Go up or down a floor (PageUp, PageDown)"
 	_level_button.focus_mode = Control.FOCUS_NONE
-	_level_button.custom_minimum_size = Vector2(120, 34)
+	_level_button.custom_minimum_size = Vector2(100, 26)
 	_sims_button(_level_button)
 	_level_button.pressed.connect(func() -> void: level_requested.emit(1 - Levels.view))
 	_bottom_right.add_child(_level_button)

@@ -1,0 +1,117 @@
+[
+ {
+  "neck": 0.3743,
+  "shoulder": 0.3993,
+  "hand": 0.765,
+  "hip": 0.765,
+  "arm_a": 0.2059,
+  "arm_b": 0.7919,
+  "mid": 0.4989,
+  "top": 0.0414,
+  "id": "rig.adult_male",
+  "set": "people.adult_male",
+  "skirts": []
+ },
+ {
+  "neck": 0.3655,
+  "shoulder": 0.3905,
+  "hand": 0.7525,
+  "hip": 0.7525,
+  "arm_a": 0.1757,
+  "arm_b": 0.8214,
+  "mid": 0.4986,
+  "top": 0.0823,
+  "id": "rig.adult_female",
+  "set": "people.adult_female",
+  "skirts": [
+   "casual",
+   "casual_bottom",
+   "formal",
+   "formal_bottom",
+   "sleepwear",
+   "sleepwear_bottom",
+   "winter",
+   "winter_bottom"
+  ]
+ },
+ {
+  "neck": 0.3741,
+  "shoulder": 0.3991,
+  "hand": 0.7602,
+  "hip": 0.7602,
+  "arm_a": 0.2005,
+  "arm_b": 0.7995,
+  "mid": 0.4988,
+  "top": 0.052,
+  "id": "rig.elder_male",
+  "set": "people.elder_male",
+  "skirts": [
+   "formal",
+   "formal_bottom"
+  ]
+ },
+ {
+  "neck": 0.3555,
+  "shoulder": 0.3805,
+  "hand": 0.72,
+  "hip": 0.72,
+  "arm_a": 0.2098,
+  "arm_b": 0.7539,
+  "mid": 0.5091,
+  "top": 0.1346,
+  "id": "rig.elder_female",
+  "set": "people.elder_female",
+  "skirts": [
+   "casual",
+   "casual_bottom",
+   "sleepwear",
+   "sleepwear_bottom"
+  ]
+ },
+ {
+  "neck": 0.4028,
+  "shoulder": 0.4278,
+  "hand": 0.7398,
+  "hip": 0.7398,
+  "arm_a": 0.2215,
+  "arm_b": 0.7745,
+  "mid": 0.4973,
+  "top": 0.1417,
+  "id": "rig.youth",
+  "set": "people.youth",
+  "skirts": []
+ },
+ {
+  "neck": 0.4504,
+  "shoulder": 0.4754,
+  "hand": 0.7987,
+  "hip": 0.7987,
+  "arm_a": 0.2062,
+  "arm_b": 0.795,
+  "mid": 0.5012,
+  "top": 0.1037,
+  "id": "rig.child",
+  "set": "people.child",
+  "skirts": []
+ },
+ {
+  "neck": 0.3661,
+  "shoulder": 0.3911,
+  "hand": 0.7521,
+  "hip": 0.7521,
+  "arm_a": 0.183,
+  "arm_b": 0.8142,
+  "mid": 0.4986,
+  "top": 0.0824,
+  "id": "rig.adult_female_pregnant",
+  "set": "people.adult_female_pregnant",
+  "skirts": [
+   "casual",
+   "casual_bottom",
+   "sleepwear",
+   "sleepwear_bottom",
+   "worker",
+   "worker_bottom"
+  ]
+ }
+]

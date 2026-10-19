@@ -99,6 +99,9 @@ func _draw() -> void:
 		draw_set_transform(Vector2(0.0, -7.0) * u, 0.0, Vector2.ONE)
 	var outfit := PawnArt.outfit_for(pawn, clothes, pieces)
 	outfit["fallen"] = fallen
+	outfit["mounted"] = pawn.mount != 0
+	outfit["act"] = _activity()
+	outfit["clock"] = Time.get_ticks_msec() / 1000.0 + pawn.id * 0.37
 	PawnArt.draw(self, pawn.look, pawn.facing, u, _phase * 0.5 if pawn.mount != 0 else _phase, asleep or fallen, outfit, breath)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	if not pawn.carrying.is_empty() and not fallen and not asleep:
@@ -120,6 +123,19 @@ func _draw() -> void:
 		draw_string_outline(font, Vector2(-90.0, 0.0), label, HORIZONTAL_ALIGNMENT_CENTER, 180.0, 13, 4, Color(0, 0, 0, 0.85))
 		draw_string(font, Vector2(-90.0, 0.0), label, HORIZONTAL_ALIGNMENT_CENTER, 180.0, 13, Color(0.78, 0.77, 0.72) if townsfolk else Color(0.97, 0.96, 0.92))
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## What they are doing besides walking, for the painted people's arms (see PersonRig.motion).
+func _activity() -> String:
+	if pawn.tool != "" and pawn.job_stage == "using":
+		return "work"
+	if pawn.job_stage == "using" and pawn.pose == "":
+		return "busy"  # cooking, mending, eating, playing: the hands move
+	if pawn.pose == "talk":
+		return "talk"
+	if pawn.pose == "close":
+		return "close"
+	return ""
 
 
 ## Units to pixels for this person: the young are drawn smaller (see PawnArt.BUILDS).
