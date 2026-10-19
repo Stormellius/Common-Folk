@@ -17,6 +17,7 @@ var _pending := {}   # the new game being set up: seed, start, lifespan, the fam
 var _speed_before_menu := 1     # the speed to go back to when the menus close
 var _to_name: Array[int] = []  # babies of your household still waiting for a name
 var _loaded_view: Dictionary = {}  # the camera of the save just loaded
+var _loaded_backup := false        # the save just loaded was damaged, and its backup was used instead
 
 @onready var map_view: MapView = $MapView
 @onready var floor_layer: FloorLayer = $FloorLayer
@@ -661,6 +662,8 @@ func _on_load_requested(path: String) -> void:
 	_begin_game()
 	menus.close()
 	_restore_view_after_load()
+	if _loaded_backup:
+		hud.show_message("That save was damaged, so the copy before it was loaded.", 6.0)
 	if sim.is_game_over():
 		_open_menu(func() -> void: menus.show_game_over("This household has died out."))
 		return
@@ -988,6 +991,7 @@ func _save() -> void:
 func _on_day_changed(_day: int) -> void:
 	if sim == null or not _in_game or sim.is_game_over() or _loading or not Settings.autosave:
 		return
+	SaveSlots.shift_autosaves()
 	if _write_save(AUTOSAVE_PATH, "Autosave") == OK:
 		hud.show_message("Autosaved", 1.5)
 
@@ -1000,10 +1004,17 @@ func _write_save(path: String, slot_name: String) -> Error:
 	return err
 
 
-## F9: loads the newest save of any kind.
+## F9: loads the newest save of any kind, or if that will not load, the newest one that does.
 func _load() -> void:
-	var path := SaveSlots.newest()
-	var error := _load_path(path) if path != "" else "no save file found"
+	var path := ""
+	var error := "no save file found"
+	var skipped := 0
+	for entry in SaveSlots.all():
+		path = str(entry["path"])
+		error = _load_path(path)
+		if error == "":
+			break
+		skipped += 1
 	if error != "":
 		hud.show_message("Load failed: %s" % error)
 		return
@@ -1012,7 +1023,12 @@ func _load() -> void:
 	if sim.is_game_over():
 		_open_menu(func() -> void: menus.show_game_over("This household has died out."))
 	var date := GameClock.get_date()
-	hud.show_message("Loaded %s: %s %d, %s" % [SaveSlots.read_meta(path).get("name", "your save"), date["season_name"], date["day"], GameClock.get_time_text()])
+	var loaded_text := "Loaded %s: %s %d, %s" % [SaveSlots.read_meta(path).get("name", "your save"), date["season_name"], date["day"], GameClock.get_time_text()]
+	if skipped > 0:
+		loaded_text = "The newest save would not load. %s" % loaded_text
+	elif _loaded_backup:
+		loaded_text = "That save was damaged, so the copy before it was loaded. %s" % loaded_text
+	hud.show_message(loaded_text, 6.0 if skipped > 0 or _loaded_backup else 3.0)
 
 
 ## Puts a saved game in place. Returns "" or what went wrong.
@@ -1031,6 +1047,7 @@ func _load_path(path: String) -> String:
 	sim.events.load_dict(result["events"])
 	_loading = false
 	_loaded_view = result["view"]
+	_loaded_backup = bool(result.get("recovered", false))
 	return ""
 
 
