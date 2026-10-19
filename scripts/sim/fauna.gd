@@ -468,7 +468,7 @@ static func step_hunt(sim: Simulation, pawn: Pawn, rng: RandomNumberGenerator) -
 		sim.health_notice.emit("%s lost the trail of %s." % [_first(pawn), animal.title()])
 		sim._end_job(pawn)
 		return
-	Skills.practice(sim, pawn, "hunting")
+	Skills.practice_deed(sim, pawn, "hunting", "stalk", 1.0)
 	var broken := Skills.wear(sim, pawn)
 	if broken != "":
 		sim.health_notice.emit(broken)
@@ -528,7 +528,7 @@ static func _kill(sim: Simulation, pawn: Pawn, animal: Animal, rng: RandomNumber
 	var title := animal.title()
 	sim.world.remove_animal(animal.id)
 	Mood.add_event(pawn, "hunted", GameClock.tick)
-	Skills.practice(sim, pawn, "hunting", 15.0)
+	Skills.practice_deed(sim, pawn, "hunting", "kill", 15.0)
 	sim.health_notice.emit("%s brought down %s: %s." % [_first(pawn), title, Economy.stock_text(brought)])
 	sim._end_job(pawn)
 
@@ -652,7 +652,7 @@ static func _ride_minute(sim: Simulation, pawn: Pawn, now: int) -> void:
 		return
 	if pawn.has_orders():
 		animal.alert_until = now
-		Skills.practice(sim, pawn, "husbandry", 0.6)
+		Skills.practice_deed(sim, pawn, "husbandry", "ride", 0.6)
 	elif pawn.job_kind == "" and now - animal.alert_until >= IDLE_DISMOUNT:
 		dismount(sim, pawn)
 	refresh_pace(sim, pawn)
@@ -728,7 +728,7 @@ static func step_pet(sim: Simulation, pawn: Pawn) -> void:
 			pawn.needs[need_id] = minf(Needs.FULL, float(pawn.needs[need_id]) + 5.0)
 	if pawn.job_minutes >= PET_MINUTES:
 		Mood.add_event(pawn, "petted", GameClock.tick, animal.display_name())
-		Skills.practice(sim, pawn, "husbandry", 8.0)
+		Skills.practice_deed(sim, pawn, "husbandry", "pet", 8.0)
 		sim._end_job(pawn)
 
 
@@ -827,6 +827,10 @@ static func new_day(sim: Simulation, rng: RandomNumberGenerator) -> Array[String
 	var today := GameClock.get_day_number()
 	for animal: Animal in kept_by(sim).duplicate():
 		var def := animal.def()
+		if animal.hungry_days == 0:
+			var made := _produce(sim, animal, today, rng)
+			if made != "":
+				notices.append(made)
 		if today - animal.fed_day < int(def.get("ration_days", 1)):
 			continue
 		var ate := ""
@@ -853,6 +857,29 @@ static func new_day(sim: Simulation, rng: RandomNumberGenerator) -> Array[String
 			animal.hungry_days = 0
 	_restock(sim.world, rng)
 	return notices
+
+
+## A well-fed animal that gives something ("produces" in data/animals.json: a sheep's wool) gives it every
+## "produce_days", more with the household's best hand at animal care. Returns a notice, or "".
+static func _produce(sim: Simulation, animal: Animal, today: int, rng: RandomNumberGenerator) -> String:
+	var def := animal.def()
+	var gives: Dictionary = def.get("produces", {})
+	var every := maxi(1, int(def.get("produce_days", 1)))
+	if gives.is_empty() or (today + animal.id) % every != 0:
+		return ""
+	var keeper: Pawn = null
+	for pawn in sim.household.pawns:
+		if keeper == null or Skills.level(pawn, "husbandry") > Skills.level(keeper, "husbandry"):
+			keeper = pawn
+	var brought := {}
+	for item_id in gives:
+		var amount := Skills.yield_amount(keeper, "husbandry", int(gives[item_id]), rng) if keeper != null else int(gives[item_id])
+		if amount > 0:
+			sim.household.add_stock(str(item_id), amount)
+			brought[str(item_id)] = amount
+	if keeper != null:
+		Skills.practice_deed(sim, keeper, "husbandry", "shear", 20.0)
+	return "%s gave %s." % [animal.display_name(), Economy.stock_text(brought)] if not brought.is_empty() else ""
 
 
 ## Where the wilds have thinned, a few come back from beyond the map's edge of sight.

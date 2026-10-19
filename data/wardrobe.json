@@ -9,5 +9,6 @@
     "wash_objects": ["wash_basin"],
     "work_jobs": ["work", "build", "hunt"],
     "work_min_stage": "youth",
+    "outer_wear": { "cloak": 0.15, "boots": 0.06 },
     "choices": ["casual", "worker", "formal", "warm", "winter", "undergarments"] }
 ]

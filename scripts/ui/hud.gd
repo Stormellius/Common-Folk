@@ -24,6 +24,7 @@ const HELP_LINES: Array = [
 	["In build mode", "Drag a thing to move it, Del takes it down, Ctrl+Z / Ctrl+Y undo and redo, Shift-drag a box"],
 	["R", "Roofs: by the zoom, shown, hidden"],
 	["G", "Grid"],
+	["K", "The household's skills, and who could teach them"],
 	["F5 / F9", "Quick save / load the newest save"],
 	["F11", "Full screen"],
 	["F", "The town's families: play another, or move house"],
@@ -130,6 +131,7 @@ var _redo_button: Button
 var _search_box: LineEdit
 var _search_row: HFlowContainer
 var _current_tab := ""
+var skills_board := SkillsBoard.new()
 var _build_hint: Label
 var _palette_body: Array[Control] = []   # the tabs and the things on them, which can be folded away
 var _fold_button: Button
@@ -147,6 +149,7 @@ func _ready() -> void:
 	_build_build_ui()
 	_build_toast()
 	_build_help_panel()
+	_root.add_child(skills_board)
 	_root.add_child(_action_menu)  # last, so it sits above the other panels
 	_action_menu.action_chosen.connect(func(id: String) -> void: action_chosen.emit(id))
 	_root.add_child(_build_menu)
@@ -405,7 +408,7 @@ func show_pawn(pawn: Pawn, activity: String, job: String = "", relations: Array[
 			var skill_id := str(skills[index]["id"])
 			var rank_level := Skills.level(pawn, skill_id)
 			entry["name"].text = "%s %d" % [Skills.name_of(skill_id), rank_level]
-			entry["name"].tooltip_text = "%s (%s). %s" % [Skills.name_of(skill_id), Skills.rank_name(rank_level), str(DataRegistry.get_def("skills", skill_id).get("text", ""))]
+			entry["name"].tooltip_text = "%s (%s). %s\n%s" % [Skills.name_of(skill_id), Skills.rank_name(rank_level), str(DataRegistry.get_def("skills", skill_id).get("text", "")), Skills.perks_text(pawn, skill_id)]
 			entry["bar"].value = Skills.progress(pawn, skill_id)
 	var notes: Array[String] = []
 	if skills.is_empty():
@@ -460,6 +463,11 @@ func set_info(text: String) -> void:
 
 
 ## H: shows or hides the list of keys.
+## Opens or closes the household's skills board.
+func toggle_skills(sim: Simulation) -> void:
+	skills_board.toggle(sim)
+
+
 func toggle_help() -> void:
 	_help_panel.visible = not _help_panel.visible
 

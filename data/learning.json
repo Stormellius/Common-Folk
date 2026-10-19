@@ -1,6 +1,6 @@
 [
   { "id": "learning",
-    "xp_to_level": [0, 20, 60, 120, 200, 300, 420, 560, 720, 900, 1100],
+    "xp_to_level": [0, 15, 45, 90, 150, 230, 330, 450, 600, 800, 1050],
     "ranks": [
       { "from": 0, "name": "Untrained" },
       { "from": 1, "name": "Novice" },
@@ -16,8 +16,8 @@
     "master_radius": 7,
     "master_bonus": 1.0,
     "family_share": 0.3,
-    "family_default_xp": 70,
-    "lesson_xp": 40,
+    "family_default_xp": 60,
+    "lesson_xp": 30,
     "lesson_min_level": 2,
     "tool_buy_markup": 1.0 }
 ]

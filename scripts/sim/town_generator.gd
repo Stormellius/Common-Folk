@@ -20,7 +20,7 @@ const LEGEND := {
 	"b": "bed", "p": "cooking_pot", "h": "hearth", "w": "wash_basin", "c": "chamber_pot",
 	"l": "lute", "j": "harp", "d": "drum", "t": "table", "k": "counter", "s": "shelf", "r": "barrel", "n": "bench", "W": "well",
 	"m": "meal_table", "a": "ale_barrel", "f": "food_shelf", "B": "notice_board",
-	"A": "altar", "P": "pew", "H": "sickbed", "F": "forge", "K": "workbench", "T": "tool_rack", "Z": "haystack", "Y": "hitching_post", "Q": "quern", "O": "oven", "V": "brew_vat", "U": "tanning_rack",
+	"A": "altar", "P": "pew", "H": "sickbed", "F": "forge", "K": "workbench", "T": "tool_rack", "Z": "haystack", "Y": "hitching_post", "Q": "quern", "O": "oven", "V": "brew_vat", "U": "tanning_rack", "L": "loom",
 }
 const PRIORITY := ["tavern", "shop", "clinic", "chapel", "smithy", "workshop", "stable", "bakery", "park", "house", "vacant"]
 const YARD := 1       # tiles of open ground around a building, inside its lot
