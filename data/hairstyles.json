@@ -1,0 +1,104 @@
+[
+ {
+  "id": "hair.child",
+  "set": "people.child",
+  "styles": [
+   {
+    "id": "tousled",
+    "name": "Tousled",
+    "for": "male"
+   },
+   {
+    "id": "long",
+    "name": "Long",
+    "for": "female"
+   }
+  ]
+ },
+ {
+  "id": "hair.youth",
+  "set": "people.youth",
+  "styles": [
+   {
+    "id": "shaggy",
+    "name": "Shaggy",
+    "for": "male"
+   },
+   {
+    "id": "swept",
+    "name": "Swept",
+    "for": "male"
+   },
+   {
+    "id": "long",
+    "name": "Long",
+    "for": "female"
+   }
+  ]
+ },
+ {
+  "id": "hair.adult_male",
+  "set": "people.adult_male",
+  "styles": [
+   {
+    "id": "cropped",
+    "name": "Cropped"
+   },
+   {
+    "id": "curly",
+    "name": "Curly"
+   }
+  ]
+ },
+ {
+  "id": "hair.elder_female",
+  "set": "people.elder_female",
+  "styles": [
+   {
+    "id": "bun",
+    "name": "Bun"
+   },
+   {
+    "id": "curls",
+    "name": "Curls"
+   }
+  ]
+ },
+ {
+  "id": "hair.adult_female",
+  "set": "people.adult_female",
+  "styles": [
+   {
+    "id": "long",
+    "name": "Long"
+   },
+   {
+    "id": "bob",
+    "name": "Bob"
+   },
+   {
+    "id": "ponytail",
+    "name": "Side ponytail"
+   }
+  ]
+ },
+ {
+  "id": "hair.adult_female_pregnant",
+  "set": "people.adult_female_pregnant",
+  "hair_dir": "people/adult_female",
+  "styles": [
+   {
+    "id": "long",
+    "name": "Long"
+   },
+   {
+    "id": "bob",
+    "name": "Bob"
+   },
+   {
+    "id": "ponytail",
+    "name": "Side ponytail"
+   }
+  ]
+ }
+]

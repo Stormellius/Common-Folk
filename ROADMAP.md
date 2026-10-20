@@ -150,6 +150,13 @@ Folk are born, grow up, grow old and die, as in the Sims, with a medieval face o
 - **Fixes**: laid floors drew nothing in the middle of an area (repeats were mirrored with a negative rectangle); right-click in build mode opened a person's menu; the Move and Remove tools hid at the end of a tab and could not move floors
 - **The catalog**: a search box over every tab, a **Catalog** button that folds it away, a shorter palette, and the hint for the tool in hand under it
 
+## Layered people, a first animation system and a smaller HUD (done, and growing)
+
+- **Body, hair and clothes apart**: the painted people are a stack of same-sized pictures (hair behind, the bare body, garments, hair over). `tools/split_hair.py` made the bare bodies and every hair style from the painted figures (colour finds the hair, a head circle is fitted and drawn again where the hair was, the hair's shading is kept as grey so it takes any colour); `data/hairstyles.json` lists the styles of each set. The family screen has separate rows for skin, hair colour and hair style (Bald too); the old "Look 1/2/3" is gone, which was also where Look 3 could make a person vanish. Hair goes grey and white with age. Old men keep their painted beards for now
+- **Animation, first steps** (`PersonRig`, `tools/make_rigs.py`, `data/rigs.json`): every layer is cut in the same places (head, torso, two arms, two legs; hair in two; skirts and tops as one piece with a swinging hem) and moved in parts: a walk cycle (a foot lifts and swings while the other pushes back, arms against legs, the body bobs and leans), work (both arms raised toward you and lowered with the tool), talking (a nod and a raised hand) and a sway for a couple close together. People who stand still are drawn whole, breathing
+- **A smaller HUD**: slimmer top bar and clock, a shorter panel at the bottom with smaller bars and household chips, more see-through panels; the tool list, the realm line, traits, work and the tile under the mouse show with the Details button. The creator shows people at their true height, so a child and a youth differ
+- Still to do: side views and a sitting, sleeping and eating pose; animating the tool and the object with the arms (the axe swing is still its own); hats and outer layers; side-on walking; more hair styles and facial hair as layers (needs new pictures: a body with no hair and the styles on it)
+
 ## Later
 
 - More painted art, one sheet at a time: everything in the "What is missing" table of [docs/ART.md](docs/ART.md), and a full set of people (both sexes, several looks, side views, a walk cycle)

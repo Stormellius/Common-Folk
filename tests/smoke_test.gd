@@ -322,7 +322,10 @@ func _test_hud() -> void:
 	hud.set_build_mode(false)
 	_check(not hud._build_panel.visible and not hud._build_button.button_pressed, "turning it off hides the palette")
 	hud.set_realm("Burgher, Freehold")
-	_check(hud._realm_label.visible and hud._realm_label.text == "Burgher, Freehold", "the realm lines show under the purse")
+	_check(not hud._realm_label.visible and hud._realm_label.text == "Burgher, Freehold", "the realm lines wait for the details, to keep the corner small")
+	hud.set_details_open(true)
+	_check(hud._realm_label.visible, "and show under the purse with them")
+	hud.set_details_open(false)
 	_check(not hud._help_panel.visible, "the help panel starts hidden")
 	hud.toggle_help()
 	_check(hud._help_panel.visible, "H shows the keys")
@@ -4165,6 +4168,58 @@ func _test_art() -> void:
 	_check(off and on and painted_before, "painted people are a setting, on by default")
 	_check(not ObjectArt.is_animated("hearth") == SpriteBank.has_object("hearth") and ObjectArt.is_animated("watch_post") == not SpriteBank.has_object("watch_post"), "a painted fireplace stands still, and so does everything else painted")
 	_check_floor_pieces()
+	_check_layered_people()
+
+
+## The people are layers: a bare body, hair on its own (a style and a colour), garments, and the parts they move in.
+func _check_layered_people() -> void:
+	var sets_ok := true
+	var files_ok := true
+	var rigs_ok := true
+	var styled := 0
+	for entry in DataRegistry.get_list("sprites"):
+		if not str(entry["id"]).begins_with("people."):
+			continue
+		var styles := SpriteBank.hair_styles(str(entry["id"]))
+		var rig := PersonRig.rig_for(str(entry["id"]))
+		var cuts := not rig.is_empty() and 0.0 < float(rig["neck"]) and float(rig["neck"]) < float(rig["shoulder"]) and float(rig["shoulder"]) < float(rig["hand"]) and float(rig["hand"]) <= float(rig["hip"]) and float(rig["hip"]) < 1.0 and float(rig["arm_a"]) < float(rig["mid"]) and float(rig["mid"]) < float(rig["arm_b"])
+		rigs_ok = rigs_ok and cuts
+		if styles.is_empty():
+			continue
+		styled += 1
+		for look: Dictionary in entry["looks"]:
+			for view in ["front", "back"]:
+				files_ok = files_ok and SpriteBank.texture("%s/bare_%s_%s" % [str(entry["dir"]), str(look["id"]), view]) != null
+		for style: Dictionary in styles:
+			for view in ["front", "back"]:
+				files_ok = files_ok and SpriteBank.texture("%s/hair_%s_%s" % [SpriteBank.hair_folder(entry), str(style["id"]), view]) != null
+		sets_ok = sets_ok and styles.size() >= 1
+	_check(styled >= 5 and sets_ok and files_ok, "every set with hair of its own has a bare body for each look and each style in front and back (%d sets)" % styled)
+	_check(rigs_ok, "and every set has the places to cut it into head, torso, arms and legs, in order")
+	var girls := SpriteBank.hair_styles("people.child")
+	var women := SpriteBank.hair_styles("people.adult_female")
+	_check(SpriteBank.hairdo_for(girls, {}, "female", 7) == "long" and SpriteBank.hairdo_for(girls, {}, "male", 7) == "tousled", "a girl is given long hair and a boy a boy's, unless they chose")
+	_check(SpriteBank.hairdo_for(women, { "hairdo": "bob" }, "female", 7) == "bob" and SpriteBank.hairdo_for(women, { "hairdo": "none" }, "female", 7) == "" and SpriteBank.hairdo_for(women, { "hairdo": "no_such" }, "female", 7) != "", "the style chosen is the one worn; none is bald; one that does not exist is replaced")
+	var seen := {}
+	for n in 24:
+		seen[SpriteBank.hairdo_for(women, {}, "female", n * 8)] = true
+	_check(seen.size() == women.size(), "and the grown-up women who chose nothing get all of their styles between them")
+	var dark := SpriteBank.pick_body(SpriteBank.person_set("adult", "male"), { "skin": "#7a4a30", "hair": "#e5bc6c" })
+	var light := SpriteBank.pick_body(SpriteBank.person_set("adult", "male"), { "skin": "#f4d1bb", "hair": "#2a2a2a" })
+	_check(dark["id"] != light["id"], "the body is picked by skin alone, whatever the hair")
+	var standing := PersonRig.motion(0.0, "", 0.0, 1.0)
+	var stepping := PersonRig.motion(PI * 0.5, "", 0.0, 1.0)
+	var back_step := PersonRig.motion(PI * 1.5, "", 0.0, 1.0)
+	var working := PersonRig.motion(0.0, "work", 0.3, 1.0)
+	_check(float(standing["lift_a"]) == 0.0 and float(standing["arm_a"]) == 0.0 and float(standing["bob"]) == 0.0, "standing still moves nothing")
+	_check(float(stepping["lift_a"]) > 1.0 and float(stepping["lift_b"]) == 0.0 and float(back_step["lift_b"]) > 1.0 and float(back_step["lift_a"]) == 0.0, "a step lifts one foot and then the other")
+	_check(float(stepping["leg_a"]) * float(stepping["leg_b"]) < 0.0 and float(stepping["arm_a_y"]) * float(stepping["arm_b_y"]) < 0.0, "the legs swing against each other and the arms against the legs")
+	_check(float(working["arm_a_s"]) < 1.0 and float(working["arm_a"]) * float(working["arm_b"]) < 0.0 and PersonRig.motion(0.0, "talk", 1.2, 1.0)["head"] != 0.0, "work raises the arms toward you, and talk nods the head")
+	var busy_a := PersonRig.motion(0.0, "busy", 0.1, 1.0)
+	var busy_b := PersonRig.motion(0.0, "busy", 0.1 + PI / 4.2, 1.0)
+	_check(float(busy_a["arm_a_s"]) != float(busy_b["arm_a_s"]) and float(busy_a["arm_a_s"]) < 1.0 and float(busy_a["lift_a"]) == 0.0, "busy hands move the arms and leave the feet where they are")
+	var skirts := PersonRig.rig_for("people.adult_female").get("skirts", []) as Array
+	_check("casual_bottom" in skirts and "casual" in skirts and not PersonRig.is_skirt(PersonRig.rig_for("people.adult_male"), "casual_bottom"), "skirts are found, so that they swing in one piece and are not split with the legs")
 
 
 ## A floor picture repeats mirrored: every tile must take a piece that lies inside the picture it is read
@@ -6655,6 +6710,7 @@ func _test_family_design() -> void:
 	design["members"][0]["skin"] = "#6e4630"
 	design["members"][0]["hair"] = "#c9c2b4"
 	design["members"][0]["traits"] = ["lazy", "pious", "asexual"]
+	design["members"][0]["hairdo"] = "bun"
 	design["members"][1]["age"] = 8
 	design["members"][1]["traits"] = ["gay", "neat"]
 	design["family"] = "Thatcher"
@@ -6664,6 +6720,7 @@ func _test_family_design() -> void:
 	var child: Pawn = household.pawns[1]
 	_check(elder.display_name == "Mabel Thatcher" and elder.age == 64 and elder.adult and elder.look["skin"] == "#6e4630" and elder.look["hair"] == "#c9c2b4", "the household has the name, age and looks that were drawn")
 	_check("lazy" in elder.traits and "pious" in elder.traits and "asexual" in elder.traits, "and the chosen traits")
+	_check(str(elder.look.get("hairdo", "")) == "bun" and str(FamilyDesign.from_pawn(elder)["hairdo"]) == "bun", "and the hair style, which goes with them into a design and back")
 	_check(child.age == 8 and not child.adult and not ("gay" in child.traits) and "neat" in child.traits, "a child has no orientation")
 	_check(household.pawns.size() == 3 and HouseholdGenerator.create(world, 3, design).pawns[0].needs == elder.needs, "the same design in the same world gives the same people")
 	design["members"][2]["age"] = 12

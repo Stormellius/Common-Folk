@@ -88,6 +88,7 @@ func _build() -> void:
 	frame.add_theme_stylebox_override("panel", frame_box)
 	picture.add_child(frame)
 	_portrait = PawnPortrait.new()
+	_portrait.true_height = true
 	_portrait.scale = Vector2(3.0, 3.0)
 	_portrait.position = Vector2(9, 52)
 	picture.add_child(_portrait)
@@ -145,7 +146,7 @@ func _build() -> void:
 	_look_row = HBoxContainer.new()
 	_look_row.add_theme_constant_override("separation", 6)
 	fields.add_child(_look_row)
-	_look_row.add_child(_label("Look", "InkLabel", 80))
+	_look_row.add_child(_label("Hair style", "InkLabel", 80))
 	var style_line := HBoxContainer.new()
 	style_line.add_theme_constant_override("separation", 6)
 	fields.add_child(style_line)
@@ -282,7 +283,7 @@ func _refresh() -> void:
 		var chosen := index
 		tab.pressed.connect(func() -> void:
 			_selected = chosen
-			_refresh())
+			_refresh.call_deferred())
 		_tabs.add_child(tab)
 	_add_button.disabled = members.size() >= FamilyDesign.MAX_MEMBERS
 	_remove_button.disabled = members.size() <= 1
@@ -308,7 +309,7 @@ func _refresh() -> void:
 		var style := index
 		button.pressed.connect(func() -> void:
 			_member()["hair_style"] = style
-			_refresh())
+			_refresh.call_deferred())
 		_style_row.add_child(button)
 	_refresh_traits()
 	_building = false
@@ -344,37 +345,43 @@ func _fill_swatches(row: HBoxContainer, colors: Array[String], key: String) -> v
 		var color := colors[index]
 		swatch.pressed.connect(func() -> void:
 			_member()[key] = color
-			_refresh())
+			_refresh.call_deferred())
 		row.add_child(swatch)
 
 
-## The painted people come in a few looks (hair and all) rather than in parts, so with them the person is
-## given a choice of looks; the hair colour and style below only mean something to the drawn people.
+## The painted people are layers: the body (its skin tinted to the colour chosen above), their hair (a style and a
+## colour, each chosen on its own) and the clothes. So with them the person is given a choice of hair styles (and
+## "Bald"); the hair colour swatches go with it. A set with no hair of its own (old men) has none of this, and the
+## drawn people (and any painted ones without hair layers) keep the older short, long, shaved and bun styles.
 func _fill_looks() -> void:
 	for child in _look_row.get_children().slice(1):
 		child.queue_free()
 	var painted := SpriteBank.people_enabled()
 	var temp := Pawn.new()
 	FamilyDesign.apply(temp, _member(), str(design["family"]))
-	var entry := SpriteBank.person_set(str(PawnArt.outfit_for(temp).get("stage", "adult")), temp.gender)
-	var looks: Array = entry.get("looks", []) if painted and not entry.is_empty() else []
-	_look_row.visible = not looks.is_empty()
-	_hair_row.visible = looks.is_empty()
-	_style_row.visible = looks.is_empty()
-	if looks.is_empty():
+	var outfit := PawnArt.outfit_for(temp)
+	var entry := SpriteBank.person_set(str(outfit.get("stage", "adult")), temp.gender) if painted else {}
+	var styles: Array = SpriteBank.hair_styles(str(entry.get("id", ""))) if not entry.is_empty() else []
+	var layered := not styles.is_empty()
+	var drawn := not painted or entry.is_empty()  # drawn by code: hair colour and one of four styles
+	_look_row.visible = layered
+	_hair_row.visible = layered or drawn
+	_style_row.visible = drawn
+	if not layered:
 		return
-	var current := SpriteBank.pick_look(entry, temp.look)
-	for index in looks.size():
-		var look: Dictionary = looks[index]
+	var current := SpriteBank.hairdo_for(styles, temp.look, temp.gender, int(outfit.get("seed", 0)))
+	var choices: Array = styles.duplicate()
+	choices.append({ "id": "none", "name": "Bald" })
+	for style: Dictionary in choices:
 		var button := Button.new()
-		button.text = "Look %d" % (index + 1)
+		button.text = str(style["name"])
 		button.toggle_mode = true
 		button.custom_minimum_size = Vector2(86, 30)
-		button.set_pressed_no_signal(str(look["id"]) == str(current["id"]))
+		button.set_pressed_no_signal(str(style["id"]) == current or (current == "" and str(style["id"]) == "none"))
+		var chosen := str(style["id"])
 		button.pressed.connect(func() -> void:
-			_member()["skin"] = str(look["skin"])
-			_member()["hair"] = str(look["hair"])
-			_refresh())
+			_member()["hairdo"] = chosen
+			_refresh.call_deferred())
 		_look_row.add_child(button)
 
 

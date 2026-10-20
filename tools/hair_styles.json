@@ -1,0 +1,104 @@
+{
+ "child": {
+  "rows": 0.38,
+  "chin": 0.4,
+  "styles": {
+   "a": [
+    "tousled",
+    "Tousled",
+    "male"
+   ],
+   "b": null
+  },
+  "extra": [
+   {
+    "id": "long",
+    "name": "Long",
+    "for": "female"
+   }
+  ]
+ },
+ "youth": {
+  "rows": 0.5,
+  "chin": 0.37,
+  "styles": {
+   "a": [
+    "shaggy",
+    "Shaggy",
+    "male"
+   ],
+   "b": [
+    "swept",
+    "Swept",
+    "male"
+   ],
+   "c": null
+  },
+  "extra": [
+   {
+    "id": "long",
+    "name": "Long",
+    "for": "female"
+   }
+  ],
+  "radius_percentile": 50
+ },
+ "adult_male": {
+  "rows": 0.42,
+  "chin": 0.4,
+  "styles": {
+   "a": [
+    "cropped",
+    "Cropped"
+   ],
+   "b": [
+    "curly",
+    "Curly"
+   ],
+   "c": null
+  }
+ },
+ "adult_female": {
+  "rows": 0.6,
+  "chin": 0.365,
+  "styles": {
+   "a": [
+    "long",
+    "Long"
+   ],
+   "b": [
+    "bob",
+    "Bob"
+   ],
+   "c": [
+    "ponytail",
+    "Side ponytail"
+   ]
+  }
+ },
+ "elder_female": {
+  "rows": 0.38,
+  "chin": 0.4,
+  "styles": {
+   "a": [
+    "bun",
+    "Bun"
+   ],
+   "b": [
+    "curls",
+    "Curls"
+   ]
+  },
+  "radius_percentile": 50,
+  "dark_hair": false,
+  "clip_sky": false
+ },
+ "adult_female_pregnant": {
+  "rows": 0.6,
+  "chin": 0.365,
+  "styles": {
+   "a": null
+  },
+  "hair_from": "adult_female"
+ }
+}
