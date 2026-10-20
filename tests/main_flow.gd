@@ -19,6 +19,23 @@ func _ready() -> void:
 	print("From the title screen")
 	_check(menus.current() == "title" and not main._in_game and not hud.visible, "an ordinary launch opens the title screen, with the HUD hidden")
 
+	# Choosing land with an inherited house: the house is shown on the plot that is picked, and goes back with the plot beside the square.
+	menus.new_game_requested.emit(4242, "inherited", "short")
+	var home_rect: Rect2i = main.world.lot
+	var home_things := _things_in(main.world, home_rect)
+	_check(menus.current() == "land" and home_things >= 3, "with an inherited house, the land screen shows it standing on the plot beside the square (%d things there)" % home_things)
+	var other := ""
+	for option in Starts.land_options(main.world):
+		if str(option["id"]) != WorldState.HOME_LOT:
+			other = str(option["id"])
+			break
+	menus.land_picked.emit(other)
+	var moved_to: Rect2i = main.world.lot
+	_check(other != "" and moved_to != home_rect and _things_in(main.world, moved_to) >= 3 and _things_in(main.world, home_rect) == 0, "picking another plot moves the house with it (%d things there, none left at the old one)" % _things_in(main.world, moved_to))
+	_check(main.camera.position.distance_to((Vector2(moved_to.get_center()) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE) < 8.0, "and the camera goes to it")
+	menus.land_picked.emit(WorldState.HOME_LOT)
+	_check(main.world.lot == home_rect and _things_in(main.world, home_rect) == home_things, "going back to the plot beside the square puts it back there")
+
 	menus.new_game_requested.emit(4242, "arrived", "short")
 	_check(menus.current() == "land" and not main._in_game and main._lot_picker.visible, "Begin first lets the player choose their land")
 	menus.land_confirmed.emit("home")
@@ -108,6 +125,14 @@ func _ready() -> void:
 	print("")
 	print("ALL CHECKS PASSED" if _failures == 0 else "%d CHECK(S) FAILED" % _failures)
 	get_tree().quit(1 if _failures > 0 else 0)
+
+
+## How many placed things stand inside a rectangle of the world.
+func _things_in(world: WorldState, rect: Rect2i) -> int:
+	var count := 0
+	for placed in world.objects:
+		count += 1 if rect.has_point(placed.tile) else 0
+	return count
 
 
 func _check(condition: bool, label: String) -> void:

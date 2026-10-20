@@ -101,13 +101,23 @@ would be the next step up.
   skills, thoughts and friends down the left) and the tile under the cursor. Panels are `_sims_panel` in `hud.gd`.
 * **Sound**: the title screen plays only music; rain and snow fade in only once it is really falling; work and instrument sounds are heard only
   for people on screen.
-* **Family screen**: after "How do you begin?" you draw up your family (`FamilyCreator`, `FamilyDesign`): up to five people with name, gender,
-  age, skin, hair, hair style and traits. Painted people pick the body look nearest to the chosen skin and hair.
+* **Family screen**: after "How do you begin?" you draw up your family (`FamilyCreator`, `FamilyDesign`): up to five people with name, gender
+  and age (a stage, or an exact age), and four sections for the person picked: **Looks** (skin and hair from a dozen swatches or any colour
+  from the colour button, and a hair style or Bald), **Clothes** (an outfit to keep to, and a top, bottoms and shoes of their own, as in a
+  wardrobe), **Traits** (what they are drawn to, and up to three traits) and **Family tree**. Painted people pick the body look nearest to the
+  chosen skin and hair.
+* **The family tree** (`FamilyDesign`, `FamilyTreeView`): each member has `parents` (up to two indices), `partner` (an index or -1) and
+  `married`. A parent has to be 16 years older than their child; partners are grown-ups who are drawn to each other and not kin (brother and
+  sister, parent and child, or a couple with a parent in common is refused); the creator greys out whoever cannot be chosen and says why, and
+  `problem` stops Begin on a tree that no longer fits (somebody made younger, or whom they like changed). "Suggest a tree" makes the couple
+  nearest in age husband and wife and the youngest of the people old enough to be their parents the parents. `FamilyDesign.link` gives the
+  household the parents, partners and marriages when the game begins (so kin do not date, and a husband and wife begin wed, fond of each
+  other). The tree is drawn in rows by generation with a double line for a couple.
 * The painted-people setting is saved as `painted_people` so an old saved "off" no longer hides the new art.
 
 ## Medieval HUD, land and upstairs
 * The HUD panels are dark timber with a gilt edge (`_sims_panel`, `_sims_button` in `hud.gd`); the build palette wraps and scrolls inside the window and shows each object's picture fitted into its frame.
-* After the family screen the player chooses their land (`Starts.land_options`, `LotPicker`): the usual plot beside the square or any empty lot in the region (grown towards 16 by 13). A start without a house begins paused in build mode with the starting coin.
+* After the family screen the player chooses their land (`Starts.land_options`, `LotPicker`): the usual plot beside the square or any empty lot in the region (grown towards 16 by 13). Each pick makes the town again with the plot moved, so the inherited house (or the camp) stands on the plot being looked at. A start without a house begins paused in build mode with the starting coin.
 * **Two storeys** (`Levels`): a tile upstairs is the ground tile with its y lifted by 4096, so floors, walls, objects, roofs and people upstairs live in the same tables. Stairs (built in a roofed room) put a landing upstairs; upstairs floors grow out from the landing over a roofed room, then walls, furniture and a roof. `PathFinder` keeps a grid per floor and routes by the nearest stairs. PageUp / PageDown or the button at the bottom right change the floor on screen; choosing a person on the other floor switches to it. The stairs are drawn by code for now.
 
 ## Garments (clothes in separate pieces)

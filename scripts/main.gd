@@ -13,7 +13,7 @@ var _loading := false           # true while a save is being put in place (no au
 ## False on the title screen, where the town behind is only to look at.
 var _in_game := false
 var _lot_picker := LotPicker.new()
-var _pending := {}   # the new game being set up: seed, start, lifespan, the family drawn
+var _pending := {}   # the new game being set up: seed, start, lifespan, the family drawn, the plot shown
 var _speed_before_menu := 1     # the speed to go back to when the menus close
 var _to_name: Array[int] = []  # babies of your household still waiting for a name
 var _loaded_view: Dictionary = {}  # the camera of the save just loaded
@@ -605,7 +605,7 @@ func _on_menus_closed() -> void:
 
 func _on_new_game_requested(world_seed: int, start_id: String, lifespan: String) -> void:
 	# The world is made and shown first, so that the player can look about and choose where to settle.
-	_pending = { "seed": world_seed, "start": start_id, "lifespan": lifespan, "design": menus.family_design.duplicate(true) }
+	_pending = { "seed": world_seed, "start": start_id, "lifespan": lifespan, "design": menus.family_design.duplicate(true), "lot": WorldState.HOME_LOT }
 	_in_game = false
 	audio.listening = false
 	build.set_active(false)
@@ -614,7 +614,7 @@ func _on_new_game_requested(world_seed: int, start_id: String, lifespan: String)
 	tile_cursor.visible = false
 	_start_new_world(world_seed, start_id, lifespan, _pending["design"])
 	GameClock.set_speed(0)
-	var options := Starts.land_options(world)
+	var options := Starts.land_options(world)  # the picker keeps this layout: the town is made again for each pick, with the plot moved
 	_lot_picker.show_options(options, WorldState.HOME_LOT)
 	camera.drift = Vector2.ZERO
 	camera.input_enabled = true
@@ -626,10 +626,15 @@ func _on_new_game_requested(world_seed: int, start_id: String, lifespan: String)
 	menus.open_land(options, WorldState.HOME_LOT, funds, "A house is waiting on your plot." if homed else "Your land is bare ground and a camp.")
 
 
+## A plot is picked while choosing land: the town is made again with the player on it, so that the house they begin
+## with (or the camp) is standing on the plot they are looking at, and the camera goes to it.
 func _on_land_picked(lot_id: String) -> void:
-	for option in Starts.land_options(world):
-		if str(option["id"]) == lot_id:
-			camera.focus_on((Vector2(option["rect"].get_center()) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE)
+	if _pending.is_empty() or lot_id == str(_pending.get("lot", "")):
+		return
+	_pending["lot"] = lot_id
+	_start_new_world(int(_pending.get("seed", 0)), str(_pending.get("start", "")), str(_pending.get("lifespan", "normal")), _pending.get("design", {}), lot_id)
+	GameClock.set_speed(0)
+	camera.focus_on((Vector2(world.lot.get_center()) + Vector2(0.5, 0.5)) * MapView.TILE_SIZE)
 
 
 func _cancel_land() -> void:

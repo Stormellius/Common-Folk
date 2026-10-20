@@ -31,6 +31,7 @@ static func create(world: WorldState, size: int = SIZE, design: Dictionary = {})
 		pawn.step_to = spot
 		household.add_pawn(pawn)
 	Relations.make_family(household.pawns)
+	FamilyDesign.link(household.pawns, design)  # who is whose parent or partner, if the family tree was drawn
 	return household
 
 

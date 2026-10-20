@@ -47,6 +47,7 @@ func _ready() -> void:
 	_section("clothing", _test_clothing)
 	_section("wardrobe", _test_wardrobe)
 	_section("family", _test_family_design)
+	_section("tree", _test_family_tree)
 	_section("upstairs", _test_upstairs)
 	_section("traits", _test_trait_effects)
 	_section("garments", _test_garments)
@@ -6751,6 +6752,115 @@ func _test_family_design() -> void:
 		picked += 1 if str(DataRegistry.get_def("traits", trait_id).get("group", "")) != "orientation" else 0
 	_check(picked >= 2, "traits can be picked (%d)" % picked)
 	creator.queue_free()
+
+
+## Whether two lists hold the same numbers in the same order (typed and plain lists differ in how they compare).
+func _same(a: Array, b: Array) -> bool:
+	if a.size() != b.size():
+		return false
+	for index in a.size():
+		if int(a[index]) != int(b[index]):
+			return false
+	return true
+
+
+func _tree_member(rng: RandomNumberGenerator, given: String, gender: String, age: int) -> Dictionary:
+	var member := FamilyDesign.random_member(rng, "Thatcher", [], age)
+	member["given"] = given
+	member["gender"] = gender
+	member["traits"] = ["bisexual", "neat"] if age >= 18 else ["neat"]
+	return member
+
+
+func _test_family_tree() -> void:
+	print("Family tree")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 9
+	var design := { "family": "Thatcher", "members": [
+		_tree_member(rng, "Maud", "female", 42), _tree_member(rng, "Wat", "male", 45), _tree_member(rng, "Ann", "female", 15),
+		_tree_member(rng, "Tom", "male", 8), _tree_member(rng, "Ede", "female", 64) ] }
+	_check(FamilyDesign.problem(design) == "" and FamilyDesign.parents_of(design, 2).is_empty() and FamilyDesign.partner_of(design, 0) == -1, "a design with no tree is fine: housemates")
+	_check(FamilyDesign.set_partner(design, 0, 1, true) and FamilyDesign.partner_of(design, 1) == 0 and FamilyDesign.is_married(design, 1), "two grown-ups can be made a married couple, each the other's partner")
+	_check(FamilyDesign.relation(design, 0, 1) == "Wife" and FamilyDesign.relation(design, 1, 0) == "Husband", "and are wife and husband to each other")
+	FamilyDesign.set_partner(design, 0, 1, false)
+	_check(FamilyDesign.relation(design, 0, 1) == "Partner" and not FamilyDesign.is_married(design, 0), "or only partners, if they are not wed")
+	FamilyDesign.set_partner(design, 0, 1, true)
+	_check(not FamilyDesign.set_partner(design, 2, 3) and "grown-ups" in FamilyDesign.partner_blocker(design, 2, 3), "the young cannot be partners")
+	_check(FamilyDesign.set_parent(design, 2, 0, 0) and FamilyDesign.set_parent(design, 2, 1, 1) and _same(FamilyDesign.parents_of(design, 2), [0, 1]), "a child is given two parents")
+	_check(FamilyDesign.set_parent(design, 3, 0, 1) and FamilyDesign.set_parent(design, 3, 1, 0), "and so is another")
+	_check(FamilyDesign.relation(design, 0, 2) == "Mother" and FamilyDesign.relation(design, 1, 2) == "Father" and FamilyDesign.relation(design, 2, 0) == "Daughter" and FamilyDesign.relation(design, 3, 1) == "Son", "who are their mother and father, and they the daughter and the son")
+	_check(FamilyDesign.relation(design, 2, 3) == "Sister" and FamilyDesign.relation(design, 3, 2) == "Brother" and _same(FamilyDesign.siblings_among(design, 2), [3]), "and sister and brother to each other")
+	_check(not FamilyDesign.set_parent(design, 3, 0, 2) and "years older" in FamilyDesign.parent_blocker(design, 2, 3) and _same(FamilyDesign.parents_of(design, 3), [1, 0]), "a parent has to be %d years older than their child" % FamilyDesign.MIN_PARENT_GAP)
+	_check(FamilyDesign.set_parent(design, 0, 0, 4) and FamilyDesign.relation(design, 4, 2) == "Grandmother" and FamilyDesign.relation(design, 2, 4) == "Granddaughter" and FamilyDesign.relation(design, 4, 1) == "", "grandparents are worked out from the parents (Ede is Maud's mother, so Ann's grandmother and nothing to Wat)")
+	_check("family" in FamilyDesign.partner_blocker(design, 0, 4) and not FamilyDesign.set_partner(design, 0, 4), "kin cannot be partners")
+	_check("brother and sister" in FamilyDesign.parent_blocker(design, 4, 1), "nor can a couple be given a parent in common")
+	design["members"][1]["traits"] = ["straight", "neat"]
+	design["members"][0]["gender"] = "male"
+	_check("attracted" in FamilyDesign.tree_problem(design) and FamilyDesign.problem(design).contains("cannot be together"), "a couple who are not drawn to each other is refused, saying why")
+	design["members"][0]["gender"] = "female"
+	_check(FamilyDesign.tree_problem(design) == "" and FamilyDesign.problem(design) == "", "and the tree is accepted once they are")
+	design["members"][2]["age"] = 28
+	_check(FamilyDesign.problem(design).contains("too young"), "a parent made too young for their child is refused")
+	FamilyDesign.mend(design)
+	_check(FamilyDesign.parents_of(design, 2).size() == 1 and FamilyDesign.parents_of(design, 2)[0] == 1 and FamilyDesign.tree_problem(design) == "", "mending drops only the tie that no longer fits (Maud is 14 years older than Ann, Wat 17: he stays her father)")
+	design["members"][2]["age"] = 15
+	FamilyDesign.set_parent(design, 2, 1, 0)
+	var world := MapGenerator.generate(3, 64, 48)
+	var household := HouseholdGenerator.create(world, 5, design)
+	var maud: Pawn = household.pawns[0]
+	var wat: Pawn = household.pawns[1]
+	var ann: Pawn = household.pawns[2]
+	var tom: Pawn = household.pawns[3]
+	_check(maud.partner_id == wat.id and wat.partner_id == maud.id and maud.bond == "married" and wat.bond == "married" and maud.partner_status == "partners", "in the household the couple are married partners")
+	_check(ann.parents.size() == 2 and maud.id in ann.parents and wat.id in ann.parents and Relations.are_kin(ann, tom) and Relations.are_kin(maud, ann) and not Relations.are_kin(maud, wat), "children have their parents, and the game knows them for kin (and the couple not)")
+	_check(maud.romance_for(wat.id) > 40.0 and maud.opinion_of(wat.id) >= FamilyDesign.PARTNER_OPINION and household.pawns[4].id in maud.parents, "the couple are fond of each other, and Maud's mother is hers")
+	var removed: Dictionary = design.duplicate(true)
+	FamilyDesign.remove_member(removed, 1)
+	_check(removed["members"].size() == 4 and FamilyDesign.partner_of(removed, 0) == -1 and not FamilyDesign.is_married(removed, 0) and _same(FamilyDesign.parents_of(removed, 1), [0]) and _same(FamilyDesign.parents_of(removed, 3), []) and _same(FamilyDesign.parents_of(removed, 0), [3]), "taking someone out removes them from the tree, and the others keep their places (indices shift)")
+	var suggested: Dictionary = { "family": "Thatcher", "members": [
+		_tree_member(rng, "Maud", "female", 42), _tree_member(rng, "Wat", "male", 45), _tree_member(rng, "Ann", "female", 15),
+		_tree_member(rng, "Tom", "male", 8), _tree_member(rng, "Ede", "female", 64) ] }
+	FamilyDesign.suggest_tree(suggested)
+	_check(FamilyDesign.tree_problem(suggested) == "" and FamilyDesign.partner_of(suggested, 0) == 1 and FamilyDesign.is_married(suggested, 0), "a suggested tree fits the ages: Maud and Wat, nearest in age, are the couple")
+	_check(FamilyDesign.parents_of(suggested, 2).size() == 2 and FamilyDesign.parents_of(suggested, 3).size() == 2 and _same(FamilyDesign.parents_of(suggested, 1), [4]) and FamilyDesign.parents_of(suggested, 0).is_empty(), "the children are theirs, and the eldest, Ede, is the mother of one of them (the other married in)")
+	var chosen := FamilyDesign.from_pawn(household.pawns[0])
+	_check(chosen["parents"] == [] and int(chosen["partner"]) == -1, "a design made from a pawn starts with no tree")
+
+	# The tree, drawn.
+	var view := FamilyTreeView.new()
+	view.size = Vector2(620, 200)
+	add_child(view)
+	view.show_design(suggested, 2)
+	var rects := view.card_rects()
+	_check(view.generation_of(4) == 0 and view.generation_of(1) == 1 and view.generation_of(0) == 1 and view.generation_of(2) == 2 and view.generation_of(3) == 2, "the tree has a row for each generation, partners in the row of whichever is further down")
+	var overlap := false
+	for a in rects.size():
+		for b in range(a + 1, rects.size()):
+			overlap = overlap or rects[a].intersects(rects[b])
+	_check(not overlap and absf(rects[0].position.y - rects[1].position.y) < 1.0 and absf(rects[0].position.x - rects[1].position.x) <= FamilyTreeView.CARD.x + FamilyTreeView.GAP.x + 1.0, "no two cards overlap, and a couple stand side by side")
+	_check(rects[2].position.y > rects[0].position.y and rects[0].position.y > rects[4].position.y, "children are below their parents")
+	var picked: Array[int] = []
+	view.picked.connect(func(index: int) -> void: picked.append(index))
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = true
+	click.position = rects[3].get_center()
+	view._gui_input(click)
+	_check(_same(picked, [3]), "clicking a card picks that person")
+	view.show_design({ "family": "Thatcher", "members": [_tree_member(rng, "Solo", "male", 30)] }, 0)
+	_check(view.card_rects().size() == 1 and view.custom_minimum_size.y > 0.0, "a family of one is a single card")
+	view.queue_free()
+
+	# Clothes and looks drawn into a design reach the household.
+	var dressed := { "family": "Thatcher", "members": [_tree_member(rng, "Maud", "female", 30), _tree_member(rng, "Wat", "male", 8)] }
+	dressed["members"][0]["outfit"] = "formal"
+	dressed["members"][0]["garments"] = { "top": "winter_top", "feet": "no_such_shoe" }
+	dressed["members"][1]["garments"] = { "top": "worker_top" }  # a child has no work clothes
+	var dressed_house := HouseholdGenerator.create(world, 2, dressed)
+	_check(dressed_house.pawns[0].outfit_choice == "formal" and dressed_house.pawns[0].garments == { "top": "winter_top" }, "the outfit and garments chosen reach the person, and a piece that does not exist is left out")
+	_check(dressed_house.pawns[1].outfit_choice == "" and dressed_house.pawns[1].garments.is_empty(), "as long as their picture has it: a child is not given work clothes")
+	var back := FamilyDesign.from_pawn(dressed_house.pawns[0])
+	_check(back["outfit"] == "formal" and back["garments"] == { "top": "winter_top" }, "and a design made from them has them again")
 
 
 func _test_upstairs() -> void:
